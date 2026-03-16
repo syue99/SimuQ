@@ -21,6 +21,7 @@ from copy import copy, deepcopy
 from simuq.config import Config
 from simuq.expression import Expression
 
+import sympy as sp
 
 class productHamiltonian(MutableMapping):
     """A defaultdict-like object to speed up local Hamiltonian calculation.
@@ -82,6 +83,7 @@ class productHamiltonian(MutableMapping):
         return f"<productHamiltonian d={self.d}>"
 
 
+    
 class TIHamiltonian:
     """The time-independent Hamiltonian
 
@@ -104,7 +106,7 @@ class TIHamiltonian:
         self.sites_name = sites_name
         self.ham = ham
         self.saved_t_sites = None
-        # self.cleanHam()
+        self.cleanHam()
 
     @classmethod
     def empty(cls, sites_type, sites_name):
@@ -197,7 +199,7 @@ class TIHamiltonian:
 
         self.ham = []
         for htup in hamdic:
-            if isinstance(hamdic[htup], Expression) or abs(hamdic[htup]) > tol:
+            if isinstance(hamdic[htup], (Expression,sp.Expr)) or abs(hamdic[htup]) > tol:
                 self.ham.append((productHamiltonian(from_list=htup), hamdic[htup]))
 
     def extend_sites(self, new_sites_type, new_sites_name):
@@ -227,24 +229,24 @@ class TIHamiltonian:
 
     def __add__(self, other):
         # need more typing restrictions
-        if isinstance(other, (int, float, complex, Expression)):
+        if isinstance(other, (int, float, complex, Expression,sp.Expr)):
             other = other * TIHamiltonian.identity(self.sites_type, self.sites_name)
         self.sync_sites(other)
         ham = copy(self.ham)
         ham += other.ham
         h = TIHamiltonian(self.sites_type, self.sites_name, ham)
-        # h.cleanHam()
+        h.cleanHam()
         return h
 
     def __radd__(self, other):
-        if isinstance(other, (int, float, complex, Expression)):
+        if isinstance(other, (int, float, complex, Expression,sp.Expr)):
             return self.__add__(other * TIHamiltonian.identity(self.sites_type, self.sites_name))
         else:
             return NotImplemented
 
     def __iadd__(self, other):
         # need more typing restrictions
-        if isinstance(other, (int, float, complex, Expression)):
+        if isinstance(other, (int, float, complex, Expression,sp.Expr)):
             other = other * TIHamiltonian.identity(self.sites_type, self.sites_name)
         self.sync_sites(other)
         self.ham += other.ham
@@ -252,24 +254,24 @@ class TIHamiltonian:
 
     def __sub__(self, other):
         # need more typing restrictions
-        if isinstance(other, (int, float, complex, Expression)):
+        if isinstance(other, (int, float, complex, Expression,sp.Expr)):
             other = other * TIHamiltonian.identity(self.sites_type, self.sites_name)
         self.sync_sites(other)
         ham = copy(self.ham)
         ham += other.__neg__().ham
         h = TIHamiltonian(self.sites_type, self.sites_name, ham)
-        # h.cleanHam()
+        h.cleanHam()
         return h
 
     def __rsub__(self, other):
-        if isinstance(other, (int, float, complex, Expression)):
+        if isinstance(other, (int, float, complex, Expression,sp.Expr)):
             return (other * TIHamiltonian.identity(self.sites_type, self.sites_name)) - self
         else:
             return NotImplemented
 
     def __isub__(self, other):
         # need more typing restrictions
-        if isinstance(other, (int, float, complex, Expression)):
+        if isinstance(other, (int, float, complex, Expression,sp.Expr)):
             other = other * TIHamiltonian.identity(self.sites_type, self.sites_name)
         self.sync_sites(other)
         self.ham += other.__neg__().ham
@@ -311,7 +313,7 @@ class TIHamiltonian:
 
     def __mul__(self, other):
         # need more typing restrictions
-        if isinstance(other, (int, float, complex, Expression)):
+        if isinstance(other, (int, float, complex, Expression,sp.Expr)):
             return self.scalar_mul(other)
         self.sync_sites(other)
         self.cleanHam()
@@ -336,13 +338,13 @@ class TIHamiltonian:
         return result
 
     def __truediv__(self, other):
-        if isinstance(other, (int, float, complex, Expression)):
+        if isinstance(other, (int, float, complex, Expression,sp.Expr)):
             return self.scalar_mul(1 / other)
         else:
             return NotImplemented
 
     def __rmul__(self, other):
-        if isinstance(other, (int, float, complex, Expression)):
+        if isinstance(other, (int, float, complex, Expression,sp.Expr)):
             return self.scalar_mul(other)
         else:
             return NotImplemented
@@ -473,5 +475,216 @@ class TIHamiltonian:
             strl.append(TIHamiltonian.strlist_interleaved_insertion(sl, " * "))
         return TIHamiltonian.strlist_interleaved_insertion(strl, "  +  ")
 
+
+##Parametrized_Hamiltonian
+class Parametrized_Hamiltonian(TIHamiltonian):
+    """The Parametrized Hamiltonian
+
+    The underlying data-structure to store it is a list of
+    tuples (h, c). Here h is a product Hamiltonian,
+    represented by a list of site operators on the sites.
+
+    we will make c(x) a lambda function corresponding to h,
+    The observable program generator will takes in Parametrized Hamiltonian and always return a TI hamiltonian for compiler to generate sequence
+
+    Later if we need it to be time dependent hamiltonian, we can have c(t) to be a variable t
+    so by having a time series, we can generate a time series of (h,c(t_axis))
+    and c(t_axis) be a real number or an Expression.
+
+    TODO: The c(t_axis) will be translated into PulseDSL with Lambda functions
+    But how to do it with time as a variable is yet unknown
+
+    The site operator algebras are symbolically dealt with
+    here, since fermionic operators' algebra is position-related.
+
+    We can also test commutativity of Hamiltonians, and
+    calculate the sites the Hamiltonian is acting non-
+    trivially on.
+    """
+    def __init__(self, sites_type, sites_name, ham):
+        super().__init__(sites_type, sites_name, ham)
+
+
+    def __neg__(self):
+        ham = copy(self.ham)
+        for i in range(len(ham)):
+            ham[i] = (ham[i][0], -ham[i][1])
+        h = Parametrized_Hamiltonian(self.sites_type, self.sites_name, ham)
+        return h
+
+    def __add__(self, other):
+        # need more typing restrictions
+        if isinstance(other, (int, float, complex, Expression,sp.Expr)):
+            other = other * Parametrized_Hamiltonian.identity(self.sites_type, self.sites_name)
+        self.sync_sites(other)
+        ham = copy(self.ham)
+        ham += other.ham
+        h = Parametrized_Hamiltonian(self.sites_type, self.sites_name, ham)
+        return h
+
+    def __radd__(self, other):
+        if isinstance(other, (int, float, complex, Expression,sp.Expr)):
+            return self.__add__(other *  Parametrized_Hamiltonian.identity(self.sites_type, self.sites_name))
+        else:
+            return NotImplemented
+
+    def __iadd__(self, other):
+        # need more typing restrictions
+        if isinstance(other, (int, float, complex, Expression,sp.Expr)):
+            other = other * Parametrized_Hamiltonian.identity(self.sites_type, self.sites_name)
+        self.sync_sites(other)
+        self.ham += other.ham
+        return self
+
+    def __sub__(self, other):
+        # need more typing restrictions
+        if isinstance(other, (int, float, complex, Expression,sp.Expr)):
+            other = other * Parametrized_Hamiltonian.identity(self.sites_type, self.sites_name)
+        self.sync_sites(other)
+        ham = copy(self.ham)
+        ham += other.__neg__().ham
+        h = Parametrized_Hamiltonian(self.sites_type, self.sites_name, ham)
+        return h
+
+    def __rsub__(self, other):
+        if isinstance(other, (int, float, complex, Expression,sp.Expr)):
+            return (other * Parametrized_Hamiltonian.identity(self.sites_type, self.sites_name)) - self
+        else:
+            return NotImplemented
+
+    def __isub__(self, other):
+        # need more typing restrictions
+        if isinstance(other, (int, float, complex, Expression,sp.Expr)):
+            other = other * Parametrized_Hamiltonian.identity(self.sites_type, self.sites_name)
+        self.sync_sites(other)
+        self.ham += other.__neg__().ham
+        return self
+ 
+
+    def scalar_mul(self, other):
+        ham = copy(self.ham)
+        for i in range(len(ham)):
+            ham[i] = (ham[i][0], ham[i][1] * other)
+        h = Parametrized_Hamiltonian(self.sites_type, self.sites_name, ham)
+        return h
+
+    def __mul__(self, other):
+        # need more typing restrictions
+        if isinstance(other, (int, float, complex, Expression,sp.Expr)):
+            return self.scalar_mul(other)
+        self.sync_sites(other)
+        ham = []
+        for prod1, coef1 in self.ham:
+            for prod2, coef2 in other.ham:
+                (prod, coef3) = self.strlist_mul(self.sites_type, prod1, prod2)
+                ham.append((prod, coef1 * coef2 * coef3))
+        h = Parametrized_Hamiltonian(self.sites_type, self.sites_name, ham)
+        return h
+
+
+
+    def exp_eval(self, gvars, lvars):
+        ham = copy(self.ham)
+        for i in range(len(ham)):
+            ham[i] = (ham[i][0], ham[i][1].exp_eval(gvars, lvars))
+        h = Parametrized_Hamiltonian(self.sites_type, self.sites_name, ham)
+        return h
+
+
+    # A faster version of sum a list of TIHamiltonian
+    @staticmethod
+    def hlist_sum(hlist):
+        n = len(hlist)
+        if n == 0:
+            return 0
+        sites_type = hlist[0].sites_type
+        sites_name = hlist[0].sites_name
+        for i in range(n):
+            if hlist[i].sites_type != sites_type:
+                raise Exception("Site types do not match")
+            if hlist[i].sites_name != sites_name:
+                raise Exception("Site names do not match")
+        ham = []
+        for i in range(n):
+            ham += hlist[i].ham
+
+        return Parametrized_Hamiltonian(sites_type, sites_name, ham)
+
+
+    def __repr__(self):
+        if len(self.ham) == 0:
+            return "Zero"
+        strl = []
+        for h, c in self.ham:
+            sl = [str(c)]
+            for k in h:
+                for op in h[k]:
+                    sl.append(f"{self.sites_name[k]}.{op}")
+            strl.append(Parametrized_Hamiltonian.strlist_interleaved_insertion(sl, " * "))
+        return Parametrized_Hamiltonian.strlist_interleaved_insertion(strl, "  +  ")
+        
+
+    def diff(self, eval_variable):
+        self.new_ham = []
+        for h, coef in self.ham:
+            if isinstance(coef, (sp.Expr)):
+                for key in list(coef.free_symbols):
+                    key = str(key)
+                    if key == eval_variable:
+                        coef = sp.diff(coef, key)
+            self.new_ham.append((h, coef))
+        self.ham = self.new_ham
+
+
+    def take_diff_coef(self, eval_variable):
+        diff_coef_dict = {}
+        for h, coef in self.ham:
+            htup = h.to_tuple()
+            if isinstance(coef, (sp.Expr)):
+                for key in list(coef.free_symbols):
+                    key = str(key)
+                    if key == eval_variable:
+                        coef = sp.diff(coef, key)
+            diff_coef_dict[htup] = coef
+        return diff_coef_dict
+    
+    def set_parameterizedHam(self, eval_dict, tol=1e-6):
+        #we use this function to evaulate an parameterized Hamiltonian with its coeficients 
+        #eval_dict is a dictionary with variable and its value. e.g. {"x": 2} or {"x": sine(a)} as it can also be an simuqu expression
+        #it will return again as a parametrized Hamiltonian if there still exists sympy expression
+        #otherwise it will return a TI Hamiltonian
+        un_evaluated_varibles = False
+        if Config.value("TIHamiltonian_tol") is not None:
+            tol = Config.value("TIHamiltonian_tol")
+        
+        eval_key = eval_dict.keys()
+        
+        #hamiltonian_key = []
+
+        hamdic = dict([])
+        for h, coef in self.ham:
+            htup = h.to_tuple()
+            if htup not in hamdic:
+                hamdic[htup] = coef
+            else:
+                hamdic[htup] += coef
+
+        ham = []
+        for htup in hamdic:
+            if isinstance(hamdic[htup], (sp.Expr)):
+                for key in list(hamdic[htup].free_symbols):
+                    key = str(key)
+                    if key in eval_key:
+                        hamdic[htup] = hamdic[htup].subs(key, eval_dict[key])
+                    else:
+                        un_evaluated_varibles = True
+            if isinstance(hamdic[htup], (Expression, sp.Expr)) or abs(hamdic[htup]) > tol:
+                if isinstance(hamdic[htup], (sp.Expr)) and un_evaluated_varibles==False:
+                    hamdic[htup] = float(hamdic[htup])
+                ham.append((productHamiltonian(from_list=htup), hamdic[htup]))
+        if un_evaluated_varibles == False:
+            return TIHamiltonian(self.sites_type, self.sites_name, ham)
+        else:
+            return Parametrized_Hamiltonian(self.sites_type, self.sites_name,ham)
 
 hlist_sum = TIHamiltonian.hlist_sum

@@ -60,6 +60,8 @@ def _initialize_positions_1d(sol_gvars):
 
 def _initialize_positions_2d(sol_gvars, verbose):
     pos = [(0.0, 0.0)]
+    if isinstance(sol_gvars,int):
+        return pos
     for i in range(int(len(sol_gvars) / 2)):
         pos.append((sol_gvars[2 * i], sol_gvars[2 * i + 1]))
     # Fix rotation angle
@@ -73,6 +75,9 @@ def _initialize_positions_2d(sol_gvars, verbose):
     return pos
 
 
+
+#clean_as depreciated as it is used to generate the format for bracket to calculate the waveform
+#we will get the boxes and positions directly from the solvers
 def clean_as(sol_gvars, boxes, ramp_time, state_prep, dimension, verbose=0):
     if dimension == 1:
         pos = _initialize_positions_1d(sol_gvars)
@@ -84,17 +89,21 @@ def clean_as(sol_gvars, boxes, ramp_time, state_prep, dimension, verbose=0):
     m = len(boxes)
     times = []
     pulse = [[0 for i in range(m)] for k in range(3)]
+    print(boxes)
     for evo_idx in range(m):
         box = boxes[evo_idx]
         times.append(box[1])
         for (i, j), ins, h, ins_lvars in box[0]:
+            #print(box[0])
             if verbose > 0:
                 print(f"i={i}, ins_lvars={ins_lvars}")
+            print(f"i={i}, ins_lvars={ins_lvars}")
             if i == 0:
                 pulse[0][evo_idx] = ins_lvars[0] * 1e6
             else:
-                pulse[1][evo_idx] = ins_lvars[0] * 1e6
-                pulse[2][evo_idx] = ins_lvars[1] * 1e6
+                pass
+                #pulse[1][evo_idx] = ins_lvars[0] * 1e6
+                #pulse[2][evo_idx] = ins_lvars[1] * 1e6
     if len(state_prep["times"]) > 0:
         pulse[0] = [v * 1e6 for v in state_prep["delta"]] + [pulse[0][0]] + pulse[0]
         pulse[1] = [v * 1e6 for v in state_prep["omega"]] + [pulse[1][0]] + pulse[1]
@@ -108,15 +117,16 @@ def clean_as(sol_gvars, boxes, ramp_time, state_prep, dimension, verbose=0):
             pulse[2][i] += np.pi
     return pos, gen_clocks(times, ramp_time, state_prep["times"]), pulse
 
-
 class BraketRydbergTranspiler(Transpiler):
     def __init__(self, dimension):
         self._dimension = dimension
 
+    # def transpile(self, sol_gvars, boxes, edges, ramp_time=0.05, state_prep=None, verbose=0):
+    #     # print(sol_gvars)
+    #     # print(boxes)
+    #     code = gen_braket_code(
+    #         *clean_as(sol_gvars, boxes, ramp_time, state_prep or {}, self._dimension, verbose)
+    #     )
+    #     return code
     def transpile(self, sol_gvars, boxes, edges, ramp_time=0.05, state_prep=None, verbose=0):
-        # print(sol_gvars)
-        # print(boxes)
-        code = gen_braket_code(
-            *clean_as(sol_gvars, boxes, ramp_time, state_prep or {}, self._dimension, verbose)
-        )
-        return code
+        return 

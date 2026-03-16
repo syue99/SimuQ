@@ -12,6 +12,7 @@ from simuq.braket.braket_rydberg_transpiler import BraketRydbergTranspiler
 from simuq.provider import BaseProvider
 from simuq.solver import generate_as
 
+#YS: I will learn from this code with comments
 
 class BraketProvider(BaseProvider):
     def __init__(self):
@@ -60,7 +61,8 @@ class BraketProvider(BaseProvider):
 
         if self.provider == "quera":
             nsite = qs.num_sites
-
+#will generate a machine with all avaliable parameterzed instruction sets; also initiate a transpiler for pulses, input parameter is dimension
+#transpiler used to generate pulse sequences when corresponding parameters are calculauted (e.g. phase, amp of the global laser)
             if aais == "rydberg1d_global":
                 transpiler = BraketRydbergTranspiler(1)
                 mach = rydberg1d_global.generate_qmachine(nsite)

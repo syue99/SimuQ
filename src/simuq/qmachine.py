@@ -54,10 +54,13 @@ class QMachine(BaseQuantumEnvironment):
     def instantiate(self):
         if not self.instantiated:
             if self.with_sys_ham:
-                sys_line = self.add_signal_line()
-                sys_ins = sys_line.add_instruction("native", "System Hamiltonian")
-                sys_ins.set_ham(self.sys_ham)
-                sys_ins.is_sys_ham = True
+                #Fred change this for runningthe code
+                #will need to change rydberg transiplier to add the case where there is no Hsys
+                #sys_line = self.add_signal_line()
+                #sys_ins = sys_line.add_instruction("native", "System Hamiltonian")
+                #sys_ins.set_ham(self.sys_ham)
+                #sys_ins.is_sys_ham = True
+                pass
 
             # Add indices to global variables
             for index, gvar in enumerate(self.gvars):

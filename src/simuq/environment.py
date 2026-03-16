@@ -13,7 +13,7 @@ Currently operators are stored as strings. In future these may be
 substituted by operator classes.
 """
 
-from simuq.hamiltonian import TIHamiltonian
+from simuq.hamiltonian import Parametrized_Hamiltonian as TIHamiltonian
 
 
 class BaseQuantumEnvironment:
