@@ -206,40 +206,6 @@ def classify_instruction(ins):
     return ('unknown',)
 
 
-def classify_kick(Hj):
-    """
-    Classify a single-operator kick TIHamiltonian for transport routing.
-
-    Hj is always constructed with exactly one product term (coef = 1):
-        Hj.ham = [(productHamiltonian, 1)]
-
-    productHamiltonian.d maps site_name (int) → operator string.
-    Only non-identity sites (op not in {'', 'I'}) are considered.
-
-    Returns one of:
-        ('detuning', site:int)   — single-site Z
-        ('rabi',     site:int)   — single-site X or Y
-        ('zz',       q0, q1)     — two-site ZZ
-        ('unknown',)
-    """
-    prod, _ = Hj.ham[0]
-    active = {site: op for site, op in prod.d.items() if op not in ('', 'I')}
-    sites  = sorted(active.keys())
-
-    if len(active) == 1:
-        site, op = sites[0], active[sites[0]]
-        if op == 'Z':
-            return ('detuning', site)
-        if op in ('X', 'Y'):
-            return ('rabi', site)
-
-    if len(active) == 2:
-        if all(active[s] == 'Z' for s in sites):
-            return ('zz', sites[0], sites[1])
-
-    return ('unknown',)
-
-
 # ── TweezerMapper ─────────────────────────────────────────────────────────────
 
 class TweezerMapper:
@@ -434,43 +400,6 @@ class TweezerMapper:
                     ))
         return ops
 
-    def map_kick(self, Hj, kick_duration, t_cursor):
-        """
-        Map a single-operator kick TIHamiltonian to schedule ops.
-
-        The Hj operator has coefficient 1 (dimensionless); kick_duration is the
-        physical hold time in μs.
-
-        For ZZ kicks: atoms are brought to R = (C_6)^(1/6) μm, the distance at
-        which C_6/R^6 = 1 rad·μs⁻¹.  The hold time kick_duration then
-        accumulates the desired phase: φ = 1 × kick_duration rad.
-
-        Parameters
-        ----------
-        Hj           : TIHamiltonian — single product term, coefficient 1
-        kick_duration : float — hold time in μs
-        t_cursor     : float — current time in μs (for logging)
-        """
-        cls = classify_kick(Hj)
-        if cls[0] == 'detuning':
-            return [_op_play(
-                channel_idx=cls[1],
-                amplitude=1.0,           # rad·μs⁻¹  (unit kick)
-                duration=kick_duration,  # μs
-            )]
-        if cls[0] == 'rabi':
-            return [_op_play(
-                channel_idx=self.n + cls[1],
-                amplitude=1.0,
-                duration=kick_duration,
-            )]
-        if cls[0] == 'zz':
-            q0, q1 = cls[1], cls[2]
-            # J = 1 rad·μs⁻¹  →  R = C_6^(1/6) ≈ 13.25 μm (may be > rest distance)
-            return self._cz_ops(q0, q1, J=1.0,
-                                duration=kick_duration, t_cursor=t_cursor)
-        return []
-
     # ── Top-level entry point ─────────────────────────────────────────────────
 
     def map_hlist(self, H_list):
@@ -482,8 +411,12 @@ class TweezerMapper:
               [Hj,          kick_duration],
               [evaluated_H, T - tau]      ]
 
+        All three segments are mapped through map_evaluated_H: the kick segment
+        (index 1) is a single-term TIHamiltonian whose geometry is already
+        encoded in sol_gvars and boxes by generate_as — no separate treatment
+        is needed.
+
         All durations in μs (same as T and tau throughout the pipeline).
-        Segment index 1 is always the kick; indices 0 and 2 are evaluated_H.
 
         Returns
         -------
@@ -494,11 +427,8 @@ class TweezerMapper:
         ops      = []
         t        = 0.0   # μs
 
-        for i, (H, duration) in enumerate(H_list):
-            if i % 3 == 1:
-                ops.extend(self.map_kick(H, duration, t))
-            else:
-                ops.extend(self.map_evaluated_H(duration, t))
+        for H, duration in H_list:
+            ops.extend(self.map_evaluated_H(duration, t))
             t += duration
 
         return ops, self.log

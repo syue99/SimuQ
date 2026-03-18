@@ -8,11 +8,9 @@ Coverage
 --------
 - encode_positions / make_aod_pulse
 - classify_instruction (all rydberg2d instruction types)
-- classify_kick (detuning, Rabi, ZZ)
 - rest_positions / _pair_target_positions
 - _dressing_ops / _cz_ops / _native_ops (op type, logging)
 - map_evaluated_H (priority: dressing suppresses ZZ)
-- map_kick (detuning, Rabi, ZZ)
 - map_hlist (3-segment branch, time cursor, TransportLog)
 """
 
@@ -32,7 +30,7 @@ from simuq.hamiltonian import TIHamiltonian, productHamiltonian
 from aod_channel import encode_positions, make_aod_pulse, AOD_FREQ_MHZ
 from tweezer_mapper import (
     TransportLog, TweezerMapper,
-    classify_instruction, classify_kick,
+    classify_instruction,
     _op_aod, _op_play, _op_delay,
     C_6,
 )
@@ -131,33 +129,6 @@ class TestClassifyInstruction:
 
     def test_unknown(self):
         assert classify_instruction(_fake_ins("mystery")) == ('unknown',)
-
-
-# ── classify_kick ─────────────────────────────────────────────────────────────
-
-class TestClassifyKick:
-
-    def test_single_z(self):
-        Hj = _make_Hj({0: 'Z'})
-        assert classify_kick(Hj) == ('detuning', 0)
-
-    def test_single_x(self):
-        Hj = _make_Hj({1: 'X'})
-        assert classify_kick(Hj) == ('rabi', 1)
-
-    def test_single_y(self):
-        Hj = _make_Hj({0: 'Y'})
-        assert classify_kick(Hj) == ('rabi', 0)
-
-    def test_two_site_zz(self):
-        Hj = _make_Hj({0: 'Z', 1: 'Z'})
-        cls = classify_kick(Hj)
-        assert cls[0] == 'zz'
-        assert set(cls[1:]) == {0, 1}
-
-    def test_unknown_xy(self):
-        Hj = _make_Hj({0: 'X', 1: 'Z'})
-        assert classify_kick(Hj) == ('unknown',)
 
 
 # ── TweezerMapper geometry ────────────────────────────────────────────────────
@@ -365,45 +336,6 @@ class TestMapEvaluatedH:
         assert any(o["duration"] == pytest.approx(2.5) for o in play_ops)
 
 
-# ── map_kick ──────────────────────────────────────────────────────────────────
-
-class TestMapKick:
-
-    def setup_method(self):
-        self.m = _mapper_3q()
-
-    def test_detuning_kick_play(self):
-        Hj  = _make_Hj({0: 'Z'})
-        ops = self.m.map_kick(Hj, kick_duration=0.5, t_cursor=0.0)
-        assert len(ops) == 1
-        assert ops[0]["op"]       == "play"
-        assert ops[0]["channel"]  == 0
-        assert ops[0]["duration"] == pytest.approx(0.5)
-
-    def test_rabi_kick_play(self):
-        Hj  = _make_Hj({2: 'X'})
-        ops = self.m.map_kick(Hj, kick_duration=0.3, t_cursor=0.0)
-        assert ops[0]["op"]      == "play"
-        assert ops[0]["channel"] == self.m.n + 2   # rabi site 2 → ch[5]
-
-    def test_zz_kick_emits_cz_ops(self):
-        Hj  = _make_Hj({0: 'Z', 1: 'Z'})
-        ops = self.m.map_kick(Hj, kick_duration=1.0, t_cursor=0.0)
-        aod_ops = [o for o in ops if o["op"] == "aod"]
-        assert len(aod_ops) == 2       # bring-together + separate
-
-    def test_zz_kick_logged(self):
-        Hj  = _make_Hj({0: 'Z', 1: 'Z'})
-        self.m.map_kick(Hj, kick_duration=1.0, t_cursor=5.0)
-        assert len(self.m.log.cz_moves) == 1
-        assert self.m.log.cz_moves[0].t_start == pytest.approx(5.0)
-
-    def test_unknown_kick_returns_empty(self):
-        Hj  = _make_Hj({0: 'X', 1: 'Z'})
-        ops = self.m.map_kick(Hj, kick_duration=1.0, t_cursor=0.0)
-        assert ops == []
-
-
 # ── map_hlist ─────────────────────────────────────────────────────────────────
 
 class TestMapHlist:
@@ -434,28 +366,3 @@ class TestMapHlist:
         # Each call resets the log — counts should match, not accumulate
         assert len(log1.cz_moves) == len(log2.cz_moves)
 
-    def test_time_cursor_advances(self):
-        """ZZ kick at index 1 must be logged at t = tau, not t = 0."""
-        tau  = 0.4
-        kick = np.pi / 4
-        qs   = QSystem(); q = [Qubit(qs)]
-        H_eval = 1.0 * q[0].Z
-        Hj     = _make_Hj({0: 'Z', 1: 'Z'})
-
-        sol_gvars = [2.0, 0.0, 1.0, 1.73]
-        m = TweezerMapper(n_qubits=3, sol_gvars=sol_gvars, boxes=[], ramp_time=0.01)
-
-        m.map_hlist([[H_eval, tau], [Hj, kick], [H_eval, 1.0 - tau]])
-        assert m.log.cz_moves[0].t_start == pytest.approx(tau)
-
-    def test_kick_segment_at_index_1(self):
-        """Only the middle segment (index 1) should be treated as a kick."""
-        qs = QSystem(); q = [Qubit(qs)]
-        H_eval = 1.0 * q[0].Z
-        Hj     = _make_Hj({0: 'Z'})   # detuning kick → play op, not aod
-
-        m  = _mapper_3q()
-        ops, _ = m.map_hlist([[H_eval, 0.3], [Hj, 0.5], [H_eval, 0.7]])
-        play_ops = [o for o in ops if o["op"] == "play"]
-        # The kick produces a play op; evaluated_H with no boxes produces nothing
-        assert len(play_ops) >= 1
