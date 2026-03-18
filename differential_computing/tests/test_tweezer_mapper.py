@@ -94,20 +94,20 @@ class TestAODChannel:
         assert encode_positions([(3.0, 4.0), (5.0, 12.0)]) == pytest.approx(13.0)
 
     def test_make_aod_pulse_type(self):
-        p = make_aod_pulse([(1.0, 0.0)], ramp_time_ns=10)
+        p = make_aod_pulse([(1.0, 0.0)], ramp_time=10.0)
         assert p["type"] == "aod"
 
     def test_make_aod_pulse_freq(self):
-        p = make_aod_pulse([(1.0, 0.0)], ramp_time_ns=10)
+        p = make_aod_pulse([(1.0, 0.0)], ramp_time=10.0)
         assert p["freq_MHz"] == AOD_FREQ_MHZ
 
     def test_make_aod_pulse_duration(self):
-        p = make_aod_pulse([(1.0, 0.0)], ramp_time_ns=42)
-        assert p["duration_ns"] == 42
+        p = make_aod_pulse([(1.0, 0.0)], ramp_time=42.0)
+        assert p["duration"] == pytest.approx(42.0)
 
     def test_make_aod_pulse_positions_recorded(self):
         pos = [(1.0, 2.0), (3.0, 4.0)]
-        p   = make_aod_pulse(pos, ramp_time_ns=5)
+        p   = make_aod_pulse(pos, ramp_time=5.0)
         assert p["positions"] == pos
 
 

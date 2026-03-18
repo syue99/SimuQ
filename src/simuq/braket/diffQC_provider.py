@@ -70,12 +70,15 @@ def to_pulsedsl(ops, channels, aod_ch):
     for op in ops:
         kind = op["op"]
 
+        # All time fields in op dicts are in μs; PulseDSL Pulse.duration is in ns.
+        # Conversion: duration_ns = int(duration_μs * 1000)
+
         if kind == "aod":
             # AOD transport: sine wave at fixed frequency (amplitude = position proxy)
             pulse = Pulse(
                 shape=Shape.Sine,
                 amplitude=float(op["amplitude"]),
-                duration=int(op["duration_ns"]),
+                duration=int(op["duration"] * 1000),  # μs → ns
             )
             Play(pulse, aod_ch)
 
@@ -85,13 +88,13 @@ def to_pulsedsl(ops, channels, aod_ch):
                 shape=Shape.Constant,
                 amplitude=float(op["amplitude"]),
                 phase=float(op["phase"]),
-                duration=int(op["duration"]),
+                duration=int(op["duration"] * 1000),  # μs → ns
             )
             Play(pulse, channels[op["channel"]])
 
         elif kind == "delay":
             # Time advance: emit a zero-amplitude hold on the AOD channel
-            DSLDelay(int(op["duration"]), aod_ch)
+            DSLDelay(int(op["duration"] * 1000), aod_ch)  # μs → ns
 
 
 # ── Provider ──────────────────────────────────────────────────────────────────
