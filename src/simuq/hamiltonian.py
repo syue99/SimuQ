@@ -640,11 +640,10 @@ class Parametrized_Hamiltonian(TIHamiltonian):
         diff_coef_dict = {}
         for h, coef in self.ham:
             htup = h.to_tuple()
-            if isinstance(coef, (sp.Expr)):
-                for key in list(coef.free_symbols):
-                    key = str(key)
-                    if key == eval_variable:
-                        coef = sp.diff(coef, key)
+            if isinstance(coef, sp.Expr):
+                coef = sp.diff(coef, sp.Symbol(eval_variable))
+            else:
+                coef = 0  # Python int/float constant: derivative is 0
             diff_coef_dict[htup] = coef
         return diff_coef_dict
     
