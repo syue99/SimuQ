@@ -83,7 +83,7 @@ def generate_qmachine(n=2, inits=None):
             dsqr = (x[i][0] - x[j][0]) ** 2 + (x[i][1] - x[j][1]) ** 2
             #Jij = J0/(1+(dsqr/rc)**6)
             #hlist.append(Jij * noper[i] * noper[j]) 
-            hlist.append(o* C_6 / (dsqr**6) * noper[i] * noper[j]) 
+            hlist.append(o * C_6 / (dsqr**3) * noper[i] * noper[j])  # C6/R^6, dsqr=R^2 so dsqr**3=R^6
     dressing_h = hlist_sum(hlist)
     ins.set_ham(dressing_h)
 
