@@ -363,3 +363,79 @@ class TestSingleTrial3Atoms:
         assert np.sign(grad_psr) == np.sign(grad_fd), (
             f"Sign mismatch: PSR={grad_psr:.6f}, FD={grad_fd:.6f}"
         )
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# MULTI-LAYER COMPILED GRADIENT TEST
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestMultilayerCompiledGradient:
+    """End-to-end compiled gradient for the two-layer dressing example.
+
+    |psi0> --[ H1(x) ]--[ H_X ]--[ H2 ]-- <Z0Z1>
+    3 qubits. Layer 1 parameterized, Layers 2+3 fixed.
+    Checks that compiled H for all 3 layers gives same gradient as original.
+    """
+
+    T1 = 0.5; T_X = 0.1; T2 = 0.5
+    x_val = 1.0
+
+    def setup_method(self):
+        from verify_compilation import verify_multilayer_compilation
+
+        x = sp.Symbol('x')
+        J01 = sp.sin(2 * x)
+
+        # Layer 1
+        qs1 = QSystem(); q1 = [Qubit(qs1) for _ in range(3)]
+        self.H1_param = J01 * q1[0].Z * q1[1].Z + J01 * q1[0].X + J01 * q1[1].X
+
+        # Layer 2
+        qs_x = QSystem(); q_x = [Qubit(qs_x) for _ in range(3)]
+        self.H_X = 5.0 * (q_x[0].X + q_x[1].X + q_x[2].X)
+
+        # Layer 3
+        qs2 = QSystem(); q2 = [Qubit(qs2) for _ in range(3)]
+        self.H2 = 1.2 * q2[0].Z * q2[2].Z + 1.2 * q2[0].X + 1.2 * q2[2].X
+
+        # PSR programs
+        np.random.seed(42)
+        self.programs = _single_trial_programs(self.H1_param, self.T1, self.x_val)
+
+        # Compile all 3 layers
+        self.prov1 = _compile_provider(self.H1_param, self.x_val, self.T1, 3)
+        self.prov1.run(self.programs, None, T=self.T1, backend="hardware", verbose=0)
+
+        self.prov2 = _compile_provider(self.H_X, self.x_val, self.T_X, 3)
+        programs_x = [([[[self.H_X, self.T_X]]], 1.0, 1)]
+        self.prov2.run(programs_x, None, T=self.T_X, backend="hardware", verbose=0)
+
+        self.prov3 = _compile_provider(self.H2, self.x_val, self.T2, 3)
+        programs_2 = [([[[self.H2, self.T2]]], 1.0, 1)]
+        self.prov3.run(programs_2, None, T=self.T2, backend="hardware", verbose=0)
+
+    def test_compiled_multilayer_gradient(self):
+        """Compiled gradient across all 3 layers matches original."""
+        from verify_compilation import verify_multilayer_compilation
+
+        runner = QuTiPSequentialRunner(n_qubits=3)
+        psi0 = runner.zero_state()
+        obs = runner.zz_observable(0, 1)
+
+        result = verify_multilayer_compilation(
+            self.programs,
+            self.prov1._pulse_ledgers,
+            [
+                (self.prov2._pulse_ledgers[0][0], self.H_X, self.T_X),
+                (self.prov3._pulse_ledgers[0][0], self.H2, self.T2),
+            ],
+            n_qubits=3,
+            psi0=psi0,
+            observable=obs,
+            T=self.T1,
+        )
+
+        assert result["relative_error"] < 0.01, (
+            f"Multi-layer compiled gradient error {result['relative_error']:.4%}. "
+            f"truth={result['ground_truth']:.6f}, compiled={result['compiled']:.6f}"
+        )

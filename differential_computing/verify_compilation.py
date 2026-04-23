@@ -245,3 +245,85 @@ def verify_compilation(programs, pulse_ledgers, n_qubits, psi0, observable, T,
         "gradient": float(grad_recon),
         "norm_diffs": norms,
     }
+
+
+def verify_multilayer_compilation(
+    programs, psr_ledgers, fixed_layer_ledgers, n_qubits, psi0, observable, T,
+):
+    """
+    End-to-end compiled gradient check for multi-layer evolution.
+
+    Compares:
+      - Ground truth: PSR gradient with original H for all layers
+      - Compiled: PSR gradient with compiled H (from ledgers) for all layers
+
+    Parameters
+    ----------
+    programs           : list — PSR programs for the parameterized layer
+    psr_ledgers        : list[list[PulseLedger]] — from prov1._pulse_ledgers
+    fixed_layer_ledgers: list of (PulseLedger, original_H, T) for each fixed layer
+                         Each element: (ledger, H_original, duration)
+    n_qubits           : int
+    psi0               : QuTiP ket
+    observable         : QuTiP Qobj
+    T                  : float — PSR evolution time (parameterized layer)
+
+    Returns
+    -------
+    dict with keys:
+        "ground_truth"  : float — gradient with original H
+        "compiled"      : float — gradient with compiled H
+        "error"         : float — absolute difference
+        "relative_error": float
+    """
+    import qutip as qp
+
+    runner = QuTiPSequentialRunner(n_qubits=n_qubits)
+
+    # Reconstruct compiled H for fixed layers
+    compiled_fixed = []
+    for ledger, H_orig, dur in fixed_layer_ledgers:
+        st, sn = _infer_sites([[ledger]], n_qubits)
+        H_list = _ledger_to_H_list(ledger, st, sn)
+        compiled_fixed.append(H_list)
+
+    # Ground truth expfn: original H for all layers
+    def expfn_original(H_list):
+        state = runner.run_sequence(H_list, psi0)
+        for _, H_orig, dur in fixed_layer_ledgers:
+            r = qp.sesolve(H_orig.to_qutip_qobj(), state, [0, float(dur)])
+            state = r.states[-1]
+        return float(qp.expect(observable, state).real)
+
+    # Compiled expfn: compiled H for all layers
+    def expfn_compiled(H_list):
+        state = runner.run_sequence(H_list, psi0)
+        for H_list_fixed in compiled_fixed:
+            for H_seg, dur in H_list_fixed:
+                r = qp.sesolve(H_seg.to_qutip_qobj(), state, [0, float(dur)])
+                state = r.states[-1]
+        return float(qp.expect(observable, state).real)
+
+    # Ground truth gradient
+    grad_truth = combine_gradient_results(programs, expfn_original, T)
+
+    # Compiled Layer 1 programs
+    st1, sn1 = _infer_sites(psr_ledgers, n_qubits)
+    compiled_programs = []
+    for prog_idx, (H_tot_list, ugrad, n_rep) in enumerate(programs):
+        compiled_H_tot = []
+        for branch_idx in range(len(H_tot_list)):
+            ledger = psr_ledgers[prog_idx][branch_idx]
+            H_list = _ledger_to_H_list(ledger, st1, sn1)
+            compiled_H_tot.append(H_list)
+        compiled_programs.append([compiled_H_tot, ugrad, n_rep])
+
+    grad_compiled = combine_gradient_results(compiled_programs, expfn_compiled, T)
+
+    error = abs(grad_truth - grad_compiled)
+    return {
+        "ground_truth":   float(grad_truth),
+        "compiled":       float(grad_compiled),
+        "error":          float(error),
+        "relative_error": float(error / (abs(grad_truth) + 1e-12)),
+    }
