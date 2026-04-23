@@ -559,10 +559,6 @@ class TweezerMapper:
         """
         ops = []
         for box_entries, _box_duration in self.boxes:
-            has_dressing = any(
-                classify_instruction(ins)[0] == 'dressing'
-                for (_, _), ins, _, _ in box_entries
-            )
             for (_, _), ins, _, ins_lvars in box_entries:
                 cls = classify_instruction(ins)
                 if cls[0] in ('detuning', 'rabi'):
@@ -577,7 +573,7 @@ class TweezerMapper:
                         duration=duration,
                         t_cursor=t_cursor,
                     ))
-                elif cls[0] == 'zz' and not has_dressing:
+                elif cls[0] == 'zz':
                     q0, q1 = cls[1], cls[2]
                     ops.extend(self._cz_ops(
                         q0, q1,

@@ -389,15 +389,15 @@ class TestMapEvaluatedH:
         aod_ops = [o for o in ops if o["op"] == "aod"]
         assert len(aod_ops) >= 1
 
-    def test_dressing_suppresses_zz(self):
-        """If dressing is active, ZZ entries in the same box must be skipped."""
+    def test_dressing_and_zz_both_emitted(self):
+        """Both dressing and ZZ are emitted — solver uses both together."""
         m = self._mapper_with_boxes([
             ("dressing gloabl potential", "native",  [0.5]),
             ("c01_zz",                   "derived",  [1.0]),
         ])
         ops = m.map_evaluated_H(duration=1.0, t_cursor=0.0)
-        cz_logs = m.log.cz_moves
-        assert len(cz_logs) == 0
+        assert len(m.log.dressing_moves) > 0, "Dressing should be emitted"
+        assert len(m.log.cz_moves) > 0, "ZZ should also be emitted"
 
     def test_zz_only_box_emits_cz(self):
         m   = self._mapper_with_boxes([("c01_zz", "derived", [2.0])])

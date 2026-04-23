@@ -147,15 +147,18 @@ def solve_aligned(
                     tc = tc.real
                 eq = (lambda c: lambda x: -c)(tc * t)
                 targ_bc = _body_count(tprod)
+                # Body-count filter: don't let multi-body instructions
+                # (dressing, ZZ) contribute to single-body ORIGINAL target
+                # terms. But allow them for side-effect terms (tc=0) — those
+                # exist because a multi-body instruction was activated, and
+                # the solver needs all contributors in the equation so
+                # detuning can compensate dressing's single-qubit side-effects.
+                is_side_effect = (isinstance(tc, (int, float)) and tc == 0)
                 for i in range(len(mach.lines)):
                     line = mach.lines[i]
                     for j in range(len(line.inss)):
                         ins = line.inss[j]
-                        # Body-count filter: don't let multi-body instructions
-                        # (dressing, ZZ) contribute to single-body target terms.
-                        # This prevents the solver from activating dressing/ZZ
-                        # for purely single-qubit Hamiltonians.
-                        if targ_bc <= 1 and _max_body_count(ins) > 1:
+                        if targ_bc <= 1 and _max_body_count(ins) > 1 and not is_side_effect:
                             continue
                         for mprod, mc in ins.h.ham:
                             if tprod == mprod:  # This compares the contents of prodHams.
