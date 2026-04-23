@@ -82,13 +82,19 @@ def _fake_provider_with_prog(n_sites=2):
 
     # Minimal fake boxes: one box with a single dressing instruction and one ZZ
     from unittest.mock import MagicMock
+    from simuq.hamiltonian import TIHamiltonian
     ins_dress = MagicMock(); ins_dress.name = "dressing gloabl potential"
     ins_zz    = MagicMock(); ins_zz.name    = "c01_zz"; ins_zz.nativeness = "derived"
 
+    # h_eval needs sites_type/sites_name for TweezerMapper init
+    sites_type = ["qubit"] * n_sites
+    sites_name = [f"q{i}" for i in range(n_sites)]
+    h_eval = TIHamiltonian.identity(sites_type, sites_name)
+
     fake_box = (
         [
-            ((6, 0), ins_dress, MagicMock(), [0.5]),
-            ((7, 0), ins_zz,    MagicMock(), [1.0]),
+            ((6, 0), ins_dress, h_eval, [0.5]),
+            ((7, 0), ins_zz,    h_eval, [1.0]),
         ],
         1.0,
     )
@@ -230,8 +236,9 @@ class TestRunHardware:
         with pytest.raises(NotImplementedError):
             prov.results()
 
-    def test_ops_contain_aod_and_play(self):
-        """Branch ops must include both 'aod' (dressing) and optionally 'play' ops."""
+    def test_ops_contain_delay_and_play(self):
+        """Branch ops must include 'delay' (dressing) and 'play' ops.
+        AOD may be skipped if atoms are already at the target position."""
         prov = self._prov()
         prov.run(self._prog(n_sample=2), None, T=1.0, backend="hardware")
         all_ops = [
@@ -241,7 +248,7 @@ class TestRunHardware:
             for op in ops
         ]
         op_types = {o["op"] for o in all_ops}
-        assert "aod" in op_types   # dressing generates AOD ops
+        assert "delay" in op_types
 
     def test_transport_summary_prints(self, capsys):
         prov = self._prov()

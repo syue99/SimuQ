@@ -58,6 +58,23 @@ def locate_switch(mach, evo_index, ins_index):
     return locate_switch_evo(mach, evo_index) + ins_index
 
 
+def _body_count(tprod):
+    """Count non-identity factors in a productHamiltonian.
+
+    1-body: single Z_i, X_i, Y_i
+    2-body: Z_iZ_j, etc.
+    0-body: identity
+    """
+    return sum(1 for v in tprod.values() if v != "")
+
+
+def _max_body_count(ins):
+    """Max body count across all terms in an instruction's Hamiltonian."""
+    if ins.h is None:
+        return 0
+    return max((_body_count(mprod) for mprod, _ in ins.h.ham), default=0)
+
+
 # Equation builder and solver when an alignment is supplied.
 def solve_aligned(
     ali, qs, mach, solver="least_squares", solver_args={"tol": 1e-3, "time_penalty": 0}, verbose=0
@@ -65,12 +82,14 @@ def solve_aligned(
     if isinstance(solver_args, float):
         tol = solver_args
         time_penalty = 0
+        fix_time = False
     else:
         tol = solver_args["tol"]
         if "time_penalty" in solver_args.keys():
             time_penalty = solver_args["time_penalty"]
         else:
             time_penalty = 0
+        fix_time = solver_args.get("fix_time", False)
     logger.info(ali)
     if verbose > 0:
         print("Start_solving for ", ali)
@@ -127,10 +146,17 @@ def solve_aligned(
                         raise Exception("Met complex coefficients, not implemented yet.")
                     tc = tc.real
                 eq = (lambda c: lambda x: -c)(tc * t)
+                targ_bc = _body_count(tprod)
                 for i in range(len(mach.lines)):
                     line = mach.lines[i]
                     for j in range(len(line.inss)):
                         ins = line.inss[j]
+                        # Body-count filter: don't let multi-body instructions
+                        # (dressing, ZZ) contribute to single-body target terms.
+                        # This prevents the solver from activating dressing/ZZ
+                        # for purely single-qubit Hamiltonians.
+                        if targ_bc <= 1 and _max_body_count(ins) > 1:
+                            continue
                         for mprod, mc in ins.h.ham:
                             if tprod == mprod:  # This compares the contents of prodHams.
                                 eq = (lambda eq_, f_: lambda x: eq_(x) + f_(x))(
@@ -234,9 +260,9 @@ def solve_aligned(
 
         nvar = len(mach.gvars) + len(qs.evos) * (mach.num_inss + len(mach.lvars)) + len(qs.evos)
         eqs, fixed_values = build_eqs([None for i in range(nvar)])
-        # if fix_time :
-        #    for j in range(len(qs.evos)) :
-        #        fixed_values[locate_timevar(mach, len(qs.evos), j)] = qs.evos[j][1]
+        if fix_time:
+            for j in range(len(qs.evos)):
+                fixed_values[locate_timevar(mach, len(qs.evos), j)] = qs.evos[j][1]
         offset = np.sqrt(1e5 * tol / np.sqrt(nvar))
         if verbose > 1 :
             print("offset: ", offset)
@@ -274,6 +300,18 @@ def solve_aligned(
         if np.linalg.norm(f_sol[1:], 1) > tol:
             return False
 
+        # Determine which instructions are active and whether dressing is among them.
+        # If dressing is active, single-qubit instructions (detuning, rabi) must be
+        # kept to compensate dressing's single-qubit side-effects.
+        has_dressing = False
+        for evo_index in range(len(qs.evos)):
+            for line in mach.lines:
+                for ins in line.inss:
+                    sw_idx = locate_switch_evo(mach, evo_index) + ins.index
+                    if fixed_values[sw_idx] is None or fixed_values[sw_idx] == 1:
+                        if _max_body_count(ins) > 1 and ins.nativeness == "native":
+                            has_dressing = True
+
         map_var = []
         map_var_revert = [None for i in range(nvar)]
         new_fixed_values = [fixed_values[i] for i in range(len(fixed_values))]
@@ -289,17 +327,36 @@ def solve_aligned(
                     < len(mach.gvars) + len(qs.evos) * (len(mach.lvars) + mach.num_inss)
                     and (i - len(mach.gvars)) % (mach.num_inss + len(mach.lvars)) < mach.num_inss
                 ):
-                    temp_store = sol[label]
-                    sol[label] = 0
-                    if np.linalg.norm(f(sol)[1:], 1) - sol_error > 1e-3:
+                    # Identify the instruction for this switch
+                    ins_offset = (i - len(mach.gvars)) % (mach.num_inss + len(mach.lvars))
+                    ins_obj = None
+                    for line in mach.lines:
+                        for ins in line.inss:
+                            if ins.index == ins_offset:
+                                ins_obj = ins
+                                break
+                        if ins_obj is not None:
+                            break
+
+                    # If dressing is active, keep single-qubit instructions
+                    # (they compensate dressing side-effects)
+                    if has_dressing and ins_obj is not None and _max_body_count(ins_obj) <= 1:
                         new_fixed_values[i] = 1
                     else:
-                        new_fixed_values[i] = 0
-                    sol[label] = temp_store
+                        temp_store = sol[label]
+                        sol[label] = 0
+                        if np.linalg.norm(f(sol)[1:], 1) - sol_error > 1e-5:
+                            new_fixed_values[i] = 1
+                        else:
+                            new_fixed_values[i] = 0
+                        sol[label] = temp_store
                 else:
                     new_init.append(sol[label])
 
         eqs, fixed_values = build_eqs(new_fixed_values)
+        if fix_time:
+            for j in range(len(qs.evos)):
+                fixed_values[locate_timevar(mach, len(qs.evos), j)] = qs.evos[j][1]
         offset = np.sqrt(1e5 * tol / np.sqrt(len(new_init)))
         f, lbs, ubs, _ = build_obj([lambda x: offset] + eqs, fixed_values)
         if time_penalty != 0:
