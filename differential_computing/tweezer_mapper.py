@@ -614,11 +614,14 @@ class TweezerMapper:
 
             elif len(active) == 1:
                 site, op = active[0]
+                # Return to interaction zone if needed (single-qubit ops
+                # should run at interaction zone, not gate zone)
+                retrieval_ops = self._ensure_interaction_zone(site)
                 if op == "Z":
                     # Detuning: H = -d*(I-Z)/2 → Z coeff = d/2
                     # We want total Z coeff = coeff, so d = 2*coeff
                     amp = 2.0 * coeff
-                    ops.extend([_op_play(
+                    ops.extend(retrieval_ops + [_op_play(
                         channel_idx=site, amplitude=amp, duration=duration)])
                     self.ledger.record(
                         self.current_positions, self.current_zones, "play",
@@ -628,7 +631,7 @@ class TweezerMapper:
                     # Rabi: H = Ω/2*(cosφ*X - sinφ*Y), X coeff = Ω/2
                     # We want coeff*X, so Ω = 2*coeff, phase=0
                     amp = 2.0 * coeff
-                    ops.extend([_op_play(
+                    ops.extend(retrieval_ops + [_op_play(
                         channel_idx=self.n + site, amplitude=amp,
                         duration=duration, phase=0.0)])
                     self.ledger.record(
@@ -640,7 +643,7 @@ class TweezerMapper:
                     # We want coeff*Y, so Ω = -2*coeff, phase=π/2
                     amp = -2.0 * coeff
                     phase = np.pi / 2.0
-                    ops.extend([_op_play(
+                    ops.extend(retrieval_ops + [_op_play(
                         channel_idx=self.n + site, amplitude=amp,
                         duration=duration, phase=phase)])
                     self.ledger.record(
