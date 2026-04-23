@@ -189,21 +189,22 @@ class TestDressingOps:
     def test_skips_aod_when_already_at_interaction(self):
         """Atoms start at interaction zone — no AOD needed."""
         ops = self.m._dressing_ops(o_coef=0.5, duration=1.0, t_cursor=0.0)
-        assert len(ops) == 1  # delay only, no aod
-        assert ops[0]["op"] == "delay"
+        assert len(ops) == 1  # play on dressing channel only, no aod
+        assert ops[0]["op"] == "play"
+        assert ops[0]["channel"] == 2 * self.m.n  # dressing channel
 
     def test_emits_aod_when_not_at_interaction(self):
         """Atoms NOT at interaction zone — AOD move required."""
         self.m.current_positions = [(999.0, 999.0)] * self.m.n
         ops = self.m._dressing_ops(o_coef=0.5, duration=1.0, t_cursor=0.0)
-        assert len(ops) == 2  # aod + delay
+        assert len(ops) == 2  # aod + play
         assert ops[0]["op"] == "aod"
-        assert ops[1]["op"] == "delay"
+        assert ops[1]["op"] == "play"
 
-    def test_delay_duration(self):
+    def test_dressing_play_duration(self):
         ops = self.m._dressing_ops(o_coef=0.5, duration=1.5, t_cursor=0.0)
-        delay_ops = [o for o in ops if o["op"] == "delay"]
-        assert delay_ops[0]["duration"] == pytest.approx(1.5)
+        play_ops = [o for o in ops if o["op"] == "play"]
+        assert play_ops[0]["duration"] == pytest.approx(1.5)
 
     def test_logs_dressing_move(self):
         self.m._dressing_ops(o_coef=0.7, duration=1.0, t_cursor=2.5)
@@ -266,9 +267,10 @@ class TestCZOps:
         )
         assert dist == pytest.approx(R_expected, rel=1e-5)
 
-    def test_second_is_delay(self):
+    def test_second_is_play_on_zz_channel(self):
         ops = self.m._cz_ops(0, 1, J=1.0, duration=2.3, t_cursor=0.0)
-        assert ops[1]["op"] == "delay"
+        assert ops[1]["op"] == "play"
+        assert ops[1]["channel"] == 2 * self.m.n + 1  # ZZ channel
         assert ops[1]["duration"] == pytest.approx(2.3)
 
     def test_logs_cz_move(self):

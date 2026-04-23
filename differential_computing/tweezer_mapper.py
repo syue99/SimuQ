@@ -79,8 +79,9 @@ Channel allocation in PulseDSL (n=3 example)
 ---------------------------------------------
 ch[0..n-1]   detuning per site
 ch[n..2n-1]  Rabi per site
-ch[2n]       dressing (global) — not a transport channel; used as time holder
-ch[2n+1]     AOD transport — single channel, sine 100 MHz carrier (placeholder)
+ch[2n]       dressing (UV laser, interaction zone)
+ch[2n+1]     ZZ gate (gate-zone laser)
+ch[2n+2]     AOD transport — single channel, sine 100 MHz carrier (placeholder)
 """
 
 import sys
@@ -405,8 +406,10 @@ class TweezerMapper:
 
         self._update_positions(pos, zones)
 
-        ops.append(_op_delay(duration))
-        # Ledger: dressing play entry with stored Hamiltonian
+        # Dressing channel: play on ch[2n] (UV laser driving dressing interaction)
+        dressing_ch = 2 * self.n
+        ops.append(_op_play(dressing_ch, amplitude=float(o_coef), duration=duration))
+
         # Build the solver's dressing Hamiltonian from o_coef + positions
         dressing_H = self._build_dressing_H(
             o_coef, self._sites_type, self._sites_name)
@@ -452,7 +455,10 @@ class TweezerMapper:
 
         self._update_positions(pos, zones)
 
-        ops.append(_op_delay(duration))
+        # ZZ channel: play on ch[2n+1] (gate-zone laser)
+        zz_ch = 2 * self.n + 1
+        ops.append(_op_play(zz_ch, amplitude=float(J), duration=duration))
+
         # Build ZZ Hamiltonian from solver's J
         zz_H = self._build_zz_H(J, q0, q1, self._sites_type, self._sites_name)
         # Ledger: ZZ play entry

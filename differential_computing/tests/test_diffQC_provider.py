@@ -236,9 +236,8 @@ class TestRunHardware:
         with pytest.raises(NotImplementedError):
             prov.results()
 
-    def test_ops_contain_delay_and_play(self):
-        """Branch ops must include 'delay' (dressing) and 'play' ops.
-        AOD may be skipped if atoms are already at the target position."""
+    def test_ops_contain_play(self):
+        """Branch ops must include 'play' ops (dressing/ZZ/detuning/rabi)."""
         prov = self._prov()
         prov.run(self._prog(n_sample=2), None, T=1.0, backend="hardware")
         all_ops = [
@@ -248,7 +247,7 @@ class TestRunHardware:
             for op in ops
         ]
         op_types = {o["op"] for o in all_ops}
-        assert "delay" in op_types
+        assert "play" in op_types
 
     def test_transport_summary_prints(self, capsys):
         prov = self._prov()
