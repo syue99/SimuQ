@@ -186,7 +186,48 @@ class diffQCProvider(BaseProvider):
             elif aais == "rydberg2d":
                 if _BRAKET_AVAILABLE:
                     transpiler = BraketRydbergTranspiler(2)
-                mach = rydberg2d.generate_qmachine(nsite)
+                # Analyze target H: find qubits involved in two-body terms.
+                # Idle qubits (no ZZ interaction) get placed far away so
+                # dressing doesn't create unwanted coupling.
+                active_qubits = set()
+                for h, t in qs.evos:
+                    for prod, c in h.ham:
+                        sites = [s for s, op in prod.d.items() if op != ""]
+                        if len(sites) >= 2:
+                            active_qubits.update(sites)
+                if active_qubits and len(active_qubits) < nsite:
+                    # Place active qubits in standard polygon, idle qubits far away.
+                    # inits[i] is for qubit i+1 (qubit 0 is fixed at origin).
+                    active_list = sorted(active_qubits)
+                    n_active = len(active_list)
+                    C6_val = rydberg2d.C_6
+                    l = (C6_val / 4) ** (1.0 / 6) / max(
+                        (2 - 2 * np.cos(2 * np.pi / max(n_active, 2))) ** 0.5, 1e-10)
+                    # Build positions for all n qubits (qubit 0 at origin, handled by generate_qmachine)
+                    all_pos = [(0.0, 0.0)]  # qubit 0
+                    active_counter = 0
+                    for i in range(1, nsite):
+                        if i in active_qubits:
+                            active_counter += 1
+                            all_pos.append((
+                                l * (np.cos(active_counter * 2 * np.pi / max(n_active, 2)) - 1),
+                                l * np.sin(active_counter * 2 * np.pi / max(n_active, 2)),
+                            ))
+                        else:
+                            # Park idle qubit far away (1000 μm)
+                            all_pos.append((1000.0, 1000.0 + 5.0 * i))
+                    # If qubit 0 is idle, swap it with an active qubit's position
+                    # (qubit 0 is always at origin in rydberg2d)
+                    if 0 not in active_qubits and active_list:
+                        # Qubit 0 idle — place first active qubit at origin
+                        # and set qubit 0's would-be position far away
+                        # (but qubit 0 is hardcoded at origin, so just park others)
+                        all_pos[0] = (0.0, 0.0)  # forced by rydberg2d
+                    # inits is indexed by qubit number: inits[i] for i in 1..n-1
+                    # (qubit 0 is always at origin, inits[0] is unused)
+                    mach = rydberg2d.generate_qmachine(nsite, inits=all_pos)
+                else:
+                    mach = rydberg2d.generate_qmachine(nsite)
             else:
                 raise NotImplementedError
 
