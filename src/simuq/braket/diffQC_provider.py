@@ -278,6 +278,145 @@ class diffQCProvider(BaseProvider):
 
     # ── run / results ─────────────────────────────────────────────────────────
 
+    # ── TD compilation ────────────────────────────────────────────────────────
+
+    def compile_td(
+        self,
+        H_td,
+        t_sym,
+        T,
+        param_dict=None,
+        verbose=0,
+    ):
+        """Compile a time-dependent Hamiltonian for PSR gradient estimation.
+
+        Factors ``H_td`` into envelope groups (see ``td_hamiltonian.py``) and
+        decides the execution strategy:
+
+        - disjoint groups → **envelope path** (per-group AWG waveforms)
+        - shared ≥2-body qubits → **Trotter fallback**
+
+        The result is stored on ``self.td_compilation`` and is consumed by
+        :meth:`run_td`. Per-group solver calls and hardware waveform emission
+        are the next step (they require ``play_wf`` support in TweezerMapper
+        and cross-group position mapping — neither is wired up yet).
+
+        Parameters
+        ----------
+        H_td : Parametrized_Hamiltonian
+            Coefficients may mix the time symbol and parameter symbols.
+        t_sym : sympy.Symbol or str
+        T : float
+            Total evolution duration.
+        param_dict : dict, optional
+            Non-time parameter values (leave out the diff_var; it is
+            substituted at PSR-generation time).
+        verbose : int
+
+        Returns
+        -------
+        dict
+            The ``td_compilation`` dictionary.
+        """
+        if _DIFF_COMPUTING_PATH not in sys.path:
+            sys.path.insert(0, _DIFF_COMPUTING_PATH)
+        from td_hamiltonian import (
+            check_dressing_collision,
+            factor_td_hamiltonian,
+        )
+
+        groups = factor_td_hamiltonian(H_td, t_sym, param_dict)
+        collision = check_dressing_collision(groups)
+        strategy = "trotter" if collision else "envelope"
+
+        self.td_compilation = {
+            "H_td": H_td,
+            "t_sym": t_sym,
+            "T": float(T),
+            "param_dict": dict(param_dict) if param_dict else {},
+            "groups": groups,
+            "collision": collision,
+            "strategy": strategy,
+            "n_sites": len(H_td.sites_type),
+        }
+
+        # Keep a minimal prog-shaped tuple so downstream code that sniffs
+        # self.prog[0] for n_sites still works.
+        self.prog = [len(H_td.sites_type), None, None, None, None]
+
+        if verbose > 0:
+            print(
+                f"[compile_td] {len(groups)} envelope group(s); "
+                f"strategy={strategy}; collision={collision}"
+            )
+            for i, (env, ti) in enumerate(groups):
+                n_terms = len(ti.ham)
+                sites = sorted({
+                    s for prod, _ in ti.ham for s in prod.keys() if prod[s] != ""
+                })
+                print(f"  group {i}: env={env}  ({n_terms} term(s), sites={sites})")
+
+        return self.td_compilation
+
+    def run_td(
+        self,
+        programs,
+        observable,
+        psi0=None,
+        backend="qutip",
+        shots=1,
+        verbose=0,
+    ):
+        """Run TD-PSR branches (from ``observable_program_generator_td``).
+
+        ``backend='qutip'``
+            Dispatches to the TD sequential runner and
+            ``combine_gradient_results_td``. T is taken from the
+            ``compile_td`` record.
+
+        ``backend='hardware'``
+            Not yet wired — requires ``play_wf`` emission and cross-group
+            position mapping in TweezerMapper. Raises
+            :class:`NotImplementedError` with a message describing what's
+            missing.
+        """
+        if not hasattr(self, "td_compilation"):
+            raise RuntimeError("Call compile_td() before run_td().")
+
+        if _DIFF_COMPUTING_PATH not in sys.path:
+            sys.path.insert(0, _DIFF_COMPUTING_PATH)
+
+        T = self.td_compilation["T"]
+        n_sites = self.td_compilation["n_sites"]
+        self._T = T
+        self._programs = programs
+        self._gradient = None
+
+        if backend == "qutip":
+            import qutip as qp
+            from td_psr import (
+                combine_gradient_results_td,
+                make_td_expectation_fn,
+            )
+            if psi0 is None:
+                psi0 = qp.tensor([qp.basis(2, 0)] * n_sites)
+            expfn = make_td_expectation_fn(psi0, observable, n_qubits=n_sites)
+            self._gradient = combine_gradient_results_td(programs, expfn, T)
+            if verbose > 0:
+                print(f"[run_td/qutip] gradient = {self._gradient:.6f}")
+            return self._gradient
+
+        if backend == "hardware":
+            raise NotImplementedError(
+                "Hardware path for TD not yet wired. Needs: (1) play_wf op in "
+                "TweezerMapper for time-varying AWG samples, (2) per-group "
+                "solver calls to obtain channel weights, (3) cross-group "
+                "atom position allocation when multiple envelope groups run "
+                "concurrently. For now, use backend='qutip'."
+            )
+
+        raise ValueError(f"Unknown backend {backend!r}. Use 'qutip' or 'hardware'.")
+
     def run(
         self,
         programs,
