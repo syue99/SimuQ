@@ -93,6 +93,7 @@ from typing import List, Tuple, Optional
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 from aod_channel import make_aod_pulse
 from pulse_ledger import PulseLedger, idle_position, GATE_ZONE
+from pulse_tree import Seq, Para, PlayNode, AodNode, DelayNode
 from simuq.hamiltonian import TIHamiltonian, productHamiltonian
 
 # Rydberg C6 for Rb87 ~70S₁/₂ (QuEra Aquila).
@@ -729,3 +730,119 @@ class TweezerMapper:
             t += duration
 
         return ops, self.log, self.ledger
+
+    # ── Native op-tree entry point ────────────────────────────────────────────
+
+    def _channel_kind(self, channel):
+        """
+        Channel role from the rydberg2d layout — metadata for downstream
+        pulse-shape selection (not part of the flattened op dict).
+
+            ch[0 .. n-1]    detuning
+            ch[n .. 2n-1]   rabi
+            ch[2n]          dressing
+            ch[2n+1]        zz (gate)
+        """
+        n = self.n
+        if channel < n:
+            return "detuning"
+        if channel < 2 * n:
+            return "rabi"
+        if channel == 2 * n:
+            return "dressing"
+        if channel == 2 * n + 1:
+            return "zz"
+        return None
+
+    def _group_segment(self, ops):
+        """
+        Group one segment's flat ops into a position-segmented Seq/Para subtree.
+
+        Position-segmented PARA rule (atoms have one position state at a time):
+          - Consecutive 'play' ops accumulate into one PARA — they share the
+            current atom-position state, so they run concurrently.
+          - An 'aod' (position change) or 'delay' closes the open PARA and is
+            appended to the SEQ as a barrier, forcing what follows to run after.
+          - A 'play' whose channel is already in the open PARA also closes it:
+            two pulses on one channel cannot overlap.
+
+        flatten() of the returned subtree reproduces `ops` in order, so this is
+        a pure regrouping — no op is added, dropped, or reordered.
+        """
+        seq = Seq()
+        cur = None              # the open Para, or None
+        cur_channels = set()
+
+        def flush():
+            nonlocal cur, cur_channels
+            if cur is not None:
+                seq.add(cur)
+                cur = None
+                cur_channels = set()
+
+        for op in ops:
+            kind = op["op"]
+            if kind == "play":
+                ch = int(op["channel"])
+                if cur is not None and ch in cur_channels:
+                    flush()     # same channel can't be concurrent → force SEQ
+                if cur is None:
+                    cur = Para()
+                cur.add(PlayNode(
+                    channel=ch,
+                    amplitude=op["amplitude"],
+                    duration=op["duration"],
+                    phase=op["phase"],
+                    kind=self._channel_kind(ch),
+                ))
+                cur_channels.add(ch)
+            elif kind == "aod":
+                flush()
+                seq.add(AodNode(positions=op["positions"],
+                                ramp_time=op["duration"]))
+            elif kind == "delay":
+                flush()
+                seq.add(DelayNode(duration=op["duration"]))
+            else:
+                raise ValueError(f"_group_segment: unknown op {kind!r}")
+        flush()
+        return seq
+
+    def map_hlist_tree(self, H_list, T=None):
+        """
+        Map one H_list branch to a native op-tree (pulse_tree IR), plus the
+        same TransportLog and PulseLedger that map_hlist produces.
+
+        The tree is Seq([seg0, seg1, seg2]): segments run back-to-back, and the
+        outer SEQ enforces that ordering — AOD barriers alone cannot, since two
+        adjacent segments may already share the same atom positions (no AOD
+        between them).  Each segment is grouped by the position-segmented PARA
+        rule (see _group_segment).
+
+        flatten(tree) == map_hlist(H_list)[0] exactly — the tree only adds
+        timing structure to the same ops.
+
+        Returns
+        -------
+        tree   : pulse_tree.Seq — native op-tree for this branch
+        log    : TransportLog
+        ledger : PulseLedger
+        """
+        self.log    = TransportLog()
+        self.ledger = PulseLedger(self.n)
+        # Reset position state to interaction zone at start of each branch
+        self.current_positions = list(self.interaction_positions())
+        self.current_zones     = ["interaction"] * self.n
+
+        seg_subtrees = []
+        t = 0.0   # μs
+
+        for seg_idx, (H, duration) in enumerate(H_list):
+            if seg_idx == 1 and len(H_list) == 3:
+                seg_ops = self._map_kick_segment(H, duration, t)
+            else:
+                seg_ops = self.map_evaluated_H(duration, t)
+            seg_subtrees.append(self._group_segment(seg_ops))
+            t += duration
+
+        return Seq(seg_subtrees), self.log, self.ledger
