@@ -130,6 +130,88 @@ def to_pulsedsl_simple(ops, channels, aod_ch):
             DSLDelay(dur_ns, aod_ch)
 
 
+def to_pulsedsl_tree(tree, channels, aod_ch, run=True):
+    """
+    Translate a pulse_tree IR (from TweezerMapper.map_hlist_tree) into a live
+    PulseDSL op-tree and, by default, RUN it.
+
+    The new PulseDSL scheduler is declarative: Play/Delay/SEQ/PARA only *build*
+    nodes; nothing is scheduled until RUN(tree) walks the tree, and all timing
+    comes from how SEQ/PARA nest (SEQ threads time child-to-child, PARA forks
+    it).  This walker mirrors the IR one-to-one:
+
+        Seq       -> SEQ
+        Para      -> PARA
+        PlayNode  -> Play(Pulse(...), channels[channel])
+        AodNode   -> Play(Pulse(Sine, ...), aod_ch)
+        DelayNode -> Delay(dur_ns, aod_ch)
+
+    Pulse shapes are placeholders for now — Constant for native plays, Sine for
+    AOD transport.  The PlayNode.kind tag (detuning/rabi/dressing/zz) is carried
+    through map_hlist_tree for the later per-channel shape pass.  Durations are
+    converted μs -> ns (× 1000).
+
+    Parameters
+    ----------
+    tree     : pulse_tree node — one branch's op-tree (root is a Seq)
+    channels : PulseDSL ChannelEnv (ch) — native laser/MW channels
+    aod_ch   : PulseDSL Channel         — the AOD transport channel
+    run      : bool — if True (default), call RUN on the translated tree so it
+               lands on the global Schedule timeline.
+
+    Returns
+    -------
+    The translated PulseDSL QOp tree (already RUN if run=True), so the caller
+    can inspect or re-RUN it.
+    """
+    pulsedsl_path = "/Users/syue99/research/RISC-Q/PulseDSL/src/DSL/"
+    if pulsedsl_path not in sys.path:
+        sys.path.insert(0, pulsedsl_path)
+    from PulseDSL_py.core import Pulse, Shape
+    from PulseDSL_py.ops import Play, Delay as DSLDelay, SEQ, PARA, RUN
+
+    if _DIFF_COMPUTING_PATH not in sys.path:
+        sys.path.insert(0, _DIFF_COMPUTING_PATH)
+    from pulse_tree import Seq, Para, PlayNode, AodNode, DelayNode
+
+    US_TO_NS = 1000
+
+    def _us_to_ns(t):
+        return int(round(float(t) * US_TO_NS))
+
+    def translate(node):
+        if isinstance(node, Seq):
+            return SEQ(*[translate(c) for c in node.children])
+        if isinstance(node, Para):
+            return PARA(*[translate(c) for c in node.children])
+        if isinstance(node, PlayNode):
+            # Placeholder shape (Constant); real per-kind shapes deferred.
+            pulse = Pulse(
+                shape=Shape.Constant,
+                amplitude=float(node.amplitude),
+                phase=float(node.phase),
+                duration=_us_to_ns(node.duration),
+            )
+            return Play(pulse, channels[int(node.channel)])
+        if isinstance(node, AodNode):
+            meta = node.to_op()   # {"amplitude": encoded displacement proxy, ...}
+            pulse = Pulse(
+                shape=Shape.Sine,
+                amplitude=float(meta["amplitude"]),
+                duration=_us_to_ns(node.ramp_time),
+            )
+            return Play(pulse, aod_ch)
+        if isinstance(node, DelayNode):
+            return DSLDelay(_us_to_ns(node.duration), aod_ch)
+        raise TypeError(
+            f"to_pulsedsl_tree: unknown node {type(node).__name__}")
+
+    dsl_tree = translate(tree)
+    if run:
+        RUN(dsl_tree)
+    return dsl_tree
+
+
 # ── Provider ──────────────────────────────────────────────────────────────────
 
 class diffQCProvider(BaseProvider):
