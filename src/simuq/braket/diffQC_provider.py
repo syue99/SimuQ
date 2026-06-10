@@ -168,11 +168,11 @@ def to_pulsedsl_tree(tree, channels, aod_ch, run=True):
     if pulsedsl_path not in sys.path:
         sys.path.insert(0, pulsedsl_path)
     from PulseDSL_py.core import Pulse, Shape
-    from PulseDSL_py.ops import Play, Delay as DSLDelay, SEQ, PARA, RUN
+    from PulseDSL_py.ops import Play, Delay as DSLDelay, SEQ, PARA, COMB, RUN
 
     if _DIFF_COMPUTING_PATH not in sys.path:
         sys.path.insert(0, _DIFF_COMPUTING_PATH)
-    from pulse_tree import Seq, Para, PlayNode, AodNode, DelayNode
+    from pulse_tree import Seq, Para, PlayNode, CombNode, AodNode, DelayNode
 
     US_TO_NS = 1000
 
@@ -193,6 +193,20 @@ def to_pulsedsl_tree(tree, channels, aod_ch, run=True):
                 duration=_us_to_ns(node.duration),
             )
             return Play(pulse, channels[int(node.channel)])
+        if isinstance(node, CombNode):
+            # Multi-tone superposition on one device → PulseDSL COMB.
+            dur_ns = _us_to_ns(node.duration)
+            tone_pulses = [
+                Pulse(
+                    shape=Shape.Constant,
+                    amplitude=float(t.amplitude),
+                    phase=float(t.phase),
+                    frequency=float(t.frequency),
+                    duration=dur_ns,
+                )
+                for t in node.tones
+            ]
+            return COMB(channels[int(node.channel)], *tone_pulses)
         if isinstance(node, AodNode):
             meta = node.to_op()   # {"amplitude": encoded displacement proxy, ...}
             pulse = Pulse(

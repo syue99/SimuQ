@@ -72,6 +72,34 @@ def test_builders_add_chaining():
     assert len(seq.children) == 2 and len(para.children) == 1
 
 
+def test_comb_node_to_op():
+    comb = pt.CombNode(
+        channel=1,
+        tones=[pt.Tone(atom=0, frequency=80.0, amplitude=7.0, phase=0.0),
+               pt.Tone(atom=1, frequency=90.0, amplitude=7.0, phase=0.2)],
+        duration=0.25,
+        kind="detuning",
+    )
+    op = comb.to_op()
+    assert op["op"] == "comb" and op["channel"] == 1 and op["duration"] == 0.25
+    assert len(op["tones"]) == 2
+    assert op["tones"][0] == {"atom": 0, "frequency": 80.0,
+                              "amplitude": 7.0, "phase": 0.0}
+    # kind is metadata only — not in the op dict
+    assert "kind" not in op
+
+
+def test_comb_node_flatten_and_pretty():
+    comb = pt.CombNode(2, [pt.Tone(0, 80.0, 1.0), pt.Tone(1, 90.0, 1.0)],
+                       0.3, kind="rabi")
+    tree = pt.Seq([pt.Para([comb]), pt.PlayNode(4, 2.0, 0.3, kind="dressing")])
+    flat = pt.flatten(tree)
+    assert flat[0]["op"] == "comb" and flat[1]["op"] == "play"
+    # pretty() renders a comb without error and mentions its tones
+    text = pt.pretty(tree)
+    assert "Comb ch2" in text and "a0" in text and "a1" in text
+
+
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for fn in fns:

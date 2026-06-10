@@ -72,6 +72,26 @@ def test_play_fields_and_unit_conversion():
     assert p_rabi.ch is ch[2]
 
 
+def test_comb_translates_to_pulsedsl_COMB():
+    ch, _ = Channels(7)
+    aod_ch = ch[6]
+    comb = pt.CombNode(
+        channel=1,
+        tones=[pt.Tone(atom=0, frequency=80.0, amplitude=7.0, phase=0.0),
+               pt.Tone(atom=1, frequency=90.0, amplitude=7.0, phase=0.2)],
+        duration=0.25, kind="detuning")
+    dsl = to_pulsedsl_tree(pt.Seq([comb]), ch, aod_ch, run=False)
+
+    comb_node = dsl.children[0]
+    assert comb_node.kind == "comb"
+    assert comb_node.ch is ch[1]                  # all tones on one device
+    assert len(comb_node.children) == 2           # two tones
+    tones = [c.pulse for c in comb_node.children]
+    assert {t.frequency for t in tones} == {80.0, 90.0}
+    assert all(t.duration == 250 for t in tones)  # 0.25 μs → 250 ns
+    assert abs(tones[1].phase - 0.2) < 1e-12
+
+
 def test_delay_routes_to_aod_channel():
     ch, _ = Channels(7)
     aod_ch = ch[6]

@@ -75,6 +75,54 @@ class PlayNode:
 
 
 @dataclass
+class Tone:
+    """One tone in a multi-tone comb (one AOD/AOM addressing channel).
+
+    atom      : int   — which atom this tone addresses (via its AOD frequency)
+    frequency : float — tone/carrier frequency (the addressing knob)
+    amplitude : float — drive amplitude (detuning d, Rabi Ω, or position proxy)
+    phase     : float — rad (Rabi phase φ; 0 for detuning/position)
+    """
+    atom: int
+    frequency: float
+    amplitude: float
+    phase: float = 0.0
+
+
+@dataclass
+class CombNode:
+    """Multi-tone superposition on ONE physical device (channel).
+
+    The hardware analogue of PARA-on-one-channel done right: several tones are
+    summed into a single channel's waveform (an addressing AOD/AOM driven by a
+    multi-tone RF comb), each tone addressing a different atom by frequency.
+    Translates to the PulseDSL COMB instruction.  A leaf in the timing model —
+    occupies one [start, end] interval like a single Play.
+
+    channel  : int   — physical channel id (ADDR_DET / ADDR_RABI / TRANSPORT_AOD)
+    tones    : list[Tone]
+    duration : float — μs
+    kind     : str   — role for shape selection ('detuning'|'rabi'|'transport')
+    """
+    channel: int
+    tones: List[Tone]
+    duration: float
+    kind: Optional[str] = None
+
+    def to_op(self) -> dict:
+        return {
+            "op":       "comb",
+            "channel":  int(self.channel),
+            "duration": float(self.duration),   # μs
+            "tones": [
+                {"atom": int(t.atom), "frequency": float(t.frequency),
+                 "amplitude": float(t.amplitude), "phase": float(t.phase)}
+                for t in self.tones
+            ],
+        }
+
+
+@dataclass
 class AodNode:
     """An AOD transport move to `positions` over `ramp_time` μs.
 
@@ -126,7 +174,7 @@ class Para:
         return self
 
 
-LEAF_TYPES = (PlayNode, AodNode, DelayNode)
+LEAF_TYPES = (PlayNode, CombNode, AodNode, DelayNode)
 BLOCK_TYPES = (Seq, Para)
 
 
@@ -160,6 +208,12 @@ def pretty(node, indent: int = 0) -> str:
         tag = f"[{node.kind}]" if node.kind else ""
         return (f"{pad}Play ch{node.channel} amp={node.amplitude:.4g} "
                 f"phase={node.phase:.4g} dur={node.duration:.4g} {tag}".rstrip())
+    if isinstance(node, CombNode):
+        tag = f"[{node.kind}]" if node.kind else ""
+        tones = ", ".join(f"a{t.atom}:f={t.frequency:.4g},A={t.amplitude:.4g}"
+                          for t in node.tones)
+        return (f"{pad}Comb ch{node.channel} dur={node.duration:.4g} {tag} "
+                f"{{{tones}}}".rstrip())
     if isinstance(node, AodNode):
         return f"{pad}Aod -> {len(node.positions)} atoms, ramp={node.ramp_time:.4g}"
     if isinstance(node, DelayNode):
