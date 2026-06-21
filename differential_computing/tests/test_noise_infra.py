@@ -99,6 +99,74 @@ def test_bad_pauli_key_raises():
         NoiseModel(n_qubits=1, pauli_rates={"W": 0.1})
 
 
+# ── post-selected leakage ─────────────────────────────────────────────────────
+
+def test_leak_generators_count_and_target():
+    nm = NoiseModel(n_qubits=2, leakage_rate=0.3)
+    assert nm.has_leakage() and not nm.has_collapse()
+    gens = nm.leak_generators()
+    assert len(gens) == 2                       # one |1><1| per qubit
+    # generator on qubit 0 = 0.3·|1><1|⊗I
+    n_proj = qp.basis(2, 1) * qp.basis(2, 1).dag()
+    expected = 0.3 * qp.tensor(n_proj, qp.qeye(2))
+    assert (gens[0] - expected).norm() < 1e-12
+
+
+def test_leakage_only_excited_state_decays():
+    # |1> decays at Γ; |0> does not (only |1> is dressed)
+    import os, sys as _sys
+    _sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+    from simuq.hamiltonian import TIHamiltonian
+    H0 = TIHamiltonian(["qubit"], ["q0"], [])           # zero Hamiltonian
+    r = NoisyQuTiPRunner(1, noise=NoiseModel(n_qubits=1, leakage_rate=0.5))
+    s1 = r.run_sequence([[H0, 1.0]], qp.basis(2, 1)).tr().real
+    s0 = r.run_sequence([[H0, 1.0]], qp.basis(2, 0)).tr().real
+    assert abs(s1 - np.exp(-0.5)) < 1e-3        # survival = exp(-Γt)
+    assert abs(s0 - 1.0) < 1e-9
+
+
+def test_kick_segment_excluded_from_leakage():
+    # 3-segment H_list [evolve, kick, evolve]: leakage only on segs 0 and 2.
+    from simuq.hamiltonian import TIHamiltonian
+    H0 = TIHamiltonian(["qubit"], ["q0"], [])
+    r = NoisyQuTiPRunner(1, noise=NoiseModel(n_qubits=1, leakage_rate=0.5))
+    # all-dressed (3 unit segments) vs kick-excluded: survival differs because
+    # the middle segment is skipped for leakage.
+    psi1 = qp.basis(2, 1)
+    three = [[H0, 1.0], [H0, 1.0], [H0, 1.0]]           # middle treated as kick
+    surv = r.run_sequence(three, psi1).tr().real
+    # only 2 of 3 unit segments leak → survival = exp(-0.5·2) = exp(-1)
+    assert abs(surv - np.exp(-1.0)) < 1e-3
+
+
+def test_leakage_postselect_renormalizes_expectation():
+    # post-selected <O> = Tr(Oρ)/Tr(ρ); with only |1> leaking from |+>, the
+    # surviving population is renormalized so <Z> is well-defined in [-1,1].
+    from simuq.hamiltonian import TIHamiltonian
+    H0 = TIHamiltonian(["qubit"], ["q0"], [])
+    r = NoisyQuTiPRunner(1, noise=NoiseModel(n_qubits=1, leakage_rate=0.5))
+    plus = (qp.basis(2, 0) + qp.basis(2, 1)).unit()
+    expfn = r.make_expectation_fn(plus, qp.sigmaz())
+    z = expfn([[H0, 1.0]])
+    assert -1.0 <= z <= 1.0
+    # |1> leaks away → survivors skew toward |0> → <Z> > 0
+    assert z > 0.0
+
+
+def test_no_leak_path_unchanged():
+    # leakage_rate=None must reproduce the plain mesolve expectation exactly.
+    H, n, obs, var = _build_2q()
+    T, x_val = 0.5, 0.7
+    programs = _programs(H, var, x_val, T, n_sample=1)
+    plain = NoisyQuTiPRunner(n, noise=None)
+    leak0 = NoisyQuTiPRunner(n, noise=NoiseModel(n_qubits=n, leakage_rate=0.0))
+    g_plain = combine_gradient_results(
+        programs, plain.make_expectation_fn(plain.zero_state(), obs), T)
+    g_leak0 = combine_gradient_results(
+        programs, leak0.make_expectation_fn(leak0.zero_state(), obs), T)
+    assert abs(g_plain - g_leak0) < 1e-9
+
+
 # ── mesolve runner correctness ────────────────────────────────────────────────
 
 @pytest.mark.parametrize("build", [_build_1q, _build_2q])

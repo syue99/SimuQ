@@ -58,6 +58,7 @@ class NoiseModel:
     T1: Optional[float] = None
     T2: Optional[float] = None
     pauli_rates: Optional[Dict[str, float]] = None
+    leakage_rate: Optional[float] = None
 
     def __post_init__(self):
         if self.pauli_rates is not None:
@@ -67,10 +68,38 @@ class NoiseModel:
                                      f"{list(_PAULI)}")
             if any(r < 0 for r in self.pauli_rates.values()):
                 raise ValueError("pauli_rates must be non-negative")
+        if self.leakage_rate is not None and self.leakage_rate < 0:
+            raise ValueError("leakage_rate must be non-negative")
 
-    def has_noise(self) -> bool:
+    # ── trace-preserving channels (T1 σ⁻ / T2 dephasing / Pauli) ──────────────
+    def has_collapse(self) -> bool:
         return (self.T1 is not None or self.T2 is not None
                 or bool(self.pauli_rates))
+
+    # ── post-selected leakage (loss OUT of the qubit subspace) ────────────────
+    def has_leakage(self) -> bool:
+        return bool(self.leakage_rate)
+
+    def has_noise(self) -> bool:
+        return self.has_collapse() or self.has_leakage()
+
+    def leak_generators(self) -> List["qp.Qobj"]:
+        """Per-qubit non-Hermitian leakage generators Γ·|1><1|_i.
+
+        Models loss from the dressed |1> state out of the computational subspace
+        (atom decays to a dark ground sublevel → discarded at readout).  Used as
+        the anti-Hermitian part of a CONDITIONAL (no-jump) evolution:
+            H_eff = H − (i/2) Σ_i Γ·|1><1|_i,
+        which post-selects on "no leakage" and renormalizes — exactly hardware
+        post-selection on the atom being found in {|0>, |1>}.  Only |1> leaks
+        because only |1> is dressed.
+        """
+        if not self.leakage_rate:
+            return []
+        n = self.n_qubits
+        n_proj = qp.basis(2, 1) * qp.basis(2, 1).dag()      # |1><1| = (I−Z)/2
+        return [float(self.leakage_rate) * _embed(n_proj, i, n)
+                for i in range(n)]
 
     def collapse_ops(self) -> List["qp.Qobj"]:
         """All Lindblad collapse operators for this model (T1/T2 + Pauli rates)."""

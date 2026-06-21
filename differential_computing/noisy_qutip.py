@@ -41,32 +41,74 @@ class NoisyQuTiPRunner:
         return qp.tensor(ops)
 
     # ── Evolution ─────────────────────────────────────────────────────────────
+    def _dressed_mask(self, H_list):
+        """Which segments are dressed (leakage applies).
+
+        The PSR branch is [evolve, kick, evolve]; the kick is a gate (its leakage
+        is folded into the separate gate-error model), so only segments 0 and 2
+        leak.  A 1-segment H_list (finite difference) is all dressed.  Any other
+        length defaults to all-dressed.
+        """
+        if len(H_list) == 3:
+            return [True, False, True]
+        return [True] * len(H_list)
+
     def run_sequence(self, H_list, psi0):
         """Evolve psi0 through each segment as a density matrix.
 
-        psi0 : QuTiP ket or density matrix
-        Returns the final density matrix.
+        Trace-preserving noise (T1 σ⁻ / T2 dephasing / Pauli rates) enters as
+        mesolve collapse operators.  Post-selected leakage (loss out of the
+        subspace) enters on DRESSED segments as a CONDITIONAL (no-jump)
+        evolution: H_eff = H − (i/2)·Σ Γ|1><1|_i, built into a custom Liouvillian
+        alongside the trace-preserving dissipators.  The trace of ρ then decays =
+        survival probability; make_expectation_fn renormalizes by it.
 
-        All noise (T1/T2 + Pauli rates) enters as mesolve collapse operators, so
-        it is integrated over each segment's real duration — automatically
-        duration-scaled and fair between FD (1 segment) and PSR (3 segments).
+        All channels are integrated over each segment's real duration → duration-
+        scaled and fair between FD (1 segment) and PSR (3 segments).
         """
         rho = qp.ket2dm(psi0) if psi0.isket else psi0
+        if self.noise is None or not self.noise.has_noise():
+            for H, duration in H_list:
+                if duration == 0:
+                    continue
+                rho = qp.mesolve(H.to_qutip_qobj(), rho,
+                                 [0.0, float(duration)], c_ops=[]).states[-1]
+            return rho
 
-        c_ops = (self.noise.collapse_ops()
-                 if (self.noise is not None and self.noise.has_noise()) else [])
+        c_ops = self.noise.collapse_ops() if self.noise.has_collapse() else []
+        leak = self.noise.leak_generators() if self.noise.has_leakage() else []
+        mask = self._dressed_mask(H_list)
 
-        for H, duration in H_list:
+        for (H, duration), dressed in zip(H_list, mask):
             if duration == 0:
                 continue
             H_qobj = H.to_qutip_qobj()
-            result = qp.mesolve(H_qobj, rho, [0.0, float(duration)], c_ops=c_ops)
-            rho = result.states[-1]
+            if leak and dressed:
+                # conditional no-jump generator: H_eff = H − (i/2) Σ Γ|1><1|.
+                # normalize_output=False keeps Tr(ρ)<1 = survival probability
+                # (post-selection); the default would hide the leakage by
+                # renormalizing the state.
+                H_eff = H_qobj - 0.5j * sum(leak)
+                L = -1j * (qp.spre(H_eff) - qp.spost(H_eff.dag()))
+                for c in c_ops:
+                    L += qp.lindblad_dissipator(c)
+                rho = qp.mesolve(L, rho, [0.0, float(duration)],
+                                 options=dict(normalize_output=False)).states[-1]
+            else:
+                rho = qp.mesolve(H_qobj, rho, [0.0, float(duration)],
+                                 c_ops=c_ops).states[-1]
         return rho
 
     def make_expectation_fn(self, psi0, observable):
-        """Return expfn(H_list) -> float = Tr(O · ρ_final) (exact noisy ⟨O⟩)."""
+        """Return expfn(H_list) -> float = post-selected ⟨O⟩ = Tr(O·ρ)/Tr(ρ).
+
+        Under post-selected leakage Tr(ρ) < 1 (survival probability); dividing by
+        it conditions on the atom being found in {|0>, |1>}, exactly as hardware
+        post-selection does.  Without leakage Tr(ρ)=1 and this is the plain ⟨O⟩.
+        """
         def expfn(H_list):
             rho = self.run_sequence(H_list, psi0)
-            return float(qp.expect(observable, rho).real)
+            tr = float(rho.tr().real)
+            val = float(qp.expect(observable, rho).real)
+            return val / tr if abs(tr) > 1e-15 else val
         return expfn
