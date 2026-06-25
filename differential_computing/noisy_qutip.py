@@ -21,11 +21,19 @@ import qutip as qp
 
 
 class NoisyQuTiPRunner:
-    def __init__(self, n_qubits, noise=None):
+    def __init__(self, n_qubits, noise=None, kick_dephases=True):
         """
         n_qubits : int
         noise    : NoiseModel | None — None means coherent (no noise).
+        kick_dephases : bool — whether the dressing-level dephasing/T1/Pauli
+            collapse operators act during the PSR kick segment.  Physically the
+            kick is compiled to a single/two-qubit GATE (clock-state rotation /
+            Rydberg gate), NOT a dressed analog evolution, so the dressing T2*
+            does not apply there — only the (separately modeled) gate error.
+            Set False for that physically-faithful model; True (default) keeps
+            the conservative "dephasing everywhere" behavior.
         """
+        self.kick_dephases = kick_dephases
         self.n_qubits = n_qubits
         self.noise = noise
 
@@ -101,6 +109,10 @@ class NoisyQuTiPRunner:
             if duration == 0:
                 continue
             H_qobj = H.to_qutip_qobj()
+            # The kick is a gate, not a dressed evolution: unless kick_dephases,
+            # the dressing-level collapse operators do not act during it (only the
+            # separately-applied gate error does).
+            seg_c_ops = c_ops if (dressed or self.kick_dephases) else []
             if leak and dressed:
                 # conditional no-jump generator: H_eff = H − (i/2) Σ Γ|1><1|.
                 # normalize_output=False keeps Tr(ρ)<1 = survival probability
@@ -114,7 +126,7 @@ class NoisyQuTiPRunner:
                                  options=dict(normalize_output=False)).states[-1]
             else:
                 rho = qp.mesolve(H_qobj, rho, [0.0, float(duration)],
-                                 c_ops=c_ops).states[-1]
+                                 c_ops=seg_c_ops).states[-1]
             # kick gate error: a discrete Z-type channel on the kicked qubits
             if is_kick and gate_err:
                 rho = self.noise.apply_gate_error(rho, self._kick_support(H))

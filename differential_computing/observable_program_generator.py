@@ -37,7 +37,7 @@ def _eval_ugrad(ugrad_raw, diff_var, value):
 
 
 def observable_program_generator(parametrized_H, T, n_sample, n_repetition,
-                                  diff_var, value):
+                                  diff_var, value, short_kick=False):
     """
     Generate parameter-shift branches for differentiating <O> w.r.t. diff_var.
 
@@ -51,6 +51,17 @@ def observable_program_generator(parametrized_H, T, n_sample, n_repetition,
     n_repetition   : int    — shot count per branch (b_obs in paper)
     diff_var       : str    — name of the sympy variable to differentiate
     value          : float  — point at which to evaluate the gradient
+    short_kick     : bool   — kick parameterization (default False = Algorithm 1):
+        False : f₋ branch [Hj, π/4],  f₊ branch [Hj, 7π/4].  The +π/4 / −π/4
+                symmetric shifts, with −π/4 realized as the forward duration
+                2π−π/4 = 7π/4 (Pauli kicks are 2π-periodic).  The 7π/4 kick is
+                ~7× longer than π/4 and accrues ~7× more decoherence on hardware.
+        True  : f₋ branch [Hj, π/4],  f₊ branch [−Hj, π/4].  The −π/4 shift is
+                instead realized via the negated generator over a SHORT duration:
+                exp(−i(−Hj)·π/4) = exp(−iHj·7π/4) (identical unitary, exact for
+                Pauli generators).  Both branches run π/4 → symmetric, ~7× less
+                decoherence.  Noiselessly the gradient is unchanged; under
+                dephasing it is markedly more accurate.
 
     Returns
     -------
@@ -70,21 +81,28 @@ def observable_program_generator(parametrized_H, T, n_sample, n_repetition,
         if evaluated_ugrad == 0.0:
             continue
 
-        Hj = TIHamiltonian(
-            parametrized_H.sites_type,
-            parametrized_H.sites_name,
-            [(productHamiltonian(from_list=Hj_tuple), 1)],
-        )
+        prod = productHamiltonian(from_list=Hj_tuple)
+        Hj = TIHamiltonian(parametrized_H.sites_type,
+                           parametrized_H.sites_name, [(prod, 1)])
+        # Negated generator for the short-kick f₊ branch (Pauli string → exact).
+        Hj_neg = TIHamiltonian(parametrized_H.sites_type,
+                               parametrized_H.sites_name, [(prod, -1)])
 
         H_tot_list = []
         for tau in tau_list:
             for sgn in [-1, 1]:
-                # Algorithm 1: kick duration = (1 + sgn*3/4) * π
-                # sgn=-1 → π/4 ≈ 0.785,  sgn=+1 → 7π/4 ≈ 5.497
-                kick = (1 + sgn * 3 / 4) * np.pi
+                if short_kick:
+                    # symmetric short kicks: both π/4; +Hj (f₋), −Hj (f₊)
+                    kick = np.pi / 4.0
+                    Hk = Hj if sgn == -1 else Hj_neg
+                else:
+                    # Algorithm 1: kick = (1 + sgn*3/4) * π
+                    # sgn=-1 → π/4 ≈ 0.785,  sgn=+1 → 7π/4 ≈ 5.497
+                    kick = (1 + sgn * 3 / 4) * np.pi
+                    Hk = Hj
                 H_tot_list.append([
                     [evaluated_H, tau],
-                    [Hj, kick],
+                    [Hk, kick],
                     [evaluated_H, T - tau],
                 ])
 
