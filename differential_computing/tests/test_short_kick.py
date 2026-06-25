@@ -90,33 +90,38 @@ def test_short_kick_gradient_matches_standard_noiseless(build):
     assert abs(g_std - g_short) < 1e-5
 
 
-def test_short_kick_more_accurate_under_dephasing():
-    # Under T2 dephasing, the short kick's gradient is closer to the noiseless
-    # truth than the standard (long-kick) gradient.
+def test_short_kick_helps_only_when_kick_dephases():
+    # The short kick reduces error ONLY if the kick segment itself dephases
+    # (kick_dephases=True, the legacy conservative model). Under the physically
+    # faithful default (kick is a gate → no dressing-T2* during it), the kick
+    # does not dephase, so short ≈ standard.
     H, n, obs, var = _build_2q()
     T, x_val = 0.5, 0.7
 
     clean = QuTiPSequentialRunner(n)
     np.random.seed(1)
-    progs = observable_program_generator(H, T, n_sample=400, n_repetition=1,
-                                         diff_var=var, value=x_val)
     truth = combine_gradient_results(
-        progs, clean.make_expectation_fn(clean.zero_state(), obs), T)
+        observable_program_generator(H, T, 400, 1, var, x_val),
+        clean.make_expectation_fn(clean.zero_state(), obs), T)
 
-    noisy = NoisyQuTiPRunner(n, noise=NoiseModel(n_qubits=n, T2=2.0))
-    nexp = noisy.make_expectation_fn(noisy.zero_state(), obs)
-    np.random.seed(1)
-    g_std = combine_gradient_results(
-        observable_program_generator(H, T, 400, 1, var, x_val), nexp, T)
-    np.random.seed(1)
-    g_short = combine_gradient_results(
-        observable_program_generator(H, T, 400, 1, var, x_val, short_kick=True),
-        nexp, T)
+    def grad(short, kick_dephases):
+        noisy = NoisyQuTiPRunner(n, noise=NoiseModel(n_qubits=n, T2=2.0),
+                                 kick_dephases=kick_dephases)
+        nexp = noisy.make_expectation_fn(noisy.zero_state(), obs)
+        np.random.seed(1)
+        return combine_gradient_results(
+            observable_program_generator(H, T, 400, 1, var, x_val,
+                                         short_kick=short), nexp, T)
 
-    err_std = abs(g_std - truth)
-    err_short = abs(g_short - truth)
-    assert err_short < err_std            # short kick is more accurate under T2
-    assert err_short < 0.5 * err_std      # and substantially so
+    # legacy model (kick dephases): short kick is substantially more accurate
+    err_std_T = abs(grad(False, True) - truth)
+    err_short_T = abs(grad(True, True) - truth)
+    assert err_short_T < 0.5 * err_std_T
+
+    # faithful model (kick = gate, no dephasing): short ≈ standard
+    err_std_F = abs(grad(False, False) - truth)
+    err_short_F = abs(grad(True, False) - truth)
+    assert abs(err_short_F - err_std_F) < 0.2 * max(err_std_F, 1e-6)
 
 
 def test_default_is_standard_kick():

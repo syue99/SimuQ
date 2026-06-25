@@ -21,7 +21,7 @@ import qutip as qp
 
 
 class NoisyQuTiPRunner:
-    def __init__(self, n_qubits, noise=None, kick_dephases=True):
+    def __init__(self, n_qubits, noise=None, kick_dephases=False):
         """
         n_qubits : int
         noise    : NoiseModel | None — None means coherent (no noise).
@@ -30,8 +30,9 @@ class NoisyQuTiPRunner:
             kick is compiled to a single/two-qubit GATE (clock-state rotation /
             Rydberg gate), NOT a dressed analog evolution, so the dressing T2*
             does not apply there — only the (separately modeled) gate error.
-            Set False for that physically-faithful model; True (default) keeps
-            the conservative "dephasing everywhere" behavior.
+            DEFAULT False (physically faithful: collapse ops act only on the
+            dressed evolution segments; the kick carries only its gate error).
+            True keeps the conservative legacy "dephasing everywhere" behavior.
         """
         self.kick_dephases = kick_dephases
         self.n_qubits = n_qubits
