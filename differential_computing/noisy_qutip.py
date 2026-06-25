@@ -53,6 +53,22 @@ class NoisyQuTiPRunner:
             return [True, False, True]
         return [True] * len(H_list)
 
+    def _kick_mask(self, H_list):
+        """Which segments are the PSR kick (gate error applies after them)."""
+        if len(H_list) == 3:
+            return [False, True, False]
+        return [False] * len(H_list)
+
+    @staticmethod
+    def _kick_support(H):
+        """Qubit indices the kick Hamiltonian Hj acts on (its body count → ε)."""
+        support = set()
+        for prod, _coeff in H.ham:
+            for site, op in prod.d.items():
+                if op != "":
+                    support.add(site)
+        return sorted(support)
+
     def run_sequence(self, H_list, psi0):
         """Evolve psi0 through each segment as a density matrix.
 
@@ -77,9 +93,11 @@ class NoisyQuTiPRunner:
 
         c_ops = self.noise.collapse_ops() if self.noise.has_collapse() else []
         leak = self.noise.leak_generators() if self.noise.has_leakage() else []
+        gate_err = self.noise.has_gate_error()
         mask = self._dressed_mask(H_list)
+        kicks = self._kick_mask(H_list)
 
-        for (H, duration), dressed in zip(H_list, mask):
+        for (H, duration), dressed, is_kick in zip(H_list, mask, kicks):
             if duration == 0:
                 continue
             H_qobj = H.to_qutip_qobj()
@@ -97,6 +115,9 @@ class NoisyQuTiPRunner:
             else:
                 rho = qp.mesolve(H_qobj, rho, [0.0, float(duration)],
                                  c_ops=c_ops).states[-1]
+            # kick gate error: a discrete Z-type channel on the kicked qubits
+            if is_kick and gate_err:
+                rho = self.noise.apply_gate_error(rho, self._kick_support(H))
         return rho
 
     def make_expectation_fn(self, psi0, observable):

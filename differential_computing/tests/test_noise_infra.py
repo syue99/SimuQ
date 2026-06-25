@@ -167,6 +167,62 @@ def test_no_leak_path_unchanged():
     assert abs(g_plain - g_leak0) < 1e-9
 
 
+# ── kick gate error ───────────────────────────────────────────────────────────
+
+def test_gate_error_coherent_calibration():
+    # a pure-coherent 1q gate error of ε should give average gate infidelity ≈ ε
+    nm = NoiseModel(n_qubits=1, gate_error_1q=1e-3, gate_coherent_frac=1.0)
+    theta = (1.5 * 1e-3) ** 0.5
+    U = (-1j * theta * qp.sigmaz()).expm()
+    d = 2
+    infid = 1.0 - (d + abs(U.tr()) ** 2) / (d * (d + 1))
+    assert abs(infid - 1e-3) < 5e-5
+
+
+def test_gate_error_incoherent_dephases():
+    # pure-incoherent gate error shrinks coherence by (1-2p), p=1.5·ε
+    nm = NoiseModel(n_qubits=1, gate_error_1q=1e-3, gate_coherent_frac=0.0)
+    rho = qp.ket2dm((qp.basis(2, 0) + qp.basis(2, 1)).unit())
+    out = nm.apply_gate_error(rho, [0])
+    assert abs(abs(out.full()[0, 1]) - 0.5 * (1 - 2 * 1.5e-3)) < 1e-6
+
+
+def test_kick_support_body_count():
+    from simuq import QSystem, Qubit
+    qs = QSystem(); q = [Qubit(qs) for _ in range(2)]
+    assert NoisyQuTiPRunner._kick_support(q[0].X) == [0]            # 1q kick
+    assert NoisyQuTiPRunner._kick_support(q[0].Z * q[1].Z) == [0, 1]  # 2q kick
+
+
+def test_gate_error_only_on_kick_segment():
+    # gate error must NOT touch an FD-style 1-segment (no kick) evolution.
+    H, n, obs, var = _build_2q()
+    T, x_val = 0.5, 0.7
+    clean = NoisyQuTiPRunner(n, noise=None)
+    gated = NoisyQuTiPRunner(n, noise=NoiseModel(
+        n_qubits=n, gate_error_1q=1e-2, gate_error_2q=1e-1))  # large, to be sure
+    He = H.set_parameterizedHam({var: x_val})
+    e_clean = clean.make_expectation_fn(clean.zero_state(), obs)([[He, T]])
+    e_gated = gated.make_expectation_fn(gated.zero_state(), obs)([[He, T]])
+    assert abs(e_clean - e_gated) < 1e-9       # 1-segment: no kick → no gate err
+
+
+def test_gate_error_affects_psr_kick():
+    # on a 3-segment PSR branch the kick gate error DOES change the gradient.
+    H, n, obs, var = _build_1q()
+    T, x_val = 0.5, 0.7
+    programs = _programs(H, var, x_val, T, n_sample=1)
+    clean = NoisyQuTiPRunner(n, noise=None)
+    gated = NoisyQuTiPRunner(n, noise=NoiseModel(
+        n_qubits=n, gate_error_1q=1e-2, gate_coherent_frac=1.0))
+    g_clean = combine_gradient_results(
+        programs, clean.make_expectation_fn(clean.zero_state(), obs), T)
+    g_gated = combine_gradient_results(
+        programs, gated.make_expectation_fn(gated.zero_state(), obs), T)
+    assert abs(g_gated - g_clean) > 1e-4
+    assert np.sign(g_gated) == np.sign(g_clean)   # sign preserved (descent-safe)
+
+
 # ── mesolve runner correctness ────────────────────────────────────────────────
 
 @pytest.mark.parametrize("build", [_build_1q, _build_2q])

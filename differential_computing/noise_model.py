@@ -59,6 +59,16 @@ class NoiseModel:
     T2: Optional[float] = None
     pauli_rates: Optional[Dict[str, float]] = None
     leakage_rate: Optional[float] = None
+    # ── gate (kick) error, anchored to Evered et al. 2026 (arXiv:2604.25987) ──
+    # The residual CZ error after loss post-selection is Z/phase- and
+    # scattering-dominated (T2*, Doppler, |r'> coupling), NOT flip (X); 1q gate
+    # errors are negligible.  So we model the kick gate error as a Z-type channel
+    # on the kicked qubits — a coherent Z over-rotation (Doppler/laser phase) +
+    # incoherent Z-dephasing (T2*/scattering) — with total average-gate
+    # infidelity gate_error_1q / gate_error_2q by body count.  X ≈ 0.
+    gate_error_1q: Optional[float] = None   # ε for 1-qubit kicks (e.g. 1e-4)
+    gate_error_2q: Optional[float] = None   # ε for 2-qubit kicks (e.g. 1e-3)
+    gate_coherent_frac: float = 0.5         # fraction of ε that is coherent Z
 
     def __post_init__(self):
         if self.pauli_rates is not None:
@@ -70,6 +80,11 @@ class NoiseModel:
                 raise ValueError("pauli_rates must be non-negative")
         if self.leakage_rate is not None and self.leakage_rate < 0:
             raise ValueError("leakage_rate must be non-negative")
+        if not (0.0 <= self.gate_coherent_frac <= 1.0):
+            raise ValueError("gate_coherent_frac must be in [0, 1]")
+        for g in (self.gate_error_1q, self.gate_error_2q):
+            if g is not None and g < 0:
+                raise ValueError("gate_error_* must be non-negative")
 
     # ── trace-preserving channels (T1 σ⁻ / T2 dephasing / Pauli) ──────────────
     def has_collapse(self) -> bool:
@@ -80,8 +95,42 @@ class NoiseModel:
     def has_leakage(self) -> bool:
         return bool(self.leakage_rate)
 
+    # ── gate (kick) error ─────────────────────────────────────────────────────
+    def has_gate_error(self) -> bool:
+        return bool(self.gate_error_1q) or bool(self.gate_error_2q)
+
+    def apply_gate_error(self, rho, support):
+        """Apply the Z-type kick gate error to the qubits in `support`.
+
+        support : iterable of qubit indices the kick acts on (body count sets ε).
+        Composition per qubit (average-gate-infidelity calibration, 1-qubit):
+          - coherent Z over-rotation exp(-iθZ):  infidelity (2/3)sin²θ → θ=√(1.5·ε_coh)
+          - incoherent Z-dephasing (1-p)ρ+pZρZ:  infidelity (2/3)p     → p = 1.5·ε_inc
+        ε is split per qubit (ε_q = ε/body) so the total gate infidelity ≈ ε.
+        Trace-preserving, so it composes with post-selected leakage unchanged.
+        """
+        support = list(support)
+        body = len(support)
+        if body == 0:
+            return rho
+        eps = self.gate_error_1q if body == 1 else self.gate_error_2q
+        if not eps:
+            return rho
+        n = self.n_qubits
+        eps_q = float(eps) / body
+        theta = (1.5 * self.gate_coherent_frac * eps_q) ** 0.5
+        p = 1.5 * (1.0 - self.gate_coherent_frac) * eps_q
+        for q in support:
+            Zq = _embed(qp.sigmaz(), q, n)
+            if theta > 0:                                   # coherent over-rotation
+                U = (-1j * theta * Zq).expm()
+                rho = U * rho * U.dag()
+            if p > 0:                                       # incoherent dephasing
+                rho = (1.0 - p) * rho + p * (Zq * rho * Zq)
+        return rho
+
     def has_noise(self) -> bool:
-        return self.has_collapse() or self.has_leakage()
+        return self.has_collapse() or self.has_leakage() or self.has_gate_error()
 
     def leak_generators(self) -> List["qp.Qobj"]:
         """Per-qubit non-Hermitian leakage generators Γ·|1><1|_i.
