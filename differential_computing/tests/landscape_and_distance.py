@@ -34,12 +34,15 @@ import scaling_universality as su
 from noisy_qutip import NoisyQuTiPRunner
 from noise_model import NoiseModel
 
-T = 4.0
-T2 = 16.0                 # T/T2* = 0.25 (small-noise regime, rescale accurate)
+T = 2.5
+T2 = 25.0                 # T/T2* = 0.10 (realistic operating regime)
 OBS = qp.tensor(qp.sigmaz(), qp.qeye(2))
 PSI0 = qp.tensor(qp.basis(2, 0), qp.basis(2, 0))
 I = qp.qeye(2); X, Z = qp.sigmax(), qp.sigmaz()
-FD_EPS = [0.3, 0.6, 0.9]
+FD_EPS = [0.3, 0.6, 0.9]     # secants drawn on the landscape (panel A)
+N_SHOTS = 40000              # finite shot budget / gradient (panel B)
+R_TRIALS = 4000
+N_SAMPLE = 256               # PSR tau samples
 
 
 def Hsq(theta):                                   # qutip H(theta)
@@ -73,24 +76,52 @@ def main():
     # the REAL gradient (ideal) at x*
     g_real = (fc(x_star + 1e-3) - fc(x_star - 1e-3)) / 2e-3
 
-    # PSR raw (under noise) and rescaled
+    # PSR raw (under noise) + analytic rescale factor
     H, var = Hsimuq()
-    g_psr_raw = su.psr_grad(H, var, x_star, T, noisy, 2, OBS, n_sample=300)
     s = ar.lambda_slope(Hsq, OBS, PSI0, T, 2, z_sites=[0], theta=x_star)
     factor = ar.rescale_factor(s, T, T2)
-    g_psr_resc = g_psr_raw * factor
 
-    # FD estimates on the noisy landscape at several ε
-    fd = {eps: (fn(x_star + eps) - fn(x_star - eps)) / (2 * eps) for eps in FD_EPS}
+    # ── shot-noise machinery (RMSE distance to the REAL gradient) ──
+    rng = np.random.default_rng(0)
 
-    print(f"Sharp landscape T={T}, T2={T2} (T/T2*={T/T2:.2f}).  x*={x_star:.3f}.")
-    print(f"  REAL (ideal) gradient = {g_real:+.4f}")
-    print(f"  PSR raw   = {g_psr_raw:+.4f}  (dist {abs(g_psr_raw-g_real):.4f})")
-    print(f"  PSR resc  = {g_psr_resc:+.4f}  (dist {abs(g_psr_resc-g_real):.4f})  "
-          f"[slope s={s:+.3f}, factor 1/λ={factor:.3f}]")
-    for eps in FD_EPS:
-        print(f"  FD ε={eps} = {fd[eps]:+.4f}  (dist {abs(fd[eps]-g_real):.4f})"
-              f"{'  WRONG sign' if np.sign(fd[eps])!=np.sign(g_real) else ''}")
+    def shots(exact, n):
+        p = 0.5 * (1 + np.clip(exact, -1, 1))
+        return 2.0 * rng.binomial(int(max(1, n)), p, size=R_TRIALS) / max(1, n) - 1
+
+    def fd_rmse(eps):
+        n = N_SHOTS // 2
+        est = (shots(fn(x_star + eps), n) - shots(fn(x_star - eps), n)) / (2 * eps)
+        return float(np.sqrt(np.mean((est - g_real) ** 2)))
+
+    # PSR pool (noisy branch expectations), subsample + shots per trial
+    np.random.seed(123)
+    progs = su.observable_program_generator(H, T, n_sample=800, n_repetition=1,
+                                            diff_var=var, value=x_star)
+    pexp = noisy.make_expectation_fn(PSI0, OBS)
+    H_tot, ug, _ = progs[0]; b = len(H_tot) // 2
+    em = np.array([pexp(H_tot[2 * i]) for i in range(b)])
+    ep = np.array([pexp(H_tot[2 * i + 1]) for i in range(b)])
+
+    def psr_est():
+        n_per = int(max(1, round(N_SHOTS / (2 * N_SAMPLE))))
+        idx = rng.integers(0, len(em), size=(R_TRIALS, N_SAMPLE))
+        fm = 2.0 * rng.binomial(n_per, 0.5 * (1 + np.clip(em[idx], -1, 1))) / n_per - 1
+        fp = 2.0 * rng.binomial(n_per, 0.5 * (1 + np.clip(ep[idx], -1, 1))) / n_per - 1
+        return (T / N_SAMPLE) * float(ug) * np.sum(fm - fp, axis=1)
+
+    psr_raw = psr_est()
+    psr_raw_rmse = float(np.sqrt(np.mean((psr_raw - g_real) ** 2)))
+    psr_resc_rmse = float(np.sqrt(np.mean((psr_raw * factor - g_real) ** 2)))
+
+    eps_grid = np.geomspace(0.02, 1.5, 22)
+    fd_rmses = [fd_rmse(float(e)) for e in eps_grid]
+
+    print(f"Sharp landscape T={T}, T2={T2} (T/T2*={T/T2:.2f}).  x*={x_star:.3f}, "
+          f"real grad={g_real:+.4f}, N={N_SHOTS} shots.")
+    print(f"  PSR raw RMSE      = {psr_raw_rmse:.4f}")
+    print(f"  PSR rescaled RMSE = {psr_resc_rmse:.4f}  [factor 1/λ={factor:.3f}]")
+    for e, r in zip(eps_grid, fd_rmses):
+        print(f"  FD ε={e:5.3f}  RMSE={r:.4f}")
 
     # ── plot ──
     fig, (axA, axB) = plt.subplots(1, 2, figsize=(12.5, 4.8), dpi=150)
@@ -102,37 +133,36 @@ def main():
     tx = np.array([x_star - 0.25, x_star + 0.25])
     axA.plot(tx, z0 + g_real * (tx - x_star), color="#1f77b4", lw=2.6,
              label=f"TRUE tangent ({g_real:+.2f})")
-    fdc = ["#d62728", "#ff7f0e", "#9467bd"]
-    for eps, c in zip(FD_EPS, fdc):
+    for eps, c in zip(FD_EPS, ["#d62728", "#ff7f0e", "#9467bd"]):
+        sl = (fn(x_star + eps) - fn(x_star - eps)) / (2 * eps)
         axA.plot([x_star-eps, x_star+eps], [fn(x_star-eps), fn(x_star+eps)],
-                 "s-", color=c, lw=1.8, ms=5, label=f"FD ε={eps} ({fd[eps]:+.2f})")
+                 "s-", color=c, lw=1.8, ms=5, label=f"FD ε={eps} ({sl:+.2f})")
     axA.axhline(0, color="gray", lw=0.8); axA.axvline(x_star, color="gray", ls=":", lw=1)
     axA.plot([x_star], [z0], "ko", ms=6)
     axA.set_xlabel("parameter x"); axA.set_ylabel(r"$\langle Z_0\rangle(x)$")
     axA.set_title(f"(A) sharp landscape, FD secants at several ε  (x*={x_star:.2f})")
     axA.legend(frameon=False, fontsize=8, loc="lower left")
 
-    # Panel B: distance to the real gradient
-    labels = [f"FD ε={e}" for e in FD_EPS] + ["PSR raw", "PSR rescaled"]
-    dists = [abs(fd[e] - g_real) for e in FD_EPS] + \
-            [abs(g_psr_raw - g_real), abs(g_psr_resc - g_real)]
-    cols = fdc + ["#7f7f7f", "#1f77b4"]
-    bars = axB.bar(range(len(labels)), dists, color=cols)
+    # Panel B: log-log RMSE distance vs ε (U-shape) + PSR lines
+    axB.loglog(eps_grid, fd_rmses, "s-", color="#d62728", lw=2, label="FD (shots)")
+    axB.axhline(psr_raw_rmse, color="#7f7f7f", lw=2.2, label="PSR raw")
+    axB.axhline(psr_resc_rmse, color="#1f77b4", lw=2.6, label="PSR rescaled")
     axB.axhline(abs(g_real), color="k", ls=":", lw=1.2,
-                label=f"|real gradient| = {abs(g_real):.3f}")
-    for b, e in zip(bars[:len(FD_EPS)], FD_EPS):
-        if np.sign(fd[e]) != np.sign(g_real):
-            axB.text(b.get_x()+b.get_width()/2, b.get_height(), "wrong\nsign",
-                     ha="center", va="bottom", fontsize=7, color="#d62728")
-    axB.set_xticks(range(len(labels))); axB.set_xticklabels(labels, fontsize=8, rotation=15)
-    axB.set_ylabel("distance  |estimate − real gradient|")
-    axB.set_title("(B) error vs the REAL (ideal) gradient")
-    axB.legend(frameon=False, fontsize=8.5)
+                label=f"|real grad| = {abs(g_real):.3f}")
+    # annotate the two failure arms
+    axB.text(eps_grid[1], fd_rmses[1], "small ε:\nshot noise\nblows up",
+             fontsize=8, color="#d62728", va="center")
+    axB.text(eps_grid[-3], fd_rmses[-3], "large ε:\nbias (wrong\ndirection)",
+             fontsize=8, color="#d62728", ha="right", va="center")
+    axB.set_xlabel(r"FD step size $\varepsilon$")
+    axB.set_ylabel("distance to real gradient  (RMSE)")
+    axB.set_title(f"(B) error vs ε, N={N_SHOTS} shots — FD's U-shape")
+    axB.legend(frameon=False, fontsize=8, loc="upper center")
 
-    fig.suptitle(f"Small-T/T2* regime (T/T2*={T/T2:.2f}): FD's secant has the WRONG "
-                 f"sign at every ε; PSR (raw & rescaled) keep the\ndirection and "
-                 f"sit closest to the real gradient (rescale partially corrects the "
-                 f"magnitude near this sharp feature)", fontsize=9.0)
+    fig.suptitle(f"Realistic regime T/T2*={T/T2:.2f}, N={N_SHOTS} shots: FD is "
+                 f"trapped — small ε → shot noise dominates, large ε → bias\n"
+                 f"(wrong direction); no ε reaches the real gradient. PSR rescaled "
+                 f"(analytic 1/λ) sits well below the whole U.", fontsize=8.8)
     fig.tight_layout(rect=(0, 0, 1, 0.92))
     out = os.path.abspath(os.path.join(os.path.dirname(__file__), "..",
                                        "figures", "landscape_and_distance.png"))
