@@ -129,43 +129,66 @@ def main():
     em, ep, ug = psr_pool(noisy, x_star, 800)
 
     psr = psr_estimates(em, ep, ug, n_sample, N, rng)
-    psr_sign = float(np.mean(np.sign(psr) == sgn))
-    psr_rmse = float(np.sqrt(np.mean((psr - g_truth) ** 2)))
+    psr_mean, psr_std = float(np.mean(psr)), float(np.std(psr))
 
-    eps_grid = np.geomspace(EPS_MIN, 1.5, 14)
-    fd_sign, fd_rmse = [], []
+    eps_grid = np.linspace(EPS_MIN, 1.5, 14)
+    fd_mean, fd_std = [], []
     for eps in eps_grid:
         est = fd_estimates(fn, x_star, float(eps), N, rng)
-        fd_sign.append(float(np.mean(np.sign(est) == sgn)))
-        fd_rmse.append(float(np.sqrt(np.mean((est - g_truth) ** 2))))
+        fd_mean.append(float(np.mean(est)))
+        fd_std.append(float(np.std(est)))
+    fd_mean, fd_std = np.array(fd_mean), np.array(fd_std)
 
-    print(f"noisy-landscape grad={g_truth:+.4f} (sign {int(sgn):+d}), N={N}, "
-          f"T2=2, ε≥{EPS_MIN}.")
-    print(f"  PSR n={n_sample}: P(correct sign)={psr_sign:.2%}, RMSE={psr_rmse:.4f}")
-    print(f"  {'ε':>6}{'FD sign%':>10}{'FD RMSE':>10}")
+    print(f"TRUE noisy-landscape gradient = {g_truth:+.4f}  (descent direction: "
+          f"{'+' if g_truth < 0 else '−'}).  N={N}, T2=2, ε≥{EPS_MIN}.")
+    print(f"  PSR n={n_sample}: estimate {psr_mean:+.4f} ± {psr_std:.4f}  "
+          f"(error {psr_mean - g_truth:+.4f})")
+    print(f"  {'ε':>6}{'FD estimate':>16}{'error':>10}{'sign':>7}")
     for i, eps in enumerate(eps_grid):
-        print(f"  {eps:>6.2f}{fd_sign[i]:>10.2%}{fd_rmse[i]:>10.4f}")
+        ok = "ok" if np.sign(fd_mean[i]) == sgn else "WRONG"
+        print(f"  {eps:>6.2f}{fd_mean[i]:>+11.4f}±{fd_std[i]:.3f}"
+              f"{fd_mean[i] - g_truth:>+10.4f}{ok:>7}")
 
-    fig, (axS, axR) = plt.subplots(1, 2, figsize=(11.5, 4.6), dpi=150)
-    axS.semilogx(eps_grid, fd_sign, "s--", color="#d62728", lw=2, label="FD")
-    axS.axhline(psr_sign, color="#1f77b4", lw=2.6, label=f"PSR n={n_sample}")
-    axS.axhline(0.5, color="gray", ls=":", lw=1, label="coin flip")
-    axS.set_xlabel(r"FD step $\varepsilon$ (floored $\geq$%.2f)" % EPS_MIN)
-    axS.set_ylabel("P(correct gradient sign)")
-    axS.set_title("(A) direction reliability"); axS.set_ylim(0.4, 1.02)
-    axS.legend(frameon=False, fontsize=8.5, loc="lower left")
+    fig, (axE, axB) = plt.subplots(1, 2, figsize=(11.5, 4.6), dpi=150)
 
-    axR.loglog(eps_grid, fd_rmse, "s--", color="#d62728", lw=2, label="FD")
-    axR.axhline(psr_rmse, color="#1f77b4", lw=2.6, label=f"PSR n={n_sample}")
-    axR.axhline(abs(g_truth), color="k", ls=":", lw=1, label="|gradient|")
-    axR.set_xlabel(r"FD step $\varepsilon$"); axR.set_ylabel("gradient RMSE")
-    axR.set_title("(B) accuracy (RMSE vs noisy-landscape grad)")
-    axR.legend(frameon=False, fontsize=8.5)
+    # ── Panel A: actual gradient estimate (linear) vs FD ε ──
+    axE.axhspan(0, axE.get_ylim()[1], facecolor="#fde8e8", alpha=0)  # placeholder
+    axE.fill_between(eps_grid, fd_mean - fd_std, fd_mean + fd_std,
+                     color="#d62728", alpha=0.18)
+    axE.plot(eps_grid, fd_mean, "s-", color="#d62728", lw=2, label="FD estimate")
+    axE.axhline(psr_mean, color="#1f77b4", lw=2.6, label=f"PSR estimate (n={n_sample})")
+    axE.fill_between(eps_grid, psr_mean - psr_std, psr_mean + psr_std,
+                     color="#1f77b4", alpha=0.18)
+    axE.axhline(g_truth, color="k", ls="--", lw=1.6, label="TRUE gradient")
+    axE.axhline(0.0, color="gray", lw=1)
+    # shade the wrong-sign half-plane (gradient is negative → positive = wrong way)
+    lo, hi = axE.get_ylim()
+    axE.axhspan(0.0, hi, facecolor="#d62728", alpha=0.06)
+    axE.text(eps_grid[-1], hi * 0.92, "wrong direction", ha="right", va="top",
+             fontsize=8, color="#d62728")
+    axE.set_xlabel(r"FD step size $\varepsilon$  (control floor $\geq$%.2f)" % EPS_MIN)
+    axE.set_ylabel("gradient estimate")
+    axE.set_title("(A) estimated gradient vs true value")
+    axE.legend(frameon=False, fontsize=8.5, loc="upper left")
 
-    fig.suptitle(f"Small gradient on a sharp landscape (x*={x_star:.2f}, "
-                 f"|g|={abs(g_truth):.3f}): FD's step bias exceeds the gradient →\n"
-                 f"wrong direction at every floored ε; analog PSR resolves it "
-                 f"(no step bias, no 1/ε)", fontsize=9.3)
+    # ── Panel B: error = estimate − true (linear) ──
+    axB.fill_between(eps_grid, (fd_mean - g_truth) - fd_std,
+                     (fd_mean - g_truth) + fd_std, color="#d62728", alpha=0.18)
+    axB.plot(eps_grid, fd_mean - g_truth, "s-", color="#d62728", lw=2, label="FD error")
+    axB.axhline(psr_mean - g_truth, color="#1f77b4", lw=2.6,
+                label=f"PSR error (n={n_sample})")
+    axB.axhline(0.0, color="k", ls="--", lw=1.2, label="zero error (exact)")
+    axB.axhline(-g_truth, color="gray", ls=":", lw=1,
+                label="error = −|true| (sign flips here)")
+    axB.set_xlabel(r"FD step size $\varepsilon$")
+    axB.set_ylabel("error  (estimate − true)")
+    axB.set_title("(B) error: PSR ≈ 0, FD's bias exceeds the gradient")
+    axB.legend(frameon=False, fontsize=8)
+
+    fig.suptitle(f"Small gradient ({g_truth:+.3f}) on a sharp landscape: FD's step "
+                 f"bias pushes its estimate ACROSS zero\n(wrong direction) at every "
+                 f"feasible ε; analog PSR's estimate sits at the true gradient",
+                 fontsize=9.3)
     fig.tight_layout(rect=(0, 0, 1, 0.92))
     out = os.path.abspath(os.path.join(os.path.dirname(__file__), "..",
                                        "figures", "sharp_small_gradient.png"))
