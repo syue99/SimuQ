@@ -130,15 +130,33 @@ def main():
     gx = np.linspace(0.0, 1.45, 150)
     axA.plot(gx, [fc(x) for x in gx], "--", color="#9aa0a6", lw=1.6, label="ideal")
     axA.plot(gx, [fn(x) for x in gx], color="#202124", lw=2.2, label=f"noisy (T2={T2:.0f})")
-    z0 = fc(x_star); tx = np.array([x_star - 0.22, x_star + 0.22])
-    axA.plot(tx, z0 + g_real*(tx - x_star), color="#1a73e8", lw=3,
+    z0 = fc(x_star); ex = np.array([x_star - 0.28, x_star + 0.28])
+    axA.plot(ex, z0 + g_real*(ex - x_star), color="#1a73e8", lw=3,
              label=f"true tangent ({g_real:+.3f})")
-    sec_eps = [0.15, 0.3, 0.45, 0.6, 0.9]
-    cmap = plt.cm.viridis(np.linspace(0.15, 0.85, len(sec_eps)))
+    # moderate/large ε: exact secants (segments showing how ε spans the landscape)
+    sec_eps = [0.15, 0.3, 0.45, 0.6]
+    cmap = plt.cm.viridis(np.linspace(0.2, 0.82, len(sec_eps)))
     for eps, c in zip(sec_eps, cmap):
         fp_e, fm_e = fn(x_star+eps), fn(x_star-eps)
         axA.plot([x_star-eps, x_star+eps], [fm_e, fp_e], "o-", color=c, lw=1.8,
                  ms=4, label=f"FD ε={eps}: {(fp_e-fm_e)/(2*eps):+.3f}")
+    # tiny ε=0.01: shot-noise dominated → a typical realization flips the sign
+    n0 = N_SHOTS // 2
+    sl01 = None
+    for _ in range(20):
+        fp01 = 2*rng.binomial(n0, 0.5*(1+np.clip(fn(x_star+0.01), -1, 1)))/n0 - 1
+        fm01 = 2*rng.binomial(n0, 0.5*(1+np.clip(fn(x_star-0.01), -1, 1)))/n0 - 1
+        cand = (fp01 - fm01) / 0.02
+        if np.sign(cand) != sgn:                  # a representative wrong-sign draw
+            sl01 = cand; break
+    if sl01 is None:
+        sl01 = cand
+    axA.plot(ex, z0 + sl01*(ex - x_star), ":", color="#d50000", lw=2.4,
+             label=f"FD ε=0.01 (shots): {sl01:+.2f}  WRONG sign")
+    # PSR rescaled mean — sits on the true tangent
+    psr_slope = float(np.mean(raw)) * factor
+    axA.plot(ex, z0 + psr_slope*(ex - x_star), "-", color="#00897b", lw=2.6,
+             label=f"PSR rescaled: {psr_slope:+.3f}")
     axA.axhline(0, color="#bbb", lw=0.8); axA.axvline(x_star, color="#bbb", ls=":", lw=1)
     axA.plot([x_star], [z0], "ko", ms=6)
     axA.set_xlabel("parameter x"); axA.set_ylabel(r"$\langle Z_0\rangle(x)$")
