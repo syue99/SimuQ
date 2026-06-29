@@ -99,11 +99,19 @@ def main():
     fd_rmse = np.array(fd_rmse); fd_wrongfrac = np.array(fd_wrongfrac)
     fd_wrong = fd_wrongfrac > WRONG_FRAC
 
-    # PSR pool under noise
+    # PSR pool under noise.  The POOL is the τ "population" the estimator subsamples
+    # N_SAMPLE from; build it with a DETERMINISTIC midpoint grid (O(1/n²)) so the
+    # estimator's CENTER is the exact τ-integral (a random pool offsets the center by
+    # ~1/√POOL ≈ 0.035).  The realistic τ-sampling VARIANCE is preserved: the per-trial
+    # N_SAMPLE subsampling below uses a separate rng and still draws uniformly over τ.
     H, var = Hsimuq()
-    np.random.seed(123)
-    progs = observable_program_generator(H, T, n_sample=POOL, n_repetition=1,
-                                         diff_var=var, value=x_star)
+    orig_rand = np.random.rand
+    np.random.rand = lambda k: (np.arange(k) + 0.5) / k
+    try:
+        progs = observable_program_generator(H, T, n_sample=POOL, n_repetition=1,
+                                             diff_var=var, value=x_star)
+    finally:
+        np.random.rand = orig_rand
     pexp = noisy.make_expectation_fn(PSI0, OBS)
     H_tot, ug, _ = progs[0]; b = len(H_tot)//2
     em = np.array([pexp(H_tot[2*i]) for i in range(b)])
