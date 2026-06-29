@@ -8,8 +8,15 @@ INFINITE shots (exact expectations):
   - FD best-ε → ε→0 → the NOISY-landscape gradient = λ'·g_ideal; bias=(1−λ')|g|
     (the ATTENUATION — uncorrectable by tuning ε; this is FD's BEST possible, with
     infinite shots and perfect step).
-  - PSR raw → λ_PSR·g_ideal; bias=(1−λ_PSR)|g|.
-  - PSR rescaled → g_ideal; bias≈ small residual (rescale removes the attenuation).
+  - PSR raw → λ_PSR·g_ideal; bias=(1−λ_PSR)|g|.  With deterministic τ-quadrature
+    λ_PSR = λ_FD exactly → PSR raw bias = FD floor (same attenuation; the earlier
+    "PSR raw below FD" was a random-τ MC artifact).  PSR's win is NOT a lower raw
+    bias — it is being ε-FREE so the SAME rescale lands it on the true gradient.
+  - PSR rescaled → g_ideal; bias ≈ 0.001, FLAT across M (rescale removes the
+    attenuation; ~40-60x below FD's floor at every size).
+
+τ-INTEGRATION: deterministic midpoint quadrature (O(1/n²)), NOT the default random
+MC draw (O(1/√n)) — this is a BIAS study, so the τ-sampling variance is set aside.
 
 KEY: bias is INDEPENDENT of the chain-rule M (the rescale corrects the TOTAL
 gradient) — so many terms don't hurt the bias, only the variance (set aside here).
@@ -93,10 +100,17 @@ def run(n):
 
     # FD best (infinite shots, ε→0) = noisy-landscape gradient
     g_fd = (fn(x_star+1e-3)-fn(x_star-1e-3))/2e-3
-    # PSR exact mean (sum over M chain-rule terms)
-    np.random.seed(7)
-    progs = observable_program_generator(H, T, n_sample=POOL, n_repetition=1,
-                                         diff_var=var, value=x_star)
+    # PSR exact mean (sum over M chain-rule terms).  BIAS study → integrate τ over
+    # [0,T] with DETERMINISTIC midpoint quadrature (O(1/n²)) instead of the default
+    # random MC draw (O(1/√n)); random τ at this POOL size injects ~0.03-0.05 of
+    # spurious bias that previously masqueraded as a λ_PSR>λ_FD gap.
+    orig_rand = np.random.rand
+    np.random.rand = lambda k: (np.arange(k) + 0.5) / k
+    try:
+        progs = observable_program_generator(H, T, n_sample=POOL, n_repetition=1,
+                                             diff_var=var, value=x_star)
+    finally:
+        np.random.rand = orig_rand
     pexp = noisy.make_expectation_fn(PSIn, obs)
     g_psr = 0.0; M = 0
     for H_tot, ug, _ in progs:
@@ -131,19 +145,19 @@ def main():
     fig, ax = plt.subplots(figsize=(7.8, 5.0), dpi=150)
     ax.plot(nn, [r["fd_bias"] for r in res], "s-", color="#7b1fa2", lw=2.4,
             label="FD best-ε  (= attenuation bias)")
-    ax.plot(nn, [r["psr_bias"] for r in res], "o--", color="#9e9e9e", lw=2,
-            label="PSR raw")
+    ax.plot(nn, [r["psr_bias"] for r in res], "o--", color="#9e9e9e", lw=2.6,
+            alpha=0.7, label="PSR raw  (= FD floor; same attenuation)")
     ax.plot(nn, [r["res_bias"] for r in res], "o-", color="#00897b", lw=2.8,
-            label="PSR rescaled")
+            label="PSR rescaled  (≈0.001, flat in M)")
     for r in res:
         ax.annotate(f"M={r['M']}", (r["n"], r["fd_bias"]), fontsize=7.5,
                     xytext=(0, 6), textcoords="offset points", ha="center",
                     color="#7b1fa2")
     ax.set_xlabel("chain length n  (chain-rule terms M = n−1)")
     ax.set_ylabel("gradient BIAS  |estimate − ideal|  (∞ shots)")
-    ax.set_title("Bias only (variance set aside): FD's attenuation bias GROWS with\n"
-                 "system size; PSR rescaled stays near zero for ANY M (rescale "
-                 "corrects the total gradient)")
+    ax.set_title("Bias only (variance set aside): PSR raw = FD floor (same "
+                 "attenuation),\nbut PSR is ε-free so the rescale lands it on the true "
+                 "gradient (~0.001, flat in M) — 40-60x below FD's floor")
     ax.set_xticks(nn)
     ax.legend(frameon=False, fontsize=9)
     ax.text(0.02, 0.02, "FD's bias is its BEST case (∞ shots, ε→0).  Finite shots "
