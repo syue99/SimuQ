@@ -127,37 +127,46 @@ def run(n, obs_fn, label):
 
 
 def main():
-    loc, ext = [], []
-    for n in NS:
-        try:
-            loc.append(run(n, obs_local, "local Z0Z1"))
-            ext.append(run(n, obs_extensive, "ext ΣZZ"))
-        except MemoryError:
-            print(f"  n={n}: MemoryError — stopping (density matrix too large)")
-            break
+    import json
+    figdir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "figures"))
+    os.makedirs(figdir, exist_ok=True)
+    cache = os.path.join(figdir, "scaling_advantage_data.json")
+
+    if os.path.exists(cache):                       # replot without re-simulating
+        d = json.load(open(cache)); loc, ext = d["loc"], d["ext"]
+        print(f"loaded cached data ({len(loc)} sizes) — replotting only")
+    else:
+        loc, ext = [], []
+        for n in NS:
+            try:
+                loc.append(run(n, obs_local, "local Z0Z1"))
+                ext.append(run(n, obs_extensive, "ext ΣZZ"))
+            except MemoryError:
+                print(f"  n={n}: MemoryError — stopping (density matrix too large)")
+                break
+        json.dump({"loc": loc, "ext": ext}, open(cache, "w"), default=float)
 
     fig, ax = plt.subplots(figsize=(8, 5.2), dpi=150)
     for res, c, mk, name in [(loc, "#7b1fa2", "s", "LOCAL ⟨Z0Z1⟩ (light-cone bounded)"),
                              (ext, "#e65100", "^", "EXTENSIVE ⟨ΣZ_iZ_{i+1}⟩")]:
         nn = [r["n"] for r in res]
-        ax.plot(nn, [r["fd"] for r in res], mk+"-", color=c, lw=2.4,
-                label=f"FD best-ε — {name}")
-        ax.plot(nn, [r["res"] for r in res], mk+"--", color=c, lw=1.8, alpha=0.65,
-                mfc="white", label=f"PSR rescaled — {name}")
+        ax.semilogy(nn, [r["fd"] for r in res], mk+"-", color=c, lw=2.4,
+                    label=f"FD best-ε — {name}")
+        ax.semilogy(nn, [r["res"] for r in res], mk+"--", color=c, lw=1.8, alpha=0.7,
+                    mfc="white", label=f"PSR rescaled — {name}")
     ax.set_xlabel("chain length n")
-    ax.set_ylabel("gradient BIAS |estimate − ideal|  (∞ shots)")
+    ax.set_ylabel("gradient BIAS |estimate − ideal|  (∞ shots, log scale)")
     ax.set_title("Does the advantage scale?  FD's attenuation bias SATURATES for a "
                  "local\nobservable (size-robust gap) and GROWS for an extensive one; "
-                 "PSR-rescaled stays ~0 for both")
-    ax.set_xticks(NS)
-    ax.legend(frameon=False, fontsize=8.2, loc="upper left")
-    ax.text(0.98, 0.55, "small-n is provably representative via\nlight-cone locality "
-            "(lightcone_slope.py): the\nlocal-observable gap at n=4-7 is the n→∞ gap.",
-            transform=ax.transAxes, fontsize=7.6, color="#444", va="top", ha="right")
+                 "PSR-rescaled stays orders below for both")
+    ax.set_xticks([r["n"] for r in ext])
+    ax.grid(True, which="both", axis="y", alpha=0.15)
+    ax.legend(frameon=False, fontsize=8.2, loc="center right")
+    ax.text(0.02, 0.02, "small-n is provably representative via light-cone locality "
+            "(lightcone_slope.py):\nthe local-observable gap at n=4-7 is the n→∞ gap.",
+            transform=ax.transAxes, fontsize=7.6, color="#444", va="bottom")
     fig.tight_layout()
-    out = os.path.abspath(os.path.join(os.path.dirname(__file__), "..",
-                                       "figures", "scaling_advantage.png"))
-    os.makedirs(os.path.dirname(out), exist_ok=True)
+    out = os.path.join(figdir, "scaling_advantage.png")
     fig.savefig(out)
     print(f"\nsaved: {out}")
 
