@@ -101,10 +101,20 @@ def pick_theta(n, obs, hq, psi0):
     return THETA_STAR
 
 
-def run(n, obs_fn, label):
+def run(n, obs_fn, label, gate_error=False):
+    """gate_error adds a kick gate-error channel (Z-type, on the kicked pair) —
+    a PSR-specific cost: FD runs no kick, so its landscape is untouched.  The
+    rescale corrects dephasing attenuation only, NOT gate error.
+    False = ideal kick; True = 99.9% 2q reference (eps=1e-3); a float = the 2q
+    infidelity directly (e.g. 5e-4 for the cryo platform's 99.95%).  1q kicks
+    use 1e-4 (99.99%) whenever gate error is on."""
     obs = obs_fn(n)
     psi0 = qp.tensor([qp.basis(2, 0)] * n)
-    noisy = NoisyQuTiPRunner(n, noise=NoiseModel(n_qubits=n, T2=T2))
+    eps2 = None
+    if gate_error:
+        eps2 = 1e-3 if gate_error is True else float(gate_error)
+    gate_kw = dict(gate_error_1q=1e-4, gate_error_2q=eps2) if eps2 else {}
+    noisy = NoisyQuTiPRunner(n, noise=NoiseModel(n_qubits=n, T2=T2, **gate_kw))
     hq = hq_builder(n)
     H, var = sq_builder(n)()
 
