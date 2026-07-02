@@ -101,7 +101,13 @@ def _ledger_to_H_list(ledger, sites_type, sites_name):
     list of [TIHamiltonian, duration]
     """
     H_list = []
-    play_entries = ledger.play_entries()
+    # cz_gate entries are hardware metadata for the digital ZZ kick (CZ +
+    # virtual Z's).  The physics of that segment is carried by the "kick"
+    # entry: the CZ implements exp(-i·Hj·kick_duration) EXACTLY (algebraic
+    # identity, tested in test_cz_kick.py), so reconstructing from the kick
+    # entry remains honest.  Including cz_gate here would double-count.
+    play_entries = [e for e in ledger.play_entries()
+                    if e.channel_kind != "cz_gate"]
 
     # Group consecutive play entries by duration (same time window = same segment).
     # Sum ALL entries in a group: each contributes its own channel Hamiltonian.

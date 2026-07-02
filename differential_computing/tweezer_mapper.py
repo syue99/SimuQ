@@ -198,6 +198,31 @@ def _op_delay(duration):
     return {"op": "delay", "duration": float(duration)}   # μs
 
 
+def cz_kick_decomposition(phi):
+    """
+    Decompose the ZZ kick unitary into a controlled-phase gate + virtual Z's.
+
+    exp(-i·φ·Z⊗Z) = e^{i·φ} · e^{-i·φ·Z⊗I} · e^{-i·φ·I⊗Z} · CP(θ),  θ = -4φ
+
+    (all four factors commute; CP(θ) = diag(1,1,1,e^{iθ})).  The single-qubit
+    Z rotations are VIRTUAL (frame updates — zero duration, zero error) and
+    the global phase is unobservable, so the only physical pulse is CP(θ).
+    For the PSR kick angles φ = ±π/4·coeff with coeff=1 (Pauli generator),
+    θ ≡ π (mod 2π) — a plain native CZ — for BOTH branches; the branches
+    differ only in the virtual-Z bookkeeping.
+
+    Returns (theta_cp, vz_angle, global_phase) with theta_cp wrapped to
+    (-π, π]: theta_cp — controlled-phase angle (π ⇒ native CZ);
+    vz_angle = φ — each qubit gets the frame update e^{-i·φ·Z};
+    global_phase = φ.
+    """
+    theta = -4.0 * float(phi)
+    theta_cp = float(np.mod(theta + np.pi, 2.0 * np.pi) - np.pi)  # (-π, π]
+    if np.isclose(theta_cp, -np.pi):
+        theta_cp = np.pi
+    return theta_cp, float(phi), float(phi)
+
+
 # ── Instruction classifiers ───────────────────────────────────────────────────
 
 def classify_instruction(ins):
@@ -244,11 +269,16 @@ class TweezerMapper:
                         Typical range: 10–100 μs for real AOD systems.
     """
 
-    def __init__(self, n_qubits, sol_gvars, boxes, ramp_time=10.0):
+    def __init__(self, n_qubits, sol_gvars, boxes, ramp_time=10.0,
+                 cz_gate_time=0.25, R_cz=2.5):
         self.n         = int(n_qubits)
         self.sol_gvars = list(sol_gvars)
         self.boxes     = boxes
         self.ramp_time = float(ramp_time)   # μs
+        # Digital CZ used for ZZ *kick* segments (evolution ZZ stays analog):
+        # physical gate duration and deep-blockade pair separation.
+        self.cz_gate_time = float(cz_gate_time)   # μs
+        self.R_cz         = float(R_cz)           # μm
         self.log       = TransportLog()
         self.ledger = PulseLedger(self.n)
         # Position state — tracks where each atom currently is
@@ -472,6 +502,58 @@ class TweezerMapper:
 
         return ops
 
+    def _cz_gate_kick_ops(self, q0, q1, coeff, kick_angle, t_cursor):
+        """
+        Schedule ops for a ZZ *kick* as a digital CZ + virtual Z's.
+
+        The PSR kick unitary exp(-i·coeff·kick_angle·Z_q0 Z_q1) equals, exactly
+        (see cz_kick_decomposition), a controlled-phase gate CP(-4φ) plus
+        virtual single-qubit Z frame updates, with φ = coeff·kick_angle.  For
+        the PSR angles (±π/4 mod 2π, coeff=1) CP is a plain CZ — the SAME
+        calibrated gate for both branches, so the branch difference lives
+        entirely in noiseless frame updates.
+
+        Compared to the analog dwell (_cz_ops, still used for EVOLUTION ZZ):
+        the gate runs in cz_gate_time (0.25 μs vs up to 7π/4 ≈ 5.5 μs),
+        at the fixed deep-blockade separation R_cz (no J-dependent placement),
+        and matches the gate-error noise model (Z-type channel on the pair).
+
+        Op/ledger convention: the play op on the ZZ channel carries
+        amplitude = theta_cp (controlled-phase angle, rad; π ⇒ CZ),
+        phase = vz_angle (virtual-Z frame update per qubit, rad),
+        duration = cz_gate_time.  Ledger channel_kind = "cz_gate" (hardware
+        metadata only — verify reads the physics from the "kick" entry, whose
+        unitary this gate implements exactly).
+        """
+        phi = float(coeff) * float(kick_angle)
+        theta_cp, vz_angle, _gphase = cz_kick_decomposition(phi)
+
+        pos = self.gate_positions(q0, q1, self.R_cz)
+        zones = ["idle"] * self.n
+        zones[q0] = "gate"
+        zones[q1] = "gate"
+
+        # J at the blockade distance (informational, for the transport log)
+        J_blockade = C_6 / self.R_cz ** 6
+        self.log.log_cz(t_cursor, (q0, q1), self.R_cz, J_blockade)
+
+        ops = []
+        if not self._positions_match(pos):
+            ops.append(_op_aod(pos, self.ramp_time))
+            self.ledger.record(pos, zones, "aod", duration=self.ramp_time)
+        self._update_positions(pos, zones)
+
+        zz_ch = 2 * self.n + 1
+        ops.append(_op_play(zz_ch, amplitude=theta_cp,
+                            duration=self.cz_gate_time, phase=vz_angle))
+        self.ledger.record(pos, zones, "play",
+                           channel_kind="cz_gate",
+                           target_qubits=[q0, q1],
+                           amplitude=theta_cp,
+                           phase=vz_angle,
+                           duration=self.cz_gate_time)
+        return ops
+
     def _ensure_interaction_zone(self, qubit_idx):
         """
         If a qubit is currently at the gate zone (from a prior ZZ),
@@ -600,7 +682,10 @@ class TweezerMapper:
             Z_i     → detuning on site i
             X_i     → rabi on site i (phase=0)
             Y_i     → rabi on site i (phase=π/2)
-            Z_iZ_j  → ZZ gate: AOD to gate zone → delay → AOD back
+            Z_iZ_j  → digital CZ + virtual Z's: AOD to gate zone (R_cz) →
+                      CZ pulse (cz_gate_time) → AOD back.  Exact for any
+                      kick angle via cz_kick_decomposition; PSR's ±π/4
+                      angles give a plain CZ on both branches.
 
         The original Hj is stored in the ledger as the Hamiltonian for this
         segment (it IS the correct H — no solver decomposition needed).
@@ -661,10 +746,11 @@ class TweezerMapper:
             elif len(active) == 2:
                 (s0, op0), (s1, op1) = active
                 if op0 == "Z" and op1 == "Z":
-                    # ZZ gate: need AOD transport to gate zone and back
+                    # ZZ kick: digital CZ + virtual Z's (exact for any kick
+                    # angle; PSR's ±π/4 ⇒ plain CZ), NOT an analog dwell
                     q0, q1 = s0, s1
-                    J = coeff
-                    ops.extend(self._cz_ops(q0, q1, J, duration, t_cursor))
+                    ops.extend(self._cz_gate_kick_ops(
+                        q0, q1, coeff, duration, t_cursor))
                     # After CZ, return to interaction zone for subsequent segments
                     pos_int = self.interaction_positions()
                     if not self._positions_match(pos_int):
