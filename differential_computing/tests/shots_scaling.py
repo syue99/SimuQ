@@ -15,6 +15,7 @@ Expectation:
 Run:  conda run -n qec_pg python differential_computing/tests/shots_scaling.py
 """
 
+import json
 import os
 import sys
 
@@ -57,7 +58,7 @@ def fmaker(runner):
     return lambda x: expfn([[H.set_parameterizedHam({"x": float(x)}), T]])
 
 
-def main():
+def compute():
     rng = np.random.default_rng(0)
     clean = NoisyQuTiPRunner(2, noise=None)
     noisy = NoisyQuTiPRunner(2, noise=NoiseModel(n_qubits=2, T2=T2))
@@ -113,8 +114,29 @@ def main():
         psr_raw.append(float(np.sqrt(np.mean((raw - g_real)**2))))
         psr_res.append(float(np.sqrt(np.mean((raw*factor - g_real)**2))))
 
-    print(f"T={T}, T/T2*={T/T2:.2f}, x*={x_star:.3f}, real grad={g_real:+.4f}, "
-          f"1/λ={factor:.2f}.")
+    return dict(T=T, T2=T2, x_star=float(x_star), g_real=float(g_real),
+                factor=float(factor), budgets=list(map(int, budgets)),
+                fd_best=fd_best, psr_raw=psr_raw, psr_res=psr_res)
+
+
+def main():
+    figdir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "figures"))
+    os.makedirs(figdir, exist_ok=True)
+    cache = os.path.join(figdir, "shots_scaling_data.json")
+    if os.path.exists(cache):
+        d = json.load(open(cache))
+        print("loaded cache — replotting only")
+    else:
+        d = compute()
+        json.dump(d, open(cache, "w"), default=float)
+        print(f"cached: {cache}")
+
+    x_star, g_real, factor = d["x_star"], d["g_real"], d["factor"]
+    budgets = np.array(d["budgets"])
+    fd_best, psr_raw, psr_res = d["fd_best"], d["psr_raw"], d["psr_res"]
+
+    print(f"T={d['T']}, T/T2*={d['T']/d['T2']:.2f}, x*={x_star:.3f}, "
+          f"real grad={g_real:+.4f}, 1/λ={factor:.2f}.")
     print(f"{'N':>9}{'FD best':>10}{'PSR raw':>10}{'PSR resc':>10}")
     for i, N in enumerate(budgets):
         print(f"{N:>9}{fd_best[i]:>10.4f}{psr_raw[i]:>10.4f}{psr_res[i]:>10.4f}")
@@ -131,14 +153,12 @@ def main():
               label=r"$N^{-1/3}$")
     ax.set_xlabel("total shots / gradient  N   (= 2 · n_sample · n_reps)")
     ax.set_ylabel("distance to real gradient  (RMSE)")
-    ax.set_title(f"Gradient accuracy vs total shots (T/T2*={T/T2:.2f})\n"
+    ax.set_title(f"Gradient accuracy vs total shots (T/T2*={d['T']/d['T2']:.2f})\n"
                  f"PSR rescaled converges (N^-1/2); FD best-ε & PSR raw FLOOR at "
                  f"the attenuation bias")
     ax.legend(frameon=False, fontsize=9)
     fig.tight_layout()
-    out = os.path.abspath(os.path.join(os.path.dirname(__file__), "..",
-                                       "figures", "shots_scaling.png"))
-    os.makedirs(os.path.dirname(out), exist_ok=True)
+    out = os.path.join(figdir, "shots_scaling.png")
     fig.savefig(out)
     print(f"\nsaved: {out}")
 

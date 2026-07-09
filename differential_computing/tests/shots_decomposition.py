@@ -11,6 +11,7 @@ for PSR raw, PSR rescaled, and FD (fixed ε).
 Run:  conda run -n qec_pg python differential_computing/tests/shots_decomposition.py
 """
 
+import json
 import os
 import sys
 
@@ -58,7 +59,7 @@ def stats(est, true):
     return bias, std, rmse
 
 
-def main():
+def compute():
     rng = np.random.default_rng(0)
     clean = NoisyQuTiPRunner(2, noise=None)
     noisy = NoisyQuTiPRunner(2, noise=NoiseModel(n_qubits=2, T2=T2))
@@ -100,6 +101,26 @@ def main():
         k = f"FD ε={FD_EPS}"
         D[k]["bias"].append(b_); D[k]["std"].append(s_); D[k]["rmse"].append(r_)
 
+    return dict(T=T, T2=T2, FD_EPS=FD_EPS, x_star=float(x_star),
+                g_real=float(g_real), factor=float(factor),
+                budgets=list(map(int, budgets)), D=D)
+
+
+def main():
+    figdir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "figures"))
+    os.makedirs(figdir, exist_ok=True)
+    cache = os.path.join(figdir, "shots_decomposition_data.json")
+    if os.path.exists(cache):
+        d = json.load(open(cache))
+        print("loaded cache — replotting only")
+    else:
+        d = compute()
+        json.dump(d, open(cache, "w"), default=float)
+        print(f"cached: {cache}")
+
+    x_star, g_real, factor = d["x_star"], d["g_real"], d["factor"]
+    budgets = np.array(d["budgets"]); D = d["D"]
+
     print(f"x*={x_star:.3f}, real grad={g_real:+.4f}, λ={1/factor:.3f}, "
           f"attenuation bias (1-λ)|g|={(1-1/factor)*abs(g_real):.4f}\n")
     for nm in D:
@@ -127,9 +148,7 @@ def main():
                  "RMSE floors at its constant attenuation bias; rescaled keeps falling.",
                  fontsize=9.2)
     fig.tight_layout(rect=(0, 0, 1, 0.92))
-    out = os.path.abspath(os.path.join(os.path.dirname(__file__), "..",
-                                       "figures", "shots_decomposition.png"))
-    os.makedirs(os.path.dirname(out), exist_ok=True)
+    out = os.path.join(figdir, "shots_decomposition.png")
     fig.savefig(out)
     print(f"\nsaved: {out}")
 

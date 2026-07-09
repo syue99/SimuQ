@@ -91,13 +91,24 @@ def run_n(n):
 
 
 def main():
+    import json
+    figdir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "figures"))
+    os.makedirs(figdir, exist_ok=True)
+    cache = os.path.join(figdir, "compile_scaling_data.json")
+
     print(f"T={T}, n_sample={N_SAMPLE}, AAIS=rydberg2d\n")
     print(f"{'n':>4}{'M':>4}{'branches':>10}{'compile(s)':>12}"
           f"{'segs':>6}{'pulse_dur':>11}")
-    rows = []
-    for n in NS:
-        r = run_n(n)
-        rows.append(r)
+    if os.path.exists(cache):
+        rows = json.load(open(cache))
+        print(f"loaded cache ({len(rows)} sizes) — reprinting only")
+    else:
+        rows = []
+        for n in NS:
+            r = run_n(n)
+            rows.append(r)
+        json.dump(rows, open(cache, "w"), default=float)
+        print(f"cached: {cache}")
 
     # LaTeX-ready table dump
     print("\n% --- LaTeX table body (C7) ---")
