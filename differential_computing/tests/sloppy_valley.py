@@ -37,7 +37,12 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-T, T2 = 1.5, 10.0
+# T, T2 (hence T/T2*) and output suffix are env-overridable so multiple regimes
+# generate without touching the default (0.15): e.g. SV_T2=3 -> 0.5;
+# SV_T=0.75 SV_T2=1 -> 0.75.
+T = float(os.environ.get("SV_T", "1.5"))
+T2 = float(os.environ.get("SV_T2", "10.0"))
+SUF = os.environ.get("SV_SUF", "")
 THETA_STAR = (0.8, 0.65)
 W_SWEEP = [0.3, 0.1, 0.03]
 W_SHOW = 0.03                      # panel-A valley
@@ -83,7 +88,7 @@ def obs_noisy(t1, t2):
 def main():
     figdir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "figures"))
     os.makedirs(figdir, exist_ok=True)
-    cache = os.path.join(figdir, "sloppy_valley_data.json")
+    cache = os.path.join(figdir, f"sloppy_valley{SUF}_data.json")
 
     if os.path.exists(cache):
         d = json.load(open(cache))
@@ -236,13 +241,13 @@ def main():
     axB.set_title("(B) small direction bias × ill-conditioning\n= amplified "
                   "parameter error (annotations: final cost)", fontsize=10)
     axB.legend(frameon=False, fontsize=8)
-    fig.suptitle("Hamiltonian-learning with a sloppy direction (T/T2*=0.15, "
+    fig.suptitle(f"Hamiltonian-learning with a sloppy direction (T/T2*={T/T2:.2g}, "
                  "∞ shots, self-consistent targets): PSR recovers θ*;\n"
                  "floored-ε FD converges to a shifted fixed point that the "
                  "valley amplifies — wrong physics, right-looking cost",
                  fontsize=10.5)
     fig.tight_layout(rect=(0, 0, 1, 0.90))
-    out = os.path.join(figdir, "sloppy_valley.png")
+    out = os.path.join(figdir, f"sloppy_valley{SUF}.png")
     fig.savefig(out)
     print(f"saved: {out}")
 

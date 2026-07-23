@@ -38,7 +38,11 @@ import matplotlib.pyplot as plt
 from simuq import QSystem, Qubit
 from observable_program_generator import observable_program_generator
 
-T, T2 = 1.5, 10.0
+# T, T2 (T/T2*) + output suffix env-overridable: default 0.15; SV_T2=3 -> 0.5;
+# SV_T=0.75 SV_T2=1 -> 0.75.
+T = float(os.environ.get("SV_T", "1.5"))
+T2 = float(os.environ.get("SV_T2", "10.0"))
+SUF = os.environ.get("SV_SUF", "")
 THETA_STAR = (0.8, 0.65)
 W_SWEEP = [0.3, 0.1, 0.03]
 W_SHOW = 0.03
@@ -76,7 +80,27 @@ def _bilerp(F, t1, t2):
             + (1 - dx) * dy * F[i0, j0 + 1] + dx * dy * F[i0 + 1, j0 + 1])
 
 
-NF = np.load(os.path.join(FIGDIR, "sloppy_valley_shots_field.npy"))
+def _load_noisy_field():
+    """Noisy <O> grid at the current T2 (reuse the T2=10 field for default,
+    build+cache a T2-specific one otherwise)."""
+    default = os.path.join(FIGDIR, "sloppy_valley_shots_field.npy")
+    if SUF == "" and os.path.exists(default):
+        return np.load(default)
+    fn = os.path.join(FIGDIR, f"sloppy_valley_shots_field{SUF}.npy")
+    if os.path.exists(fn):
+        return np.load(fn)
+    n = len(_gx); F = np.zeros((n, n, 3)); rho0 = PSI0 * PSI0.dag()
+    for i, a in enumerate(_gx):
+        for j, b in enumerate(_gx):
+            r = qp.mesolve(Hq(a, b), rho0, [0, T], c_ops=C_OPS).states[-1]
+            F[i, j] = [float(qp.expect(o, r).real) for o in OBS]
+        if i % 15 == 0:
+            print(f"  noisy field row {i}/{n} (T2={T2})", flush=True)
+    np.save(fn, F)
+    return F
+
+
+NF = _load_noisy_field()
 
 
 def noisy(t1, t2): return _bilerp(NF, t1, t2)
@@ -143,7 +167,7 @@ def sample_obs(t1, t2, n, rng):
 
 def main():
     os.makedirs(FIGDIR, exist_ok=True)
-    cache = os.path.join(FIGDIR, "sloppy_valley_finite_data.json")
+    cache = os.path.join(FIGDIR, f"sloppy_valley_finite{SUF}_data.json")
     target = noisy(*THETA_STAR).copy()          # self-consistent noisy targets
 
     def clipd(p):
@@ -261,12 +285,12 @@ def main():
                   "parameter error (FINITE shots, N=%d/grad)" % d["N_g"])
     axB.legend(frameon=False, fontsize=8.5)
     fig.suptitle("Hamiltonian-learning with a sloppy direction, FINITE SHOTS "
-                 f"(T/T2*=0.15, N={d['N_g']}/grad, self-consistent targets): "
+                 f"(T/T2*={T/T2:.2g}, N={d['N_g']}/grad, self-consistent targets): "
                  "PSR recovers θ*;\nfloored-ε FD-of-cost converges to the "
                  "valley-amplified wrong parameters — survives shot noise",
                  fontsize=9.8)
     fig.tight_layout(rect=(0, 0, 1, 0.90))
-    out = os.path.join(FIGDIR, "sloppy_valley_finite.png")
+    out = os.path.join(FIGDIR, f"sloppy_valley_finite{SUF}.png")
     fig.savefig(out); print(f"saved: {out}")
 
 
