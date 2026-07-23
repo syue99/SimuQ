@@ -42,6 +42,11 @@ THETA_STAR = (0.8, 0.65)
 W_SWEEP = [0.3, 0.1, 0.03]
 W_SHOW = 0.03                      # panel-A valley
 EPS_FLOORS = [0.3, 0.6]
+# oracle-FD sweeps eps (incl. small) and keeps the min-parameter-error one per w.
+# At infinite shots there is no variance penalty for small eps, so the oracle
+# drives eps->0 = the exact gradient -> recovers theta* (overlaps PSR): FD's
+# failure here is specifically the FLOORED eps, not FD itself.
+EPS_ORACLE = [0.05, 0.1, 0.15, 0.2, 0.3, 0.45, 0.6]
 H_FD = 1e-3
 ETA, STEPS = 0.15, 900
 DOM = (0.2, 1.4)
@@ -140,6 +145,7 @@ def main():
             return descend_from(start, w, h)
 
         rows = []
+        oracle_eps = {}
         for w in W_SWEEP:
             row = dict(w=w)
             for name, h in [("psr", H_FD)] + \
@@ -149,6 +155,16 @@ def main():
                                  err=float(np.hypot(p[0] - THETA_STAR[0],
                                                     p[1] - THETA_STAR[1])),
                                  cost=float(cost(p[0], p[1], w)))
+            # oracle-FD: best eps (min parameter error) for this w
+            best = None
+            for e in EPS_ORACLE:
+                p = descend(w, e)
+                err = float(np.hypot(p[0] - THETA_STAR[0], p[1] - THETA_STAR[1]))
+                if best is None or err < best["err"]:
+                    best = dict(theta=list(map(float, p)), err=err,
+                                cost=float(cost(p[0], p[1], w)), eps=float(e))
+            row["oracle_fd"] = best
+            oracle_eps[w] = best["eps"]
             rows.append(row)
             print(f"  w={w}: " + "  ".join(
                 f"{k} err={row[k]['err']:.3f} C={row[k]['cost']:.2e}"
@@ -171,6 +187,7 @@ def main():
         paths = {"psr": descend_path(W_SHOW, H_FD)}
         for e in EPS_FLOORS:
             paths[f"fd{e}"] = descend_path(W_SHOW, e)
+        paths["oracle_fd"] = descend_path(W_SHOW, oracle_eps[W_SHOW])
 
         d = dict(theta_star=list(THETA_STAR), rows=rows, start=list(start),
                  gx=list(map(float, gx)), LC=LC, w_show=W_SHOW,
@@ -183,13 +200,16 @@ def main():
     gx = np.array(d["gx"])
     cs = axA.contourf(gx, gx, np.array(d["LC"]), levels=24, cmap="viridis")
     fig.colorbar(cs, ax=axA, label=r"$\log_{10} C(\theta)$")
+    oe = d["rows"][[r["w"] for r in d["rows"]].index(W_SHOW)]["oracle_fd"]["eps"]
     styles = {"psr": ("#00897b", "PSR (= exact noisy-cost gradient)"),
-              "fd0.3": ("#7b1fa2", "FD ε=0.3"),
-              "fd0.6": ("#d62728", "FD ε=0.6")}
+              "oracle_fd": ("#1f77b4", f"oracle-FD (best ε; here {oe:g})"),
+              "fd0.3": ("#7b1fa2", "FD ε=0.3 (floored)"),
+              "fd0.6": ("#d62728", "FD ε=0.6 (floored)")}
     for k, (c, lab) in styles.items():
         p = np.array(d["paths"][k])
+        ls = "--" if k == "oracle_fd" else "-"
         axA.plot(p[:, 0], p[:, 1], color=c, lw=2, marker="o", ms=2,
-                 label=lab)
+                 ls=ls, label=lab)
         axA.plot(*p[-1], marker="D", color=c, ms=8, mec="w")
     axA.plot(*d["theta_star"], marker="*", color="#ffd600", ms=18, mec="k",
              label=r"true $\theta^*$")
@@ -202,9 +222,10 @@ def main():
 
     ws = [r["w"] for r in d["rows"]]
     for k, (c, lab) in styles.items():
+        ls = "--" if k == "oracle_fd" else "-"
         axB.loglog([1 / w for w in ws],
                    [max(r[k]["err"], 1e-4) for r in d["rows"]],
-                   "o-", color=c, lw=2.2, label=lab)
+                   "o" + ls, color=c, lw=2.2, label=lab)
         for r in d["rows"]:
             axB.annotate(f"C={r[k]['cost']:.0e}",
                          (1 / r["w"], max(r[k]["err"], 1e-4)),
