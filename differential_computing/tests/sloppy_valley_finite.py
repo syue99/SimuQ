@@ -44,6 +44,7 @@ W_SWEEP = [0.3, 0.1, 0.03]
 W_SHOW = 0.03
 N_G = 64000                       # high finite budget → bias-dominated
 EPS_FLOORS = [0.3, 0.6]
+EPS_ORACLE = [0.05, 0.1, 0.15, 0.2, 0.3, 0.45, 0.6]   # oracle sweeps these
 K_STEPS, R_SEEDS, ETA = 260, 16, 0.12
 START = (0.35, 0.8)               # sloppy_valley's verified start
 POOL, NS_CAP, CELL = 48, 400, 0.05
@@ -185,7 +186,8 @@ def main():
         keys = ["psr", f"fd{EPS_FLOORS[0]}", f"fd{EPS_FLOORS[1]}"]
         d = {"theta_star": list(THETA_STAR), "start": list(START),
              "N_g": N_G, "w_sweep": W_SWEEP, "w_show": W_SHOW,
-             "err": {k: [] for k in keys}, "paths": {}}
+             "err": {k: [] for k in keys + ["oracle_fd"]}, "paths": {},
+             "oracle_eps": []}
         for w in W_SWEEP:
             for (meth, eps), key in zip(methods, keys):
                 ends = np.array([descend(meth, w, eps, s)
@@ -198,6 +200,24 @@ def main():
                         [descend(meth, w, eps, s, keep_path=True)
                          for s in range(6)], axis=0).tolist()
                 print(f"  w={w} {key}: rms {d['err'][key][-1]:.3f}", flush=True)
+            # oracle-FD: best eps per w (balances truncation bias vs the shot-
+            # noise 1/eps blow-up — the finite-shot eps-dilemma).
+            best = None
+            for e in EPS_ORACLE:
+                ends = np.array([descend("fd", w, e, s) for s in range(R_SEEDS)])
+                er = np.hypot(ends[:, 0] - THETA_STAR[0],
+                              ends[:, 1] - THETA_STAR[1])
+                rms = float(np.sqrt(np.mean(er ** 2)))
+                if best is None or rms < best[0]:
+                    best = (rms, float(e))
+            d["err"]["oracle_fd"].append(best[0])
+            d["oracle_eps"].append(best[1])
+            if abs(w - W_SHOW) < 1e-9:
+                d["paths"]["oracle_fd"] = np.mean(
+                    [descend("fd", w, best[1], s, keep_path=True)
+                     for s in range(6)], axis=0).tolist()
+            print(f"  w={w} oracle_fd: rms {best[0]:.3f} (eps {best[1]:g})",
+                  flush=True)
         # contour
         gx = np.linspace(DOM[0], DOM[1], 41)
         LC = [[float(np.log10((noisy(a, b)[0] - target[0]) ** 2
@@ -212,12 +232,17 @@ def main():
     gx = np.array(d["gx"])
     cs = axA.contourf(gx, gx, np.array(d["LC"]), levels=24, cmap="viridis")
     fig.colorbar(cs, ax=axA, label=r"$\log_{10} C(\theta)$")
-    sty = {"psr": ("#00897b", "PSR (chain rule)"),
-           f"fd{EPS_FLOORS[0]}": ("#7b1fa2", f"FD-of-cost ε={EPS_FLOORS[0]}"),
-           f"fd{EPS_FLOORS[1]}": ("#d62728", f"FD-of-cost ε={EPS_FLOORS[1]}")}
-    for k, (c, lab) in sty.items():
+    oe = d["oracle_eps"][d["w_sweep"].index(W_SHOW)]
+    sty = {"psr": ("#00897b", "-", "PSR (chain rule)"),
+           "oracle_fd": ("#1f77b4", "--", f"oracle-FD (best ε; here {oe:g})"),
+           f"fd{EPS_FLOORS[0]}": ("#7b1fa2", "-",
+                                  f"FD-of-cost ε={EPS_FLOORS[0]} (floored)"),
+           f"fd{EPS_FLOORS[1]}": ("#d62728", "-",
+                                  f"FD-of-cost ε={EPS_FLOORS[1]} (floored)")}
+    for k, (c, ls, lab) in sty.items():
         p = np.array(d["paths"][k])
-        axA.plot(p[:, 0], p[:, 1], color=c, lw=2, marker="o", ms=2, label=lab)
+        axA.plot(p[:, 0], p[:, 1], color=c, lw=2, marker="o", ms=2, ls=ls,
+                 label=lab)
         axA.plot(*p[-1], "D", color=c, ms=8, mec="w")
     axA.plot(*d["theta_star"], "*", color="#ffd600", ms=18, mec="k",
              label=r"true $\theta^*$")
@@ -228,8 +253,8 @@ def main():
     axA.legend(frameon=True, fontsize=8, loc="lower right")
 
     ws = np.array(d["w_sweep"])
-    for k, (c, lab) in sty.items():
-        axB.loglog(1 / ws, d["err"][k], "o-", color=c, lw=2.4, label=lab)
+    for k, (c, ls, lab) in sty.items():
+        axB.loglog(1 / ws, d["err"][k], "o" + ls, color=c, lw=2.4, label=lab)
     axB.set_xlabel(r"condition ratio $1/w$  (sloppiness)")
     axB.set_ylabel(r"parameter error $\|\hat\theta-\theta^*\|$")
     axB.set_title("(B) small direction bias × ill-conditioning = amplified\n"
