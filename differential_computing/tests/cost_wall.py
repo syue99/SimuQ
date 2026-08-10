@@ -156,6 +156,35 @@ def main():
     fig.savefig(out)
     print(f"saved: {out}")
 
+    # ── DiffSimuQ variant: sim vs compile only (the O(1) correction is a rescale
+    #    result and belongs to the transfer-map/ML paper, not the PL+Sys paper) ──
+    fig2, ax2 = plt.subplots(figsize=(8.0, 5.1), dpi=150)
+    ax2.axvspan(n_hour, 21, color="#eee", zorder=0)
+    ax2.semilogy(ns, tg, "o-", color="#d62728", lw=2.4,
+                 label="exact noisy simulation of the gradient program (measured)")
+    ax2.semilogy(n_ext, tg_ext, "--", color="#d62728", lw=1.2, alpha=0.55,
+                 label="exponential fit (extrapolated)")
+    ax2.semilogy(cn, ct, "s-", color="#7b1fa2", lw=2.4,
+                 label="differentiable compilation to pulses (measured, n→12)")
+    ax2.axhline(3600, color="#888", lw=1, ls="--")
+    ax2.text(2.15, 4300, "1 hour", fontsize=9, color="#666")
+    ax2.text(14.5, tg[0] * 8, "exact simulation\nintractable", ha="center",
+             fontsize=10, color="#666")
+    ax2.annotate("pulse depth CONSTANT in n\n(analog: no gate-depth growth)",
+                 xy=(cn[-1], ct[-1]), xytext=(8.6, 3e-2), fontsize=8, color="#7b1fa2",
+                 arrowprops=dict(arrowstyle="->", color="#7b1fa2", lw=1))
+    ax2.set_xlabel("qubits  n"); ax2.set_ylabel("wall-clock per gradient (s, log)")
+    ax2.set_xlim(2, 20)
+    ax2.set_title("The cost wall: exact simulation of the noisy gradient program is "
+                  "exponential;\ndifferentiable compilation is not — the toolchain "
+                  "runs where the simulator cannot", fontsize=9.6)
+    ax2.legend(frameon=False, fontsize=8.3, loc="upper left")
+    ax2.grid(True, which="both", alpha=0.13)
+    fig2.tight_layout()
+    out2 = os.path.join(figdir, "cost_wall_diffsimuq.png")
+    fig2.savefig(out2)
+    print(f"saved: {out2}")
+
 
 if __name__ == "__main__":
     main()
