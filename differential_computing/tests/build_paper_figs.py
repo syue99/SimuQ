@@ -76,38 +76,40 @@ def fig3():
     for k, (sec, c) in enumerate(zip(d["secants"], ramp)):
         e, fm, fp = sec["eps"], sec["fm"], sec["fp"]
         axA.plot([x_star - e, x_star + e], [fm, fp], "o-", color=c, lw=1.2, ms=2.6,
-                 label=(r"FD secants $\varepsilon$=0.15–0.6 (wrong sign)") if k == 0 else None)
-    axA.plot(ex, z0 + d["sl_small"] * (ex - x_star), ":", color=C_FD, lw=1.8,
-             label=r"FD $\varepsilon$=0.05 + control $\delta$ (wrong sign)")
+                 label=(r"FD secants $\varepsilon$=0.15–0.35 (wrong sign)") if k == 0 else None)
     axA.plot([x_star], [z0], "o", color=C_INK, ms=4)
     axA.set_xlabel(r"parameter $\theta$")
     axA.set_ylabel(r"$\langle O\rangle_{\rm noisy}(\theta)$")
     axA.text(0.97, 0.94, rf"$T/T_2^*={regime:.2f}$", transform=axA.transAxes,
              fontsize=7, color="#555", ha="right")
     axA.set_ylim(bottom=min(d["y_noisy"]) - 0.30)
-    axA.legend(loc="lower left", handlelength=1.5, fontsize=6)
+    axA.legend(loc="lower center", handlelength=1.5, fontsize=6)
 
-    eps = np.array(d["eps_grid"]); rmse = np.array(d["fd_rmse"])
-    wrong = np.array(d["fd_wrong"]) > 0.20
-    axB.loglog(eps, rmse, "-", color=C_FD, lw=1.6, label=r"FD (shots + control error $\delta$)")
-    axB.loglog(eps[~wrong], rmse[~wrong], "o", color=C_FD, ms=3.5)
-    axB.loglog(eps[wrong], rmse[wrong], "X", color=C_INK, ms=6, label=">20% wrong sign")
-    axB.axhline(d["psr_rmse"], color=C_RES, lw=2.0, label="raw PSR (exact device grad)")
+    # panel B: RMSE vs ε at a FIXED shot budget. Drop the far-ε tail (>0.45), where
+    # the oscillatory landscape gives coincidental secant crossings, not real optima.
+    eps = np.array(d["eps_grid"]); rmse = np.array(d["fd_rmse"]); wf = np.array(d["fd_wrong"])
+    m = eps <= 0.45; eps, rmse, wf = eps[m], rmse[m], wf[m]
+    flip = wf > 0.5                                   # truncation: majority wrong-sign
+    fd_best = float(rmse[~flip].min())                # best sign-preserving FD (bias-variance min)
+    axB.loglog(eps, rmse, "-", color=C_FD, lw=1.6, label=r"FD @ $N$=%d (shots+$\delta$)" % d["N_SHOTS"])
+    axB.loglog(eps[~flip], rmse[~flip], "o", color=C_FD, ms=3.5)
+    axB.loglog(eps[flip], rmse[flip], "X", color=C_INK, ms=6, label="sign flips (truncation)")
+    axB.axhline(d["psr_rmse"], color=C_RES, lw=2.2, label=r"raw PSR @ $N$ (exact $\nabla C_{\rm noisy}$)")
     axB.set_xlabel(r"FD step size $\varepsilon$")
     axB.set_ylabel(r"error vs $\nabla C_{\rm noisy}$ (RMSE)")
-    axB.set_ylim(top=rmse.max() * 1.9)
-    axB.annotate(r"$\delta/\varepsilon$ floor", xy=(eps[1], rmse[1]),
-                 xytext=(eps[0] * 1.1, rmse.max() * 1.4), fontsize=6, color="#a0451a",
+    axB.set_ylim(d["psr_rmse"] * 0.6, rmse.max() * 2.3)
+    axB.annotate("shot variance\n" r"+ $\delta/\varepsilon$", xy=(eps[1], rmse[1]),
+                 xytext=(eps[0] * 1.05, rmse.max() * 1.7), fontsize=6, color="#a0451a",
                  arrowprops=dict(arrowstyle="->", color="#a0451a", lw=0.7))
-    axB.annotate("truncation", xy=(eps[-2], rmse[-2]),
-                 xytext=(eps[-1] * 0.5, rmse.max() * 1.55), fontsize=6, color="#a0451a",
+    axB.annotate("truncation", xy=(eps[-3], rmse[-3]),
+                 xytext=(eps[-1] * 1.02, rmse.max() * 1.7), fontsize=6, color="#a0451a",
                  ha="right", arrowprops=dict(arrowstyle="->", color="#a0451a", lw=0.7))
-    axB.text(0.5, 0.96, rf"$T/T_2^*={regime:.2f}$, $N$={d['N_SHOTS']}, control $r$={d['r_ctrl']}",
-             transform=axB.transAxes, fontsize=6.3, color="#555", ha="center", va="top")
-    axB.legend(loc="center", handlelength=1.6, fontsize=6)
+    axB.text(0.5, 0.03, rf"$T/T_2^*={regime:.2f}$, control $r$={d['r_ctrl']}",
+             transform=axB.transAxes, fontsize=6.3, color="#555", ha="center")
+    axB.legend(loc="center", bbox_to_anchor=(0.5, 0.30), handlelength=1.6, fontsize=6)
     save(fig, "fig3_fd_trap")
-    return dict(regime=regime, wrong_eps=f"{int(wrong.sum())}/{len(eps)}",
-                fd_best=float(rmse.min()), psr=d["psr_rmse"])
+    return dict(regime=regime, wrong_eps=f"{int(flip.sum())}/{len(eps)}",
+                fd_best=fd_best, psr=d["psr_rmse"])
 
 
 # ── Fig 5 — device-gradient accuracy vs control resolution (delta noise) ──────
