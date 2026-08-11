@@ -123,7 +123,8 @@ compilation → ledger/verify → pulses; one horizontal stack. `fig_architectur
 - 4.4 The PulseLedger IR + verification methodology: reconstruct H per segment
   from meta-parameters, compare norms + end-to-end gradients. **Tab 3:
   verification round-trip** (1q/2q/3q/multi-layer: seg norms, gradient errors —
-  numbers EXIST, re-run pending).
+  refreshed via `tab3_verification.py`; 1q 8.9e-4/0.86%, 2q 2.2e-4/0.03%, 3q
+  2.4e-5, multi-layer PSR-semantics 0.00%; kick seg-norm 0 everywhere).
 - 4.5 Physical channels + AWG: 5 fixed modulator lines, COMB multi-tone; one
   paragraph + pointer to Fig 5's channel rows.
 
@@ -212,7 +213,7 @@ POPL (non-differentiable compilation), digital PSR / PennyLane / stochastic PSR
 | Fig 9 | Cost wall: exact-sim wall-clock vs toolchain cost (no correction line) | `build_paper_figs.fig8` | **DONE** |
 | Tab 1 | Three gradient routes (concept; PSR = unbiased device grad) | — | TO WRITE (no compute) |
 | Tab 2 | Trotter-vs-analog exact per-gradient counts | C7 + formula | OPTIONAL (Fig 4 covers it) |
-| Tab 3 | Verification round-trip (seg norms, gradient errors, multi-layer) | `verify_compilation` | numbers EXIST — **re-run pending go** |
+| Tab 3 | Verification round-trip (seg norms, gradient errors, multi-layer) | `tab3_verification.py` | **DONE** (refreshed; cache `figures/tab3_verification.json`) |
 | Supp. | Rescale/ideal-target, other opt loops, plateau, generality, ZNE, leakage | companion paper + supplement | per locked scoping |
 
 **Companion figures now OWNED by the ML paper** (`build_ml_paper_figs.py` →
@@ -229,6 +230,6 @@ text.
    `fig_*.py` scripts or fold into `build_paper_figs.py`).
 2. Fig 7: ACM-style replot of `h2_vqe_psr_vs_fd` into `paper_fig/` (device-target
    caption: track the real noisy cost; PSR descends, FD stalls).
-3. Tab 3: re-run `verify_compilation` for 1q/2q/3q/multi-layer (needs go — sim).
+3. ~~Tab 3: re-run for 1q/2q/3q/multi-layer~~ DONE (`tab3_verification.py`).
 4. Prose: write the §5.2 theorem+proof and the §5.3 δ/ε subsection.
 5. Tab 1 (concept) + optional Tab 2 collapse into Fig 4.
