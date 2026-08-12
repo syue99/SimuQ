@@ -60,7 +60,14 @@ shot variance:
 | regime | condition | winner | why (shots) |
 |---|:--:|:--:|---|
 | aligned / foldable (**generic**) | `ρ=2` | **kick** | co-located `±` diff. `Var ≤ (2πK)²` (always) |
-| non-foldable subextensive (**exotic**) | `ρ<2` | **Nyquist** | `diam(A)≪‖v‖₁`; one combined shift |
+| non-foldable subextensive | `ρ<2` | **Nyquist** | `diam(A)<‖v‖₁`; one native shift vs per-term kicks |
+
+Concrete **Nyquist-wins** case (`nyquist_wins_example.py`): native non-commuting
+analog drives — XY/hopping `Σ(X_jX_{j+1}+Y_jY_{j+1})` (`ρ≈1.4`) and Heisenberg
+`Σ(XX+YY+ZZ)` (`ρ≈1.0`). Many-eigenvalue (non-foldable), subadditive diameter;
+Nyquist shifts the one drive while kick must decompose into per-bond Pauli kicks.
+At moderate-to-high entropy (`var≳ρ²/4`, i.e. `≳0.45` XY / `≳0.23` Heisenberg)
+Nyquist beats kick on shots (up to ~4×) — and on capability (non-Pauli).
 
 `ρ=2` for any **foldable** tangent (a kick combines commuting/same-axis
 involutions: `cφX+sφZ` *is* an involution, `Σ(Z_j−Z_{j+1})` folds). Verified
