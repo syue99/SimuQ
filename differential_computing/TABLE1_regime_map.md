@@ -41,32 +41,35 @@ penalty over `Σw_n²`; the stochastic form above is the fair one.) FD cells are
 
 ---
 
-### Kick vs Nyquist on shots: the same L1 functional (F3 case study)
+### Kick vs Nyquist on shots — same L1 functional; NEITHER universally wins (F3)
 
-Both estimators cost `∼ (T·L1)²·e^{2ΓT}/ε_g²`; they differ **only in which norm of
-the tangent** sets `L1`:
-- **Nyquist**: `L1 = 2πK = T·diam(A)` — the spectral *diameter of the sum*.
-- **Kick**: `L1 = 2T·‖v‖₁` (times `diam(H_j)`) — the *sum of the term reaches*,
-  times a both-branches discount `(1−f₊f₋)∈(0,1]` (O(1), landscape-dep, `m`-indep).
+Both cost `∼ (T·L1)²·e^{2ΓT}/ε_g²`; same L1 functional, **no `π²` advantage** (the
+`π` in `K` and the `π²` in `Σ|w|=2πK` cancel). Two independent axes decide:
 
-Since `diam(A) ≤ Σ_j|v_j|diam(H_j)` (**subadditive**, verified), Nyquist `≤` kick,
-with the verdict set by `diam(A)` vs `‖v‖₁`:
+- **structural** `ρ = diam(A)/‖v‖₁ ∈ (0,2]` (Pauli, `diam(H_j)=2`). Nyquist pays
+  `diam(A)`; a **folding** kick combines commuting/same-axis involutions
+  (`cφX+sφZ` *is* an involution; `Σ(Z_j−Z_{j+1})` folds to `Z₀−Z_last`), so for any
+  **foldable** tangent `ρ=2` (equal L1s). `ρ<2` only for **non-foldable
+  subextensive-diameter** tangents (exotic, non-commuting frustrated structure).
+- **landscape** `f₊f₋≈⟨O⟩²`. Kick's `±` branches are **co-located** (same `θ`, kick
+  sign flips), so its paired single-shot 2nd moment is `2−2f₊f₋` — a **discount**
+  when correlated/polarized (`f₊f₋>0`), a **penalty** when anti-correlated
+  (`f₊f₋<0`). Nyquist's `±s` sit at far-apart points `θ±s` → no such term.
 
-| tangent structure | `diam(A)` (verified) | `‖v‖₁` | kick vs Nyquist shots |
-|---|:--:|:--:|:--:|
-| uniform `ΣZ_j` (aligned) | `2m` | `m` | **tie** (`∝m²`; kick's O(1) both-branches edge) |
-| rotated non-Pauli `Σ(cφX_j+sφZ_j)` | `2m` | `~1.3m` (kick decomposes) | Nyquist O(1) (`≤√2`) |
-| telescoping `Σ(Z_j−Z_{j+1})` | `4` (**O(1)**) | `2m` | Nyquist `∝m²` **iff** kick doesn't fold |
+Ratio `kick/Nyquist = 4(1−f₊f₋)/ρ²`, so **kick wins iff `ρ > 2√(1−f₊f₋)`**:
 
-There is **no `π²` advantage** — that was the L1 factor applied to kick but not
-Nyquist; the `π` in `K` and the `π²` in `Σ|w|` cancel. For the generic *aligned*
-tangent it is a **tie**, and kick's both-branches measurement gives it the O(1)
-edge. Nyquist wins only when the tangent's spectral diameter is **subextensive**
-relative to `‖v‖₁` — a non-Pauli combined generator (O(1), non-foldable) or a
-cancelling/telescoping tangent a term-by-term kick fails to fold (a compiler that
-folds closes it). Sign-alternation on *independent single-body* terms does **not**
-help (`diam` still `2m`). Kick's genuine wins are elsewhere: coherent-error
-robustness, fine-grained `Δt`, and the both-branches shot discount.
+| regime | condition | winner | why |
+|---|:--:|:--:|---|
+| aligned/foldable, correlated | `ρ=2, f₊f₋>0` | **kick** | co-located `±` → 2nd moment `2−2f₊f₋` small |
+| aligned/foldable, anti-corr. | `ρ=2, f₊f₋<0` | **Nyquist** | kick's both-branches becomes a penalty |
+| non-foldable subextensive | `ρ<2` | **Nyquist** | `diam(A)<‖v‖₁·diam(H)`; one combined shift |
+
+Verified (`regime_kick_vs_nyquist.py`, `H=θZ+X`, `A=Z`, `ρ=2`): kick wins near
+polarized `⟨Z⟩` (`f₊f₋>0`), loses near the equator — landscape-dependent, O(1). So
+the generic (foldable) case is a **wash**; kick is favored at correlated/polarized
+points (e.g. near optimization minima), Nyquist at high-entropy points or for the
+exotic non-foldable subextensive tangents. Kick's *durable* wins are elsewhere:
+coherent-error robustness, fine-grained `Δt`.
 
 ### `generator req.` — boson / fermion
 

@@ -1,4 +1,10 @@
 """
+[SUPERSEDED by regime_kick_vs_nyquist.py — the "rotated/telescope → Nyquist wins"
+conclusions here are WRONG: both are FOLDABLE (cφX+sφZ is itself an involution;
+Σ(Z_j−Z_{j+1}) folds to Z₀−Z_last), so a folding kick ties them (ρ=2), and kick's
+co-located both-branches discount is omitted here. Correct account: neither
+universally wins; kick wins iff ρ>2√(1−f₊f₋). Kept only for the diam(A) numerics.]
+
 case_study_kick_vs_nyquist.py — shots for kick vs Nyquist are the SAME L1
 functional; who wins is set by diam(A) vs ‖v‖₁, not by any π² bookkeeping.
 
