@@ -13,6 +13,12 @@ shift sits at an extremum of the response → O(η²). Nyquist's ±s branches si
 DIFFERENT operating points θ±s (like FD's θ±ε), so a shift miscalibration is only
 O(η). This tells us whether Nyquist inherits the kick's suppression.
 
+SCOPE: this tests a MULTIPLICATIVE miscalibration of the differentiation operation
+(kick angle / shift amplitude / FD step scaled by 1+η). It shows kick O(η²) vs
+Nyquist/FD O(η). It does NOT settle the Table-1 coherent-error cell: an ADDITIVE,
+waveform-independent slow error is common to the ±s pair and may still cancel for
+Nyquist — that case is open (the cell is marked † pending that check).
+
 Noiseless (coherent errors only). Run:
   conda run -n qec_pg python differential_computing/tests/coherent_error_check.py
 """
