@@ -81,7 +81,7 @@ def _shifted_hlist(B, A, s, T):
 
 def nyquist_program_generator(parametrized_H, T, diff_var, value,
                               N=8, mode="deterministic", n_sample=64,
-                              seed=None, max_n=64):
+                              seed=None, max_n=64, window="none"):
     """Generate shifted-waveform programs for ∂J/∂diff_var at diff_var=value.
 
     Returns (programs, info) where
@@ -95,6 +95,14 @@ def nyquist_program_generator(parametrized_H, T, diff_var, value,
     for a bounded (∼ 2K/π·1/max_n) truncation bias, and is also what real
     amplitude/clipping limits force.  Large shifts also make the shifted H stiff
     to integrate, so keep max_n modest unless the runner uses a large nsteps.
+
+    window (deterministic only) apodizes the truncated series:
+      "none"    — the exact Nyquist weights (best when K is a tight/critical
+                  bound, so the landscape is critically sampled — no oversampling
+                  headroom for a window to exploit).
+      "lanczos" — multiply term n by the Lanczos σ-factor sinc(n/N); accelerates
+                  the truncation when the sample differences decay slowly (e.g.
+                  extensive-sum tangents with a loose K bound).
     """
     B, A = tangent_hamiltonian(parametrized_H, diff_var, value)
     K = bandwidth_K(A, T)
@@ -103,9 +111,11 @@ def nyquist_program_generator(parametrized_H, T, diff_var, value,
         return programs, {"K": 0.0, "A": A, "B": B, "mode": mode, "shifts": []}
 
     if mode == "deterministic":
-        for n in range(min(N, max_n)):
+        Nt = min(N, max_n)
+        for n in range(Nt):
             s_n = (n + 0.5) / (2.0 * K)
-            w = (2.0 * K / np.pi) * ((-1) ** n) / (n + 0.5) ** 2
+            apod = np.sinc(n / Nt) if window == "lanczos" else 1.0
+            w = apod * (2.0 * K / np.pi) * ((-1) ** n) / (n + 0.5) ** 2
             programs.append({"H_list": _shifted_hlist(B, A, +s_n, T), "weight": +w})
             programs.append({"H_list": _shifted_hlist(B, A, -s_n, T), "weight": -w})
             shifts += [+s_n, -s_n]
@@ -133,9 +143,10 @@ def combine_nyquist_results(programs, expfn):
 
 
 def nyquist_gradient(parametrized_H, T, diff_var, value, expfn,
-                     N=8, mode="deterministic", n_sample=64, seed=None, max_n=64):
+                     N=8, mode="deterministic", n_sample=64, seed=None,
+                     max_n=64, window="none"):
     """Convenience: generate + combine in one call."""
     programs, info = nyquist_program_generator(
         parametrized_H, T, diff_var, value, N=N, mode=mode,
-        n_sample=n_sample, seed=seed, max_n=max_n)
+        n_sample=n_sample, seed=seed, max_n=max_n, window=window)
     return combine_nyquist_results(programs, expfn), info

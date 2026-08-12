@@ -37,7 +37,8 @@ def _eval_ugrad(ugrad_raw, diff_var, value):
 
 
 def observable_program_generator(parametrized_H, T, n_sample, n_repetition,
-                                  diff_var, value, short_kick=False):
+                                  diff_var, value, short_kick=False,
+                                  tau_list=None):
     """
     Generate parameter-shift branches for differentiating <O> w.r.t. diff_var.
 
@@ -62,6 +63,10 @@ def observable_program_generator(parametrized_H, T, n_sample, n_repetition,
                 Pauli generators).  Both branches run π/4 → symmetric, ~7× less
                 decoherence.  Noiselessly the gradient is unchanged; under
                 dephasing it is markedly more accurate.
+    tau_list   : array or None — split times τ for the (T·E_τ) integral.  None
+                (default) draws n_sample uniform random τ (stochastic MC,
+                O(1/√n)).  Pass deterministic midpoints (k+½)/n·T for the
+                O(1/n²) quadrature analogue of deterministic Nyquist shifts.
 
     Returns
     -------
@@ -72,7 +77,10 @@ def observable_program_generator(parametrized_H, T, n_sample, n_repetition,
 
     u_grad_dict = parametrized_H.take_diff_coef(diff_var)
     evaluated_H = parametrized_H.set_parameterizedHam({diff_var: value})
-    tau_list = np.random.rand(n_sample) * T
+    if tau_list is None:
+        tau_list = np.random.rand(n_sample) * T
+    else:
+        tau_list = np.asarray(tau_list, dtype=float)
 
     for Hj_tuple, ugrad_raw in u_grad_dict.items():
         evaluated_ugrad = _eval_ugrad(ugrad_raw, diff_var, value)
