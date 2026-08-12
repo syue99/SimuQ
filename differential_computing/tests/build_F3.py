@@ -25,26 +25,26 @@ from matplotlib.gridspec import GridSpec
 
 FIGDIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "figures"))
 C_FD, C_KICK, C_NYQ = "#D55E00", "#009E73", "#0072B2"
-FAM = {"uniform": ("uniform  ΣZ_j", "#1a1a1a", "o"),
-       "rotated": ("rotated  Σ(cφX+sφZ)", "#E69F00", "s"),
-       "telescope": ("telescope  Σ(Z_j−Z_{j+1})", "#0072B2", "^")}
+FAM = [("uniform", "uniform  $\\Sigma Z_j$", "tie"),
+       ("rotated", "rotated  $\\Sigma(c_\\varphi X_j{+}s_\\varphi Z_j)$", r"Nyquist $\times2$"),
+       ("telescope", "telescope  $\\Sigma(Z_j{-}Z_{j+1})$", r"Nyquist $\times m^2$")]
 
 
 def load(name):
     return json.load(open(os.path.join(FIGDIR, name)))
 
 
-def panel_a(ax, cs):
-    for fam, (lab, c, mk) in FAM.items():
-        rows = cs["data"][fam]
-        m = [r["m"] for r in rows]
-        ratio = [r["cost_kick"] / r["cost_nyq"] for r in rows]   # kick / Nyquist shots
-        ax.loglog(m, ratio, mk + "-", color=c, ms=5, label=lab)
-    ax.axhline(1.0, color="#999", lw=0.8, ls="--")
-    ax.text(m[0], 1.15, "tie", fontsize=7, color="#666")
-    ax.set_xlabel("qubits $m$"); ax.set_ylabel("shot cost  kick / Nyquist")
-    ax.set_title("(a) same L1 functional — verdict $=$ diam$(A)$ vs $\\|v\\|_1$", fontsize=8.5)
-    ax.legend(fontsize=6.8, loc="upper left"); ax.grid(True, which="both", alpha=0.15)
+def panel_a(ax, cs, fam, title, tag, show_ylabel, show_legend):
+    rows = cs["data"][fam]; m = [r["m"] for r in rows]
+    ax.loglog(m, [r["cost_kick"] for r in rows], "o-", color=C_KICK, ms=5, label="kick")
+    ax.loglog(m, [r["cost_nyq"] for r in rows], "^--", color=C_NYQ, ms=5, label="Nyquist")
+    ax.set_title(title, fontsize=7.8); ax.set_xlabel("qubits $m$", fontsize=8)
+    if show_ylabel:
+        ax.set_ylabel("shot cost  $\\propto \\|w\\|_1^2$", fontsize=8)
+    ax.text(0.05, 0.9, tag, transform=ax.transAxes, fontsize=8, color="#333")
+    ax.grid(True, which="both", alpha=0.15); ax.tick_params(labelsize=7)
+    if show_legend:
+        ax.legend(fontsize=7, loc="lower right")
 
 
 def panel_b(ax, nz):
@@ -85,12 +85,29 @@ def panel_table(ax):
 def main():
     cs = load("case_study_kick_vs_nyquist.json")
     nz = load("noisy_nyquist_vs_fd_kick.json")
-    fig = plt.figure(figsize=(9.2, 6.4))
-    gs = GridSpec(2, 2, height_ratios=[1.25, 0.8], hspace=0.42, wspace=0.28)
-    panel_a(fig.add_subplot(gs[0, 0]), cs)
-    panel_b(fig.add_subplot(gs[0, 1]), nz)
-    panel_table(fig.add_subplot(gs[1, :]))
-    fig.suptitle("F3 — Differentiation-strategy benchmark", fontsize=10, y=0.98)
+    fig = plt.figure(figsize=(10.5, 8.4))
+    gs = GridSpec(3, 3, height_ratios=[1.0, 1.05, 0.62], hspace=0.5, wspace=0.3)
+    # row 0 — kick vs Nyquist shots by tangent structure (both curves visible)
+    for i, (fam, title, tag) in enumerate(FAM):
+        panel_a(fig.add_subplot(gs[0, i]), cs, fam, title, tag,
+                show_ylabel=(i == 0), show_legend=(i == 0))
+    fig.text(0.5, 0.905, "(a) kick vs Nyquist shots — same L1 functional; "
+             "verdict $=$ diam$(A)$ vs $\\|v\\|_1$ (no $\\pi^2$ advantage)",
+             ha="center", fontsize=9)
+    # row 1 — noisy finite-shot (centered) + verdict text
+    panel_b(fig.add_subplot(gs[1, 0:2]), nz)
+    axn = fig.add_subplot(gs[1, 2]); axn.axis("off")
+    axn.text(0.0, 0.95,
+             "Reading F3\n\n"
+             "(a) kick $\\approx$ Nyquist for\naligned tangents (tie);\n"
+             "Nyquist wins only for\nnon-foldable subextensive\n"
+             "diam$(A)$ — not generic.\n\n"
+             "(b) both PSR strategies\nreach $\\nabla C_{\\rm noisy}$ ($N^{-1/2}$)\n"
+             "where oracle-FD is\nfloored by $\\delta/\\varepsilon$.",
+             va="top", fontsize=7.6, color="#333")
+    # row 2 — case-study table
+    panel_table(fig.add_subplot(gs[2, :]))
+    fig.suptitle("F3 — Differentiation-strategy benchmark", fontsize=11, y=0.965)
     out = os.path.join(FIGDIR, "F3_strategy_benchmark.png")
     fig.savefig(out, dpi=150, bbox_inches="tight"); plt.close(fig)
     print(f"wrote {out}")

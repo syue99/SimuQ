@@ -1,4 +1,11 @@
 """
+[DEPRECATED — superseded by build_F3.py / noisy_nyquist_vs_fd_kick.py]
+The NOISELESS accuracy-vs-executions view here is misleading: the 1-qubit case is
+trivial and the ~1e-6 error floor is unreachable on a real device. The realistic
+comparison (finite shots + δ + dephasing) is noisy_nyquist_vs_fd_kick.py, and the
+shot-cost scaling is case_study_kick_vs_nyquist.py; both feed Figure F3. Figure
+moved to figures/deprecated/. Kept for reference only.
+
 nyquist_vs_fd_kick.py — three-way differentiation-strategy numerics.
 
 Computes ∂⟨O⟩/∂θ on the SAME analog program by three sound routes plus the FD
