@@ -23,7 +23,7 @@ shifts); cells read `det / stochˢ` where they differ.
 | extensive `θ` (`m` terms) | `O(m)` exec | `O(1)` dir, `K∝m` | `O(1)` |
 | fine param, `Δt→0` | ✓ | ✗ `(s∝1/Δt)` | ✓ |
 | unbiased on noisy `∇C` | ✓ | ✓† | ✗ |
-| slow/coherent-error suppr. | ✓ | ? | ✗ |
+| slow/coherent-error suppr. | ✓ `O(η²)` | ✗ `O(η)` | ✗ `O(η)` |
 | **shots `N→ε_g`** | `O(T²e^{2ΓT}/ε_g²)` | `O(K²e^{2ΓT}/ε_g²)` | `O(e^{2ΓT}/ε_g²)` |
 | **δ-robust (no floor)** | ✓ | ✓ | ✗ `(ε_g≳δ^{2/3})` |
 
@@ -61,12 +61,17 @@ exact; `H²=I` (Pauli strings, single Majoranas) is the canonical ±1 case.
 Coherent/slow errors = *systematic*, slowly-drifting or miscalibration errors
 (control drift, gate over-rotation) — **not** random shot noise. "Suppression" =
 the estimator's difference cancels such common-mode errors (an echo).
-- **Kick**: `f⁻−f⁺` differ only by the ±kick sign on the *same* base evolution and
-  the *same* kick gate → coherent errors are common-mode → cancel. ✓
-- **FD**: `θ±ε` use *different* pulses → the errors are not common-mode → no
-  structural cancellation. ✗
-- **Nyquist**: `±s` are the same waveform family (only the shift sign flips), so
-  they *plausibly* cancel like the kick — **unverified (?)**.
+Verified (`coherent_error_check.py`): miscalibrate each method's differentiation
+operation by `(1+η)` and fit the induced error `Δ(η)=|g(η)−g(0)|`.
+- **Kick**: `Δ ∝ η²` (measured slope 2.00). Both branches evolve the *same* base
+  at the *same* parameter and differ only by the ±kick sign, so the shift sits at
+  the extremum of the sinusoidal response → a common over-rotation is 2nd-order. ✓
+- **FD**: `Δ ∝ η` (slope 1.00). A miscalibrated step scales the estimate `∝(1+η)`. ✗
+- **Nyquist**: `Δ ∝ η` (slope 0.99) — **identical to FD, NOT suppressed.** Its `±s`
+  branches sit at *different* operating points `θ±s`, so a shift miscalibration
+  propagates linearly, exactly like FD's `θ±ε`. Keeping the base fixed (kick) is
+  what buys the cancellation; shifting the whole trajectory (Nyquist) forfeits it.
+  (At `η=0.005`, kick error `5e-5` vs Nyquist `9e-3` — ~160× more sensitive.)
 
 ### `δ`-amplification when `ε ≈ δ`  (`figures/delta_amplification.png`)
 
@@ -79,7 +84,7 @@ Kick/Nyquist are ε-free: `δ` is only the operating-point offset `δ·|C''| = O
 
 ---
 
-**Open cells** (blocking, FRAMEWORK_OUTLINE §Open questions): Nyquist `unbiased on
-noisy ∇C` = ✓† (numerics `noisy_nyquist_vs_fd_kick`; proof pending) and
-`slow-error suppr.` = ? (check pending). FD `δ^{2/3}` floor verified (measured
-`δ^{0.70}`, `δ∈[0.005,0.15]`).
+**One open cell** (blocking, FRAMEWORK_OUTLINE §Open questions): Nyquist `unbiased
+on noisy ∇C` = ✓† (numerics `noisy_nyquist_vs_fd_kick`; proof pending). The
+`slow-error suppr.` cell is now resolved to ✗ (verified `O(η)`, `coherent_error_check`).
+FD `δ^{2/3}` floor verified (measured `δ^{0.70}`, `δ∈[0.005,0.15]`).
