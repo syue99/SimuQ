@@ -33,24 +33,23 @@ def load(name):
 
 def panel_a(ax, rg):
     c = np.linspace(0.0, 1.0, 200); rho_b = 2 * np.sqrt(c)
-    ax.fill_betweenx(np.linspace(0, 2, 200), 0, 2, color=C_NYQ, alpha=0.12)
-    ax.fill_betweenx(c, rho_b, 2.0, color=C_KICK, alpha=0.25)
+    ax.fill_betweenx(c, 0, 2.0, color=C_NYQ, alpha=0.10)
+    ax.fill_betweenx(c, rho_b, 2.0, color=C_KICK, alpha=0.28)
     ax.plot(rho_b, c, "k-", lw=1.5)
-    ax.text(1.68, 0.12, "KICK wins\n(aligned +\ncorrelated)", color="#00695c",
-            fontsize=8, ha="center", weight="bold")
-    ax.text(0.6, 1.3, "Nyquist wins\n(non-foldable\nsubextensive,\nor $f_+f_-{<}0$)",
-            color=C_NYQ, fontsize=8, ha="center", weight="bold")
+    ax.text(1.55, 0.28, "KICK wins\n(aligned,\ngeneric)", color="#00695c",
+            fontsize=8.5, ha="center", weight="bold")
+    ax.text(0.5, 0.72, "Nyquist wins\n(non-foldable\nsubextensive)",
+            color=C_NYQ, fontsize=8.5, ha="center", weight="bold")
     ax.axvline(2.0, color="#333", lw=1.0, ls=":")
-    ax.text(1.98, 1.86, "foldable", fontsize=6.5, ha="right", color="#333")
+    ax.text(1.98, 0.05, "foldable", fontsize=6.5, ha="right", color="#333")
     r = np.array(rg["ratio"])
-    ax.scatter(np.full_like(r, 2.0) - 0.02, r,
-               c=np.where(r < 1, C_KICK, C_FD), s=12, zorder=5)
-    ax.plot([0.5], [0.6], "^", color=C_NYQ, ms=9, zorder=5)
+    ax.scatter(np.full_like(r, 2.0) - 0.02, r, c=C_KICK, s=12, zorder=5)
+    ax.plot([0.5], [0.3], "^", color=C_NYQ, ms=9, zorder=5)
     ax.set_xlabel(r"$\rho=\mathrm{diam}(A)/\Sigma_j|v_j|$")
-    ax.set_ylabel(r"$1-f_+f_-$")
-    ax.set_title(r"(a) kick vs Nyquist regime: wins iff $\rho>2\sqrt{1-f_+f_-}$"
-                 "\n(dots: real $A{=}Z$ pts, $\\rho{=}2$; same L1 — no $\\pi^2$)", fontsize=8.3)
-    ax.set_xlim(0, 2.08); ax.set_ylim(0, 2.0)
+    ax.set_ylabel(r"kick branch shot variance $\in[0,1]$")
+    ax.set_title(r"(a) kick vs Nyquist: same L1; kick wins iff $\rho>2\sqrt{\mathrm{var}}$"
+                 "\n(dots: real $A{=}Z$, $\\rho{=}2$ — ALL kick-wins; no $\\pi^2$)", fontsize=8.1)
+    ax.set_xlim(0, 2.08); ax.set_ylim(0, 1.0)
 
 
 def panel_b(ax, nz):
@@ -71,24 +70,23 @@ def panel_b(ax, nz):
 
 def panel_table(ax):
     ax.axis("off")
-    cols = ["regime", "condition", "winner", "why"]
+    cols = ["regime", "condition", "winner", "why (shots)"]
     rows = [
-        ["aligned/foldable, correlated", "$\\rho{=}2,\\ f_+f_->0$", "kick",
-         "co-located $\\pm$ branches: 2nd moment $2{-}2f_+f_-$ small"],
-        ["aligned/foldable, anti-corr.", "$\\rho{=}2,\\ f_+f_-<0$", "Nyquist",
-         "kick's both-branches becomes a penalty"],
-        ["non-foldable subextensive", "$\\rho<2$", "Nyquist",
-         "diam$(A)<\\Sigma|v_j|$; single combined shift (exotic tangents)"],
+        ["aligned / foldable (generic)", "$\\rho{=}2$", "kick",
+         "co-located $\\pm$ diff. var $(1{-}f_+^2){+}(1{-}f_-^2)\\leq(2\\pi K)^2$"],
+        ["non-foldable subextensive (exotic)", "$\\rho<2$", "Nyquist",
+         "diam$(A)\\ll\\Sigma|v_j|$; one combined shift"],
     ]
     t = ax.table(cellText=rows, colLabels=cols, cellLoc="center", loc="center",
-                 colWidths=[0.27, 0.16, 0.10, 0.47])
-    t.auto_set_font_size(False); t.set_fontsize(7.4); t.scale(1, 1.5)
+                 colWidths=[0.30, 0.10, 0.11, 0.49])
+    t.auto_set_font_size(False); t.set_fontsize(7.6); t.scale(1, 1.6)
     for (r, c), cell in t.get_celld().items():
         cell.set_edgecolor("#cccccc")
         if r == 0:
             cell.set_facecolor("#f0f0f0"); cell.set_text_props(weight="bold")
-    ax.set_title("(c) neither universally wins — same L1 functional; regime set by "
-                 "structure $\\rho$ and landscape $f_+f_-$", fontsize=8.5, pad=2)
+    ax.set_title("(c) on SHOTS kick generally wins (aligned tangents, its co-located "
+                 "$\\pm$ echo); Nyquist's edge is capability (non-Pauli) + exotic subextensive",
+                 fontsize=8.3, pad=2)
 
 
 def main():

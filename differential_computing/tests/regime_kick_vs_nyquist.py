@@ -62,52 +62,50 @@ def main():
     obs = qp.tensor(qp.sigmaz(), qp.qeye(2))
     expfn = r.make_expectation_fn(r.zero_state(), obs)
 
-    # (a) H=θZ+X, A=Z ⇒ ρ=2 (foldable). Nyquist cost = (2πK)² = (T·diam A)² = (2T)².
-    #     Kick paired cost = 4T²(Σ|v|)²(1−f₊f₋), Σ|v|=1 ⇒ ratio = (1−f₊f₋).
+    # (a) H=θZ+X, A=Z ⇒ ρ=2. SHOT-NOISE COST = VARIANCE, not the 2nd moment.
+    #   kick per-sample var = T²·Var(f̂₋−f̂₊) = T²[(1−f₊²)+(1−f₋²)] at 2 exec;
+    #   Nyquist stochastic var = (2πK)² at 1 exec (each far-apart shift: E[f̂²]=1).
+    #   (2πK)²=(2T)² for A=Z ⇒ ratio = 2T²[(1−f₊²)+(1−f₋²)]/(2T)² = varfac ≤ 1.
     thetas = np.linspace(0.1, 2.4, 40)
-    O, ratio, oneminus = [], [], []
+    O, ratio, varfac = [], [], []
     for th in thetas:
         Oz = expfn([[H.set_parameterizedHam({"x": float(th)}), T]])
         fp, fm = kick_branches(expfn, H, th)
-        ff = fp * fm
-        O.append(Oz); oneminus.append(1 - ff); ratio.append(1 - ff)   # ρ=2 ⇒ ratio=1−ff
-    nwin = sum(1 for x in ratio if x < 1)
-    print(f"H=θZ+X (ρ=2): kick/Nyquist ratio range {min(ratio):.2f}–{max(ratio):.2f}; "
-          f"kick wins at {nwin}/{len(ratio)} θ (ratio<1, f₊f₋>0), loses at the rest "
-          f"(f₊f₋<0). Landscape-dependent, O(1).")
+        vf = ((1 - fp ** 2) + (1 - fm ** 2)) / 2       # ≈ 1−⟨O⟩², ∈[0,1]
+        O.append(Oz); varfac.append(vf); ratio.append(vf)
+    print(f"H=θZ+X (ρ=2): kick/Nyquist VARIANCE ratio {min(ratio):.2f}–{max(ratio):.2f} "
+          f"(all ≤1 ⇒ KICK WINS everywhere); biggest win (→0) at polarized ⟨Z⟩, "
+          f"tie (→1) at the equator.")
 
     fig, (axA, axB) = plt.subplots(1, 2, figsize=(10.5, 4.2))
     Oarr = np.array(O); rarr = np.array(ratio)
-    axA.scatter(Oarr[rarr < 1], rarr[rarr < 1], c="#009E73", s=22, label="kick wins")
-    axA.scatter(Oarr[rarr >= 1], rarr[rarr >= 1], c="#D55E00", s=22, label="Nyquist wins")
+    axA.scatter(Oarr, rarr, c="#009E73", s=22)
     axA.axhline(1.0, color="#999", lw=0.9, ls="--")
+    axA.text(0.02, 1.03, "tie", fontsize=7, color="#666", transform=axA.get_yaxis_transform())
     axA.set_xlabel(r"$\langle Z\rangle(\theta)$")
-    axA.set_ylabel(r"kick / Nyquist shot cost  $=1-f_+f_-$")
-    axA.set_title(r"(a) foldable $A{=}Z$ ($\rho{=}2$): kick's both-branches is"
-                  "\n" r"landscape-dependent — wins where $f_+f_->0$, loses where $<0$",
+    axA.set_ylabel(r"kick / Nyquist shot cost  ($\leq1\Rightarrow$ kick wins)")
+    axA.set_title(r"(a) foldable $A{=}Z$ ($\rho{=}2$): ratio $\leq1$ everywhere"
+                  "\n$=\\frac{1}{2}[(1{-}f_+^2){+}(1{-}f_-^2)]$ (kick co-located $\\pm$)",
                   fontsize=8.3)
-    axA.legend(fontsize=7.5); axA.grid(True, alpha=0.15)
+    axA.set_ylim(0, 1.1); axA.grid(True, alpha=0.15)
 
-    # (b) regime map: ρ vs 1−f₊f₋∈[0,2]. Boundary ρ = 2√(1−f₊f₋).
+    # (b) regime map: ρ vs varfac∈[0,1]. kick wins ⟺ ρ > 2√(varfac).
     c = np.linspace(0.0, 1.0, 200); rho_b = 2 * np.sqrt(c)
+    axB.fill_betweenx(c, 0, 2.0, color="#0072B2", alpha=0.10)          # Nyquist base
+    axB.fill_betweenx(c, rho_b, 2.0, color="#009E73", alpha=0.28)      # kick wins
     axB.plot(rho_b, c, "k-", lw=1.5)
-    axB.fill_betweenx(np.linspace(0, 2, 200), 0, 2, color="#0072B2", alpha=0.12)  # Nyquist base
-    axB.fill_betweenx(c, rho_b, 2.0, color="#009E73", alpha=0.25)                  # kick wins
-    axB.text(1.72, 0.12, "KICK wins\n(aligned +\ncorrelated)", color="#00695c",
-             fontsize=8.5, ha="center", weight="bold")
-    axB.text(0.55, 1.35, "Nyquist wins\n(non-foldable\nsubextensive, or\n$f_+f_-<0$)",
-             color="#0072B2", fontsize=8.5, ha="center", weight="bold")
+    axB.text(1.55, 0.28, "KICK wins\n(aligned)", color="#00695c", fontsize=9, ha="center", weight="bold")
+    axB.text(0.5, 0.75, "Nyquist wins\n(non-foldable\nsubextensive)", color="#0072B2",
+             fontsize=9, ha="center", weight="bold")
     axB.axvline(2.0, color="#333", lw=1.0, ls=":")
-    axB.text(1.98, 1.85, "foldable\ntangents", fontsize=7, ha="right", color="#333")
-    # real H=θZ+X points (all ρ=2), spread over y by the landscape:
-    axB.scatter(np.full_like(rarr, 2.0) - 0.02, rarr, c=np.where(rarr < 1, "#009E73", "#D55E00"),
-                s=14, zorder=5)
-    axB.plot([0.5], [0.6], "^", color="#0072B2", ms=9, zorder=5)   # non-foldable subextensive
+    axB.text(1.98, 0.05, "foldable", fontsize=7, ha="right", color="#333")
+    axB.scatter(np.full_like(rarr, 2.0) - 0.02, rarr, c="#009E73", s=14, zorder=5)  # all kick-wins
+    axB.plot([0.5], [0.3], "^", color="#0072B2", ms=9, zorder=5)      # non-foldable subextensive
     axB.set_xlabel(r"$\rho=\mathrm{diam}(A)/\Sigma_j|v_j|$  (structural alignment)")
-    axB.set_ylabel(r"$1-f_+f_-$  (branch decorrelation)")
-    axB.set_title(r"(b) regime: kick wins iff $\rho>2\sqrt{1-f_+f_-}$"
-                  "\n(dots = real $A{=}Z$ points, $\\rho{=}2$)", fontsize=8.3)
-    axB.set_xlim(0, 2.08); axB.set_ylim(0, 2.0)
+    axB.set_ylabel(r"kick branch shot variance $\in[0,1]$")
+    axB.set_title(r"(b) regime: kick wins iff $\rho>2\sqrt{\mathrm{var}}$"
+                  "\n(dots: real $A{=}Z$, $\\rho{=}2$ — ALL kick-wins)", fontsize=8.3)
+    axB.set_xlim(0, 2.08); axB.set_ylim(0, 1.0)
     fig.tight_layout()
     out = os.path.join(FIGDIR, "regime_kick_vs_nyquist.png")
     fig.savefig(out, dpi=150, bbox_inches="tight"); plt.close(fig)

@@ -41,35 +41,36 @@ penalty over `Σw_n²`; the stochastic form above is the fair one.) FD cells are
 
 ---
 
-### Kick vs Nyquist on shots — same L1 functional; NEITHER universally wins (F3)
+### Kick vs Nyquist on shots — same L1 functional; KICK GENERALLY WINS (F3)
 
 Both cost `∼ (T·L1)²·e^{2ΓT}/ε_g²`; same L1 functional, **no `π²` advantage** (the
-`π` in `K` and the `π²` in `Σ|w|=2πK` cancel). Two independent axes decide:
+`π` in `K` and the `π²` in `Σ|w|=2πK` cancel). The shot-noise cost is the
+**variance**, not the 2nd moment (a subtlety: `E[(f̂₋−f̂₊)²]=2−2f₊f₋` *includes*
+the gradient signal `(f₋−f₊)²` — only `Var=(1−f₊²)+(1−f₋²)` is noise).
 
-- **structural** `ρ = diam(A)/‖v‖₁ ∈ (0,2]` (Pauli, `diam(H_j)=2`). Nyquist pays
-  `diam(A)`; a **folding** kick combines commuting/same-axis involutions
-  (`cφX+sφZ` *is* an involution; `Σ(Z_j−Z_{j+1})` folds to `Z₀−Z_last`), so for any
-  **foldable** tangent `ρ=2` (equal L1s). `ρ<2` only for **non-foldable
-  subextensive-diameter** tangents (exotic, non-commuting frustrated structure).
-- **landscape** `f₊f₋≈⟨O⟩²`. Kick's `±` branches are **co-located** (same `θ`, kick
-  sign flips), so its paired single-shot 2nd moment is `2−2f₊f₋` — a **discount**
-  when correlated/polarized (`f₊f₋>0`), a **penalty** when anti-correlated
-  (`f₊f₋<0`). Nyquist's `±s` sit at far-apart points `θ±s` → no such term.
+- **Nyquist (stochastic)**: `Var = (2πK)² = (T·diam(A))²` — each far-apart single
+  shift has `E[f̂²]=1`, no reduction.
+- **Kick**: measures a **co-located** `±` difference (same `θ`), so
+  `Var = (1−f₊²)+(1−f₋²) ≤ 2` — *reduced* by the shared base, at 2 exec.
 
-Ratio `kick/Nyquist = 4(1−f₊f₋)/ρ²`, so **kick wins iff `ρ > 2√(1−f₊f₋)`**:
+Ratio `kick/Nyquist = 2·[(1−f₊²)+(1−f₋²)] / (2πK)² ≈ (1−⟨O⟩²)/... ≤ 1` for
+`ρ=diam(A)/‖v‖₁=2`, so **kick wins iff `ρ > 2√(var)`**, `var∈[0,1]` the branch
+shot variance:
 
-| regime | condition | winner | why |
+| regime | condition | winner | why (shots) |
 |---|:--:|:--:|---|
-| aligned/foldable, correlated | `ρ=2, f₊f₋>0` | **kick** | co-located `±` → 2nd moment `2−2f₊f₋` small |
-| aligned/foldable, anti-corr. | `ρ=2, f₊f₋<0` | **Nyquist** | kick's both-branches becomes a penalty |
-| non-foldable subextensive | `ρ<2` | **Nyquist** | `diam(A)<‖v‖₁·diam(H)`; one combined shift |
+| aligned / foldable (**generic**) | `ρ=2` | **kick** | co-located `±` diff. `Var ≤ (2πK)²` (always) |
+| non-foldable subextensive (**exotic**) | `ρ<2` | **Nyquist** | `diam(A)≪‖v‖₁`; one combined shift |
 
-Verified (`regime_kick_vs_nyquist.py`, `H=θZ+X`, `A=Z`, `ρ=2`): kick wins near
-polarized `⟨Z⟩` (`f₊f₋>0`), loses near the equator — landscape-dependent, O(1). So
-the generic (foldable) case is a **wash**; kick is favored at correlated/polarized
-points (e.g. near optimization minima), Nyquist at high-entropy points or for the
-exotic non-foldable subextensive tangents. Kick's *durable* wins are elsewhere:
-coherent-error robustness, fine-grained `Δt`.
+`ρ=2` for any **foldable** tangent (a kick combines commuting/same-axis
+involutions: `cφX+sφZ` *is* an involution, `Σ(Z_j−Z_{j+1})` folds). Verified
+(`regime_kick_vs_nyquist.py`, `H=θZ+X`, `A=Z`): kick/Nyquist variance ratio
+**0.07–0.97, all ≤1 — kick wins at every θ** (≈14× at best). So on shots **kick
+generally wins** for the practical (foldable) case, via its co-located `±` echo;
+Nyquist wins only for exotic non-foldable subextensive-diameter tangents.
+(An earlier version used the 2nd moment `2−2f₊f₋` and wrongly showed Nyquist
+winning — corrected.) Nyquist's real edge is **capability** (non-Pauli generators)
+and compile cost; kick's is shots, coherent-error robustness, and fine-grained `Δt`.
 
 ### `generator req.` — boson / fermion
 
