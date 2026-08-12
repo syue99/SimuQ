@@ -5,7 +5,7 @@
 `T` evolution time · `Γ=1/T₂` dephasing rate ·
 `δ` control setpoint-error (std) · `ε` FD step · `Δt` control time-slice ·
 `N` shots · `ε_g` target gradient RMSE · `m` generator terms an extensive `θ` touches ·
-`M` Nyquist truncation order (# shift pairs) · `v̄` typical `|v_j|` ·
+`M` Nyquist truncation order (# shift pairs) · `v̄` typical `|v_j|` · `‖v‖₁=Σ_j|v_j|` ·
 `v_j(t)=∂u_j/∂θ` · `A(t)=Σ_j v_j(t) H_j` (tangent) · `diam=λ_max−λ_min` ·
 **`K = (1/2πħ)∫₀ᵀ diam(A(t)) dt`** (Nyquist bandwidth — a compile-time static
 analysis over the tangent's spectral diameter; `ħ=1`; time-independent case
@@ -21,44 +21,52 @@ superscript **ˢ** = stochastic Nyquist variant.
 | fine param, `Δt→0` | ✓ | ✗ `(s₀∝1/Δt)` | ✓ |
 | **— cost —** | | | |
 | executions / grad | `O(m)` pairs | `O(M) / O(1)ˢ` | `O(1)` |
-| variance | `O(T²v̄²)` | `O(K²)ˢ` | `O(1/ε²)` |
-| **shots @ extensive `θ`** | `O(m²T²v̄²·e^{2ΓT}/ε_g²)` | `O(K²·e^{2ΓT}/ε_g²)` | `m`-indep, **floored** |
+| variance (per shot) | `O(T²‖v‖₁²)·(1−f₊f₋)` | `O((2πK)²)=O(T²diam(A)²)ˢ` | `O(1/ε²)` |
+| **shots @ extensive `θ`** | `O(T²‖v‖₁²·e^{2ΓT}/ε_g²)` | `O(T²diam(A)²·e^{2ΓT}/ε_g²)` | `m`-indep, **floored** |
 | compilation | analog waveforms + gates (incl. transport) | waveforms only | waveforms only |
 | **— guarantees —** | | | |
 | bias | `0` | `O(K/M) / 0ˢ` | `O(ε²)+O(δ/ε)`, floor `O(δ^{2/3})` |
 | unbiased on noisy `∇C` | ✓ | ✓† | ✗ |
 | coherent-error suppr. | ✓† `O(η²)` | † | ✗ |
 
-*Caption.* Kick `O(T²v̄²)` assumes the `|v_j|≈O(1)` normalization (`v̄`). Nyquist
-variance `O(K²)` is the **stochastic** form `(Σ|w_n|)²∼K²`; the deterministic
-truncation splits the budget over `Σw_n²` and is higher by the order factor `M`.
-FD cells are all at **free `ε`** (the knob); its optimized floor lives in the bias
-row (`ε*∼δ^{1/3}⇒O(δ^{2/3})`), which is also why "no shots reach `ε_g<δ^{2/3}`".
+*Caption.* **Kick and Nyquist are the same L1 functional.** The stochastic-Nyquist
+per-shot variance is the squared L1 norm of the weights `w_n=(2K/π)(−1)ⁿ/(n+½)²`:
+`Σ|w_n|=(2K/π)·Σ_{n∈ℤ}(n+½)⁻²=(2K/π)π²=2πK`, so `Var≤(2πK)²=(T·diam(A))²`. Kick's
+is `(T‖v‖₁)²(2−2f₊f₋)` measuring both ± branches; sampling the branch sign instead
+(1 exec/sample) gives exactly `(2T‖v‖₁)²` — **identical to Nyquist**. Kick's only
+structural discount is the both-branches factor `(1−f₊f₋)`: O(1), landscape-
+dependent, `m`-independent. (Deterministic Nyquist adds an order-`M` budget-split
+penalty over `Σw_n²`; the stochastic form above is the fair one.) FD cells are at
+**free `ε`**; its floor lives in the bias row (`ε*∼δ^{1/3}⇒O(δ^{2/3})`).
 
 ---
 
-### The extensive-`θ` crossover (headline — F3a verifies)
+### Kick vs Nyquist on shots: the same L1 functional (F3 case study)
 
-Same-dimension shot counts: **kick `∼ m²T²v̄²/ε_g²`** (budget split over `m` branch
-pairs, variances add) vs **Nyquist `∼ K²/ε_g²`** with `K=(1/2π)∫diam(A)dt`. The
-generator's `O(m)` branch count *follows from* the separately-synthesizable
-condition (the transformation splits the sum term-by-term); Nyquist folds the
-whole sum into one tangent direction. The verdict is `diam(A)` vs `m·v̄`:
+Both estimators cost `∼ (T·L1)²·e^{2ΓT}/ε_g²`; they differ **only in which norm of
+the tangent** sets `L1`:
+- **Nyquist**: `L1 = 2πK = T·diam(A)` — the spectral *diameter of the sum*.
+- **Kick**: `L1 = 2T·‖v‖₁` (times `diam(H_j)`) — the *sum of the term reaches*,
+  times a both-branches discount `(1−f₊f₋)∈(0,1]` (O(1), landscape-dep, `m`-indep).
 
-`diam(Σ_j v_j H_j)` is **subadditive** (`≤ Σ_j|v_j|diam(H_j)`), so:
+Since `diam(A) ≤ Σ_j|v_j|diam(H_j)` (**subadditive**, verified), Nyquist `≤` kick,
+with the verdict set by `diam(A)` vs `‖v‖₁`:
 
-| tangent structure | `diam(A)` (verified) | `K` | Nyquist shots | vs kick `m²T²v̄²` |
-|---|:--:|:--:|:--:|:--:|
-| uniform `ΣZ_j` / same-sign | `2mv̄` (extensive) | `∝m` | `∝m²` | wins by `∼π²` const |
-| frustrated ZZ / overlapping | `<2Σ|v_j|` | `<m` | `<m²` | wins by more |
-| telescoping `Σ(Z_j−Z_{j+1})` | `4` (**O(1)**, all `m`) | `O(T)` | **`m`-indep** | wins by `∼m²` |
+| tangent structure | `diam(A)` (verified) | `‖v‖₁` | kick vs Nyquist shots |
+|---|:--:|:--:|:--:|
+| uniform `ΣZ_j` (aligned) | `2m` | `m` | **tie** (`∝m²`; kick's O(1) both-branches edge) |
+| rotated non-Pauli `Σ(cφX_j+sφZ_j)` | `2m` | `~1.3m` (kick decomposes) | Nyquist O(1) (`≤√2`) |
+| telescoping `Σ(Z_j−Z_{j+1})` | `4` (**O(1)**) | `2m` | Nyquist `∝m²` **iff** kick doesn't fold |
 
-So on **shots**, extensive `θ` favors **Nyquist** (always `≤` kick, and
-`m`-independent when the tangent spectral diameter is *subextensive*). Kick's wins
-lie elsewhere — coherent-error robustness, fine-grained `Δt` params, and a single
-**large-`|v|`** tangent (`|v|>π ⇒ K>T ⇒ O(T²)<O(K²)`). Sign-alternation on
-*independent single-body* terms does **not** help (`diam` still `2mv̄`);
-subextensivity needs *cancelling/telescoping* structure.
+There is **no `π²` advantage** — that was the L1 factor applied to kick but not
+Nyquist; the `π` in `K` and the `π²` in `Σ|w|` cancel. For the generic *aligned*
+tangent it is a **tie**, and kick's both-branches measurement gives it the O(1)
+edge. Nyquist wins only when the tangent's spectral diameter is **subextensive**
+relative to `‖v‖₁` — a non-Pauli combined generator (O(1), non-foldable) or a
+cancelling/telescoping tangent a term-by-term kick fails to fold (a compiler that
+folds closes it). Sign-alternation on *independent single-body* terms does **not**
+help (`diam` still `2m`). Kick's genuine wins are elsewhere: coherent-error
+robustness, fine-grained `Δt`, and the both-branches shot discount.
 
 ### `generator req.` — boson / fermion
 
