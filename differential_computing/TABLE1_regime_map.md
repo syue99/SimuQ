@@ -5,18 +5,20 @@
 `T` evolution time · `Γ=1/T₂` dephasing rate ·
 `δ` control setpoint-error (std) · `ε` FD step · `Δt` control time-slice ·
 `N` shots · `ε_g` target gradient RMSE · `m` generator terms an extensive `θ` touches ·
+`M` Nyquist truncation order (# shift pairs) ·
 `v_j=∂u_j/∂θ` · `A=Σ_j v_j H_j` (tangent) · `diam(A)=λ_max−λ_min` ·
 `K=(T/2π)·diam(A)` (Nyquist bandwidth).
-Cells: **✓** holds · **✗** fails · **✓†** numerically holds, proof open · **?** open ·
-superscript `s` = stochastic Nyquist.
+Cells: **✓** holds · **✗** fails · **✓†** numerically holds, proof open · **?** open.
+Nyquist has two variants — deterministic (order `M`) and **stochasticˢ** (samples
+shifts); cells read `det / stochˢ` where they differ.
 
 | Axis | Kick PSR | Nyquist | FD |
 |---|:--:|:--:|:--:|
-| generator req. | Pauli + synth. | any Hermitian | none |
-| primitive | native + digital synth. | native op. | native op. |
-| compilation | zones + transport + gate | waveform only | waveform only |
-| executions / grad | `O(m)` | `O(N)` / `O(1)ˢ` | `O(1)` |
-| bias | `0` | `O(K/N)` / `0ˢ` | `O(δ^{2/3})` |
+| generator req. | ±1 spec. (involutory) | any Hermitian | none |
+| primitive | native + digital gate | native op. | native op. |
+| compilation | analog waveforms + gates (incl. transport) | waveforms only | waveforms only |
+| executions / grad | `O(m)` | `O(M) / O(1)ˢ` | `O(1)` |
+| bias | `0` | `O(K/M) / 0ˢ` | `O(δ^{2/3})` |
 | variance | `O(T²)` | `O(K²)` | `O(1/ε²)` |
 | extensive `θ` (`m` terms) | `O(m)` exec | `O(1)` dir | `O(1)` |
 | fine param, `Δt→0` | ✓ | ✗ `(s∝1/Δt)` | ✓ |
