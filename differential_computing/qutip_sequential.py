@@ -12,8 +12,12 @@ import qutip as qp
 
 
 class QuTiPSequentialRunner:
-    def __init__(self, n_qubits):
+    def __init__(self, n_qubits, nsteps=None):
+        # nsteps: optional ODE-solver step cap.  Large Nyquist waveform shifts
+        # make the shifted Hamiltonian stiff (integration phase ∝ shift·T); a
+        # larger nsteps integrates them robustly.  Default None = QuTiP default.
         self.n_qubits = n_qubits
+        self.nsteps = nsteps
 
     def zero_state(self):
         """Return |00...0> as a QuTiP ket."""
@@ -40,7 +44,8 @@ class QuTiPSequentialRunner:
             if duration == 0:
                 continue
             H_qobj = H.to_qutip_qobj()
-            result = qp.sesolve(H_qobj, state, [0, float(duration)])
+            opts = {"nsteps": self.nsteps} if self.nsteps else None
+            result = qp.sesolve(H_qobj, state, [0, float(duration)], options=opts)
             state = result.states[-1]
         return state
 
