@@ -21,7 +21,7 @@ import qutip as qp
 
 
 class NoisyQuTiPRunner:
-    def __init__(self, n_qubits, noise=None, kick_dephases=False):
+    def __init__(self, n_qubits, noise=None, kick_dephases=False, nsteps=None):
         """
         n_qubits : int
         noise    : NoiseModel | None — None means coherent (no noise).
@@ -37,6 +37,7 @@ class NoisyQuTiPRunner:
         self.kick_dephases = kick_dephases
         self.n_qubits = n_qubits
         self.noise = noise
+        self.nsteps = nsteps        # ODE step cap; larger for stiff (large-‖H‖·T) segments
 
     # ── States / observables (same API as QuTiPSequentialRunner) ──────────────
     def zero_state(self):
@@ -92,12 +93,13 @@ class NoisyQuTiPRunner:
         scaled and fair between FD (1 segment) and PSR (3 segments).
         """
         rho = qp.ket2dm(psi0) if psi0.isket else psi0
+        opt = {"nsteps": self.nsteps} if self.nsteps else {}
         if self.noise is None or not self.noise.has_noise():
             for H, duration in H_list:
                 if duration == 0:
                     continue
                 rho = qp.mesolve(H.to_qutip_qobj(), rho,
-                                 [0.0, float(duration)], c_ops=[]).states[-1]
+                                 [0.0, float(duration)], c_ops=[], options=opt).states[-1]
             return rho
 
         c_ops = self.noise.collapse_ops() if self.noise.has_collapse() else []
@@ -124,10 +126,10 @@ class NoisyQuTiPRunner:
                 for c in c_ops:
                     L += qp.lindblad_dissipator(c)
                 rho = qp.mesolve(L, rho, [0.0, float(duration)],
-                                 options=dict(normalize_output=False)).states[-1]
+                                 options={**opt, "normalize_output": False}).states[-1]
             else:
                 rho = qp.mesolve(H_qobj, rho, [0.0, float(duration)],
-                                 c_ops=seg_c_ops).states[-1]
+                                 c_ops=seg_c_ops, options=opt).states[-1]
             # kick gate error: a discrete Z-type channel on the kicked qubits
             if is_kick and gate_err:
                 rho = self.noise.apply_gate_error(rho, self._kick_support(H))

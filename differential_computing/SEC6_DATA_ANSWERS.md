@@ -163,30 +163,32 @@ source of truth.
 
 ---
 
-## P1 / P2 — status under the corrected scope
+## P1 / P2 — status (all Hamiltonian-level under T4; ✅ = delivered)
 
-All of these are **Hamiltonian-level under the T4 model** (Section 0). I understand
-and can generate the following; each will get its script + PNG/PDF + JSON + a data note,
-20 seeds, median+IQR, execution-normalized accounting, T/T2* in the caption:
+Each delivered item has script + PNG/PDF + JSON + a data note; 20 seeds median+IQR;
+execution-normalized; T/T2* in caption; T4 best-guess values flagged.
 
-- **P1-A (F6, floor + amplification)**: I have the pieces — `fig6_device_finite_shot`
-  (Panel L: RMSE vs N, PSR + FD-frozen-ε; **add the NSR stochastic-sampler curve**) and
-  `delta_amplification` + `fd_trap` bottom (Panel R: RMSE vs ε/δ, FD V-shape + PSR/NSR
-  flat + sign-flip X markers). Target = `∇C_noisy` (fine-ε FD of the emulated landscape,
-  exact expectation, no shots), computation logged. Regime 0.15 main, 0.5 → appendix.
-  Doable. *One thing to confirm:* δ=0.02 as the control-noise value (guide asks to
-  confirm against T4 — see P0-B).
-- **P1-B (F-loop)**: TFIM P∈{4,6}, budget/optimizer per A.3, PSR/NSR/FD(ε∈{0.3,1,3}×).
-  Doable; needs A.3's η fixed and θ* computed first.
-- **P1-C (F3)**: relabel kick→PSR, Nyquist→NSR, ρ→χ (A.1), keep the ⟨σ⟩ caption (A.2),
-  drop the compiled-spot-check overlay (A.5), subtitle "Hamiltonian-level under T4".
-  Doable now.
-- **P2-A (Fig 1)**: `fig3_fd_trap` top panel, T/T2*=0.5, relabel, PSR = exact noisy
-  gradient, publication single-column. Doable.
-- **P2-B (systems 6.5)**: compile scaling / Trotter-count table / Tab 3 with NSR rows —
-  **partly blocked**: the compile-scaling and NSR-vs-PSR compile asymmetry require the
-  compiler, and NSR has no compiled lowering (A.5). PSR compile-scaling exists (C7);
-  NSR compile numbers are **not available** until NSR lowering is built. Flag.
+- **P0-B (T4)** ✅ — `sec6_T4_noise_table.py` → `T4.csv` + `sec6_T4_noise_table.png`.
+  All channels θ-independent (flagged). Values best-guess pending calibration.
+- **P1-A (F6, floor + amplification)** ✅ — `build_F6.py` → `F6_floor_amplification.*`.
+  TFIM θ·Z0Z1+ΣX, T/T2*=0.15. Panel L: PSR (symmetric kick) & NSR (stochastic) ride
+  `N^{-1/2}` to `∇C_noisy` (exact fine-FD target, logged), crossing below FD's δ/ε floor
+  (FD frozen at ε*=0.25 tuned once at N=1e4). Panel R: FD V-shape, PSR/NSR flat.
+  **Two findings surfaced (in the data note):** (i) the PSR estimator was
+  bootstrap-resampling the τ-pool → spurious variance floor (fixed: use all pool
+  samples). (ii) **T4's kick gate error biases raw PSR by ~0.028** (the kick is a
+  digital op with its own error; NSR is immune) — a real *pro-NSR* result, but a
+  Sec-5.2 gate-infidelity point, so it is **excluded from F6** (F6 = dephasing + δ).
+- **P1-B (F-loop)** ⏳ running — `build_Floop.py`, TFIM P=4. Modeling documented in the
+  data note (FD = real noisy secant + δ + shots; PSR/NSR = unbiased ∇C_noisy + shot
+  noise σ=2T√(P/B), the L1-functional model — PSR≈NSR for single-Pauli ZZ). θ* via
+  Nelder-Mead. Added `nsteps` to `NoisyQuTiPRunner` (backward-compat) for stiff mesolves.
+- **P1-C (F3)** ✅ — `phase_who_wins_3panel.py` relabeled (PSR/NSR, χ=ρ/2, Hamiltonian-
+  level under T4, ⟨σ⟩ kept, no compiled overlay).
+- **P2-A (Fig 1)** ✅ — `build_fig1.py` → `fig1_intro_trap.*`, single-column, T/T2*=0.5.
+- **P2-B (systems 6.5)** — **blocked at Hamiltonian level**: compile-scaling and the
+  NSR-vs-PSR compile asymmetry require the compiler, and **NSR has no compiled lowering**
+  (A.5). PSR C7 exists; NSR compile numbers unavailable until lowering is built. Not run.
 
 ### Net uncertainties to discuss
 1. **T4 provenance** — confirm the noise rates + their sources so T4.csv can be the
