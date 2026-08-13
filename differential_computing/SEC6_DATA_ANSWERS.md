@@ -225,19 +225,20 @@ execution-normalized; T/T2* in caption; T4 best-guess values flagged.
   the execution budget. θ*=[-0.057,-1.429,1.429,0.057], C*=0.311.
 - **P1-C (F3)** ✅ — `phase_who_wins_3panel.py` relabeled (PSR/NSR, χ=ρ/2, Hamiltonian-
   level under T4, ⟨σ⟩ kept, no compiled overlay).
-- **P2-A (Fig 1)** ✅ — `build_fig1.py` → `fig1_intro_trap.*` + `fig1_intro_trap_caption.txt`
-  (caption + data note delivered durably, per FIG1_REVISION R5). Single-column, T/T2*=0.5,
-  self-contained (own Hamiltonian-level landscape H=θZ0+X0, `⟨Z0⟩_noisy`; does not read the
-  shared `landscape_device_data.json`, so Fig 3 is untouched). All six FIG1_REVISION changes
-  applied. **Anchor θ*=1.235; drawn tangent slope = analytic ∇C_noisy = −1.240 (equal by
-  construction).** Three FD secants at ε=0.15/0.25/0.35 all wrong sign (+0.09/+0.96/+0.66).
-  **Known tension (flagged):** on this sharp landscape "all three secants wrong" (R5.4/R6)
-  and "anchor on a clean steep flank" (R2) are mutually exclusive — all-three-wrong pins the
-  anchor within ±0.015 of a crest (verified: broader landscapes have zero all-three-wrong
-  anchors). Shipped the steepest all-three-wrong anchor with a short hugging tangent; the
-  ε=0.15 secant is only marginally wrong (+0.09, near-flat). Alternative available on request:
-  steep-flank anchor with the tangent hugging cleanly and 2-of-3 secants wrong (smallest ε
-  correct-but-attenuated) — a one-line anchor-criterion change.
+- **P2-A (Fig 1)** ✅ — `build_fig1.py` → `fig1_intro_trap.*` + `fig1_intro_trap_caption.txt`.
+  Single-column, self-contained (own Hamiltonian-level landscape H=θZ0+X0, `⟨Z0⟩_noisy`;
+  does not read the shared `landscape_device_data.json`, so Fig 3 is untouched). FIG1_REVISION
+  **+ REV 2** applied. **The R2/R5.4 tension is RESOLVED by R8's grid sweep** (T×θ*×ε_min,
+  T/T2*=0.5 fixed): the flip condition is ε>λ/2 (half the ripple period), independent of
+  anchor, while secant magnitude peaks at the steep mid-flank — so a mid-flank anchor with
+  ε_min bumped above λ/2 flips all three *with margin*. Sweep found 41 passing configs;
+  chosen **T=10, θ*=1.290, ε=0.22/0.29/0.36**: (1) secant slopes +0.82/+1.29/+0.84 all
+  wrong-signed, min 0.82≥0.15 (near-flat caveat gone); (2) anchor 21% of period off the
+  extremum; (3) |slope| 3.39 = 56% of max≥50%; (4) no collisions. Drawn tangent slope =
+  analytic ∇C_noisy = −3.39 (equal by construction). **REV 2 R7:** caption migrated in-figure
+  — muted info line (program·instrument·regime), per-secant ε labels, **PSR/NSR vocabulary
+  only** (no "kick-PSR/Nyquist" in any text), **no section refs inside the image**; ~2-line
+  mini caption (with the Sec-6.2 δ/ε forwarding clause) delivered in the sidecar + JSON.
 - **P2-B / Track P (systems, R0)** — reframed by FOLLOWUP R0 as **Track P** (pulse
   generation to EVIDENCE the Sec-5 compiler claims, not a physics result): lower a
   Nyquist-shifted TFIM through the SAME AAIS→pulse→ledger path and report lines-of-glue +
