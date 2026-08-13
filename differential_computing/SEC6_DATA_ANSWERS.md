@@ -252,8 +252,29 @@ execution-normalized; T/T2* in caption; T4 best-guess values flagged.
 - **R1 accepted** — χ relabel + boundary `χ>√var` + extremes `χ=1`; ⟨σ⟩=1.37 stays in F3;
   A.4 realization-row honesty note; F3 compiled overlay dropped.
 
-### Q-items — HELD for Fred (not acted on)
-- **Q1** T4 rates + δ=0.02 + provenance → **T4.csv stays provisional** until confirmed.
-- **Q2** F3 device-alphabet foldable panel (X_a + Z_aZ_b anticommute → χ→1/√2 inside the
-  device alphabet): add as 4th panel / replace (c) / leave — pending.
-- **Q3** F-loop `T/T2*=0.5` stressor variant (appendix) — decide after the 0.15 run lands.
+### Q-items — HELD for Fred (why each is held)
+
+These are **held because the FOLLOWUP explicitly filed them as Q-items** = "still need
+confirmation from Fred before you act." They are not blocked on capability (I can execute
+all three); they are blocked on a **decision that is the author's to make**, and acting
+first would either bake in an unconfirmed number or spend a figure slot Fred may want
+differently. Concretely:
+
+- **Q1 — T4 rates + δ=0.02 + provenance.** Held because T4.csv is meant to be the paper's
+  **single source of truth** for the noise model, and I only have *best-guess* rates +
+  *undocumented* provenance (which calibration each rate traces to). FOLLOWUP C says "emit
+  T4.csv only after confirmation." Emitting it now would give a paper artifact a false air
+  of authority. *What unblocks it:* Fred confirms the numbers (T2*, 1q/2q gate error,
+  leakage, δ) and the citation for each. The provisional CSV/PNG exist and are flagged; I
+  flip them to final on his word — minutes of work.
+- **Q2 — F3 device-alphabet foldable panel** (X_a + Z_aZ_b anticommute → χ→1/√2 *inside*
+  the device alphabet). Held because it is a **figure-composition decision**: FOLLOWUP Q2
+  lists three mutually-exclusive options (add as a 4th panel / replace panel (c) / leave F3
+  as is). The *physics* is settled and cheap to compute; *where it goes* changes F3's
+  layout and narrative, which is the author's call. *What unblocks it:* Fred picks one of
+  the three; I build it same-day (it reuses `sec6_rho_chi`/`phase_who_wins_3panel`).
+- **Q3 — F-loop `T/T2*=0.5` stressor variant.** Held because FOLLOWUP Q3 says "decide after
+  the 0.15 run lands." **That precondition is now met** — the 0.15 run landed
+  (`F_loop_real.*`). So Q3 is **now actionable**; it is held only on Fred's go/appendix
+  decision, not on any dependency. *Cost if greenlit:* one more ~2 h run at the same P/seeds
+  with `T2 = T/0.5` (a one-line change), producing an appendix stressor figure.
