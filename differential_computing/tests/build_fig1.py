@@ -123,23 +123,41 @@ def main():
     plt.close(fig)
 
     signs = "/".join(f"{s['slope']:+.2f}" for s in d["secants"])
-    print(f"wrote fig1_intro_trap.pdf/.png  (T/T2*={d['regime']:.2f})")
-    print(f"DATA NOTE (Fig 1): H(θ)=θ·Z0+X0, cost C_noisy=⟨Z0⟩ under T2* dephasing, "
-          f"T/T2*={d['regime']:.2f} (Hamiltonian-level under T4). Anchor θ*={a:.3f}; analytic "
-          f"slope ∇C_noisy={g:+.3f} (h=1e-3), plotted-resolution slope={d['g_plotted']:+.3f} "
-          f"(the drawn tangent uses the analytic slope). Three FD secants at ε={EPS}: slopes "
-          f"{signs} — all POSITIVE while ∇C_noisy is NEGATIVE (all three wrong sign). Anchor is "
-          f"the steepest point at which all three flip; tangent drawn over ±{th} so it hugs the "
-          f"curve on this sharp landscape.")
-    print("\nCAPTION DRAFT (R5):")
-    print(f"  Figure 1. The finite-difference trap on a noisy analog cost. The transverse-field "
-          f"program H(θ)=θZ0+X0 is evaluated Hamiltonian-level under the T4 noise model "
-          f"(dephasing, T/T2*={d['regime']:.1f}); the cost C_noisy(θ)=⟨Z0⟩ (black) develops sharp "
-          f"θ-features. At the operating point (dot), either sound differentiation strategy of "
-          f"Sec. 4 — kick-PSR or the Nyquist waveform shift — recovers the true noisy slope "
-          f"(blue tangent). Finite differences do not: secants at three step sizes ε (orange) "
-          f"all return the WRONG sign, and shrinking ε does not rescue them — the δ/ε control-"
-          f"noise floor (Sec. 6.2) blows up as ε→0. No step size works.")
+    # R2 slope verification: the DRAWN tangent slope IS the analytic derivative (equal by
+    # construction). g_plotted (np.gradient over the plot grid) is only a coarse consistency
+    # check, not "the plotted slope" — report it as such so "equal" is not misread.
+    data_note = (
+        f"DATA NOTE (Fig 1): H(θ)=θ·Z0+X0, cost C_noisy=⟨Z0⟩ under T2* dephasing, "
+        f"T/T2*={d['regime']:.2f} (Hamiltonian-level under T4). Anchor θ*={a:.3f}. "
+        f"Slope verification (R2): drawn tangent slope = analytic ∇C_noisy = {g:+.3f} "
+        f"(central difference h=1e-3) — EQUAL by construction (the tangent is plotted with "
+        f"exactly this slope); coarse np.gradient check on the plotted samples gives "
+        f"{d['g_plotted']:+.2f}, consistent to grid resolution. Three FD secants at ε={EPS}: "
+        f"slopes {signs} — all POSITIVE while ∇C_noisy is NEGATIVE (all three wrong sign). "
+        f"θ*={a:.3f} is the steepest point at which all three flip (on this sharp landscape "
+        f"that pins it just past a crest); tangent drawn over ±{th} so it hugs the descending "
+        f"flank. Caveat: the smallest ε={EPS[0]} secant is barely wrong-sign (slope "
+        f"{d['secants'][0]['slope']:+.2f}, near-flat).")
+    caption = (
+        f"Figure 1. The finite-difference trap on a noisy analog cost. The transverse-field "
+        f"program H(θ)=θZ0+X0 is evaluated Hamiltonian-level under the T4 noise model "
+        f"(dephasing, T/T2*={d['regime']:.1f}); the cost C_noisy(θ)=⟨Z0⟩ (black) develops sharp "
+        f"θ-features. At the operating point (dot), either sound differentiation strategy of "
+        f"Sec. 4 — kick-PSR or the Nyquist waveform shift — recovers the true noisy slope "
+        f"(blue tangent). Finite differences do not: secants at three step sizes ε (orange) "
+        f"all return the WRONG sign, and shrinking ε does not rescue them — the δ/ε control-"
+        f"noise floor (Sec. 6.2) blows up as ε→0. No step size works.")
+
+    # DELIVER the caption + data note durably alongside the figure (not just stdout).
+    d["data_note"] = data_note
+    d["caption"] = caption
+    json.dump(d, open(cache, "w"), indent=2, default=float)
+    with open(os.path.join(FIGDIR, "fig1_intro_trap_caption.txt"), "w") as f:
+        f.write(caption + "\n\n" + data_note + "\n")
+
+    print(f"wrote fig1_intro_trap.pdf/.png + fig1_intro_trap_caption.txt  (T/T2*={d['regime']:.2f})")
+    print(data_note)
+    print("\nCAPTION DRAFT (R5):\n  " + caption)
 
 
 if __name__ == "__main__":

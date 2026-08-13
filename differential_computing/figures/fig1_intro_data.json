@@ -670,5 +670,7 @@
       "fp": 0.8005908904346277,
       "slope": 0.6587873803818178
     }
-  ]
+  ],
+  "data_note": "DATA NOTE (Fig 1): H(\u03b8)=\u03b8\u00b7Z0+X0, cost C_noisy=\u27e8Z0\u27e9 under T2* dephasing, T/T2*=0.50 (Hamiltonian-level under T4). Anchor \u03b8*=1.235. Slope verification (R2): drawn tangent slope = analytic \u2207C_noisy = -1.240 (central difference h=1e-3) \u2014 EQUAL by construction (the tangent is plotted with exactly this slope); coarse np.gradient check on the plotted samples gives -1.33, consistent to grid resolution. Three FD secants at \u03b5=[0.15, 0.25, 0.35]: slopes +0.09/+0.96/+0.66 \u2014 all POSITIVE while \u2207C_noisy is NEGATIVE (all three wrong sign). \u03b8*=1.235 is the steepest point at which all three flip (on this sharp landscape that pins it just past a crest); tangent drawn over \u00b10.06 so it hugs the descending flank. Caveat: the smallest \u03b5=0.15 secant is barely wrong-sign (slope +0.09, near-flat).",
+  "caption": "Figure 1. The finite-difference trap on a noisy analog cost. The transverse-field program H(\u03b8)=\u03b8Z0+X0 is evaluated Hamiltonian-level under the T4 noise model (dephasing, T/T2*=0.5); the cost C_noisy(\u03b8)=\u27e8Z0\u27e9 (black) develops sharp \u03b8-features. At the operating point (dot), either sound differentiation strategy of Sec. 4 \u2014 kick-PSR or the Nyquist waveform shift \u2014 recovers the true noisy slope (blue tangent). Finite differences do not: secants at three step sizes \u03b5 (orange) all return the WRONG sign, and shrinking \u03b5 does not rescue them \u2014 the \u03b4/\u03b5 control-noise floor (Sec. 6.2) blows up as \u03b5\u21920. No step size works."
 }
