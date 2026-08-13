@@ -214,8 +214,15 @@ execution-normalized; T/T2* in caption; T4 best-guess values flagged.
   the loop; **NSR** = real stochastic Nyquist sampler (gate-immune; tail-shift clip near
   θ* = its headroom cost); **FD** = real noisy secant + δ + shots (only the FD ε-grid uses
   the permitted side-variant form). B=1000/grad, η=0.25, 60 iters, 20 seeds, θ0+N(0,0.08)
-  shared start. Measured cost ≈2.1 s/PSR-grad, 1.7 s/NSR-grad → full run ≈78 min (feasible,
-  no reduction needed — reported per C2).
+  shared start. Measured cost ≈2.1 s/PSR-grad, 1.7 s/NSR-grad → full run ~2 h wall (20×60
+  at P=4; feasible, no reduction needed — reported per C2).
+  **Result (final median C−C*):** NSR **0.0027** < PSR **0.0037** < FD 1× **0.0084** <
+  FD 3× **0.0337** < FD 0.3× **0.0795**. Both unbiased estimators reach the shot floor,
+  ~2–20× below every FD ε; no FD step saves it (0.3× too noisy — 519 uphill steps across
+  the descent — 3× biased, 1× still floored above). PSR sits marginally above NSR = its
+  ~0.028 digital gate bias carried *inside the loop* (within the shot band at B=1000; the
+  C3 cell isolates it cleanly at fixed θ). Unbiased-vs-FD separation is clear by ~35% of
+  the execution budget. θ*=[-0.057,-1.429,1.429,0.057], C*=0.311.
 - **P1-C (F3)** ✅ — `phase_who_wins_3panel.py` relabeled (PSR/NSR, χ=ρ/2, Hamiltonian-
   level under T4, ⟨σ⟩ kept, no compiled overlay).
 - **P2-A (Fig 1)** ✅ — `build_fig1.py` → `fig1_intro_trap.*`, single-column, T/T2*=0.5.
