@@ -195,11 +195,20 @@ execution-normalized; T/T2* in caption; T4 best-guess values flagged.
 - **P0-B (T4)** ⏸ HELD (Q1) — `sec6_T4_noise_table.py` → `T4.csv` + `.png` exist as
   best-guess/provisional, but per FOLLOWUP Q1 **T4.csv is not final** until Fred confirms
   the rates + δ=0.02 + provenance strings. All channels θ-independent (flagged).
-- **P1-A (F6, floor + amplification)** ✅ — `build_F6.py` → `F6_floor_amplification.*`.
-  TFIM θ·Z0Z1+ΣX, T/T2*=0.15. Panel L: PSR & NSR ride `N^{-1/2}` to `∇C_noisy` (exact
-  fine-FD target), crossing below FD's δ/ε floor (FD frozen at ε*=0.25). Panel R: FD
-  V-shape, PSR/NSR flat. The τ-pool bootstrap bug is fixed (use all pool samples). The
-  0.028 kick-gate bias is EXCLUDED here (F6 = dephasing + δ) and MOVED to C3 below.
+- **P1-A (F6, floor + amplification)** ✅ **F6_REVISION applied** — `build_F6.py` →
+  `F6_floor_amplification.*` + `_caption.txt`. TFIM θ·Z0Z1+ΣX, **both panels T/T2*=0.15**
+  (right panel is the 0.15 rebuild, A3). Error vs **∇C_noisy** (noisy gradient, stated on
+  both axes, A1). x = **total executions for one gradient estimate** with per-method
+  accounting in the note (A2). No "raw"/"oracle" (A4/B1). **Panel L:** PSR & NSR ride
+  `N^{-1/2}` — fitted **N^−0.49 / N^−0.48** (B4) — to ∇C_noisy; FD frozen at ε*=0.25
+  saturates at the **predicted δ/ε floor 0.025** (B5). **B2 disclosure:** faint
+  *PSR + gate channel* series floors at PSR's own **≈0.028** kick-gate bias (NSR immune) —
+  the gate channel is excluded from the headline but shown, forwarded to Sec 6.3 in the
+  caption only (D5). **Panel R:** FD V, both arms, over the predicted δ/ε floor curve (C1);
+  sign-flip markers, peak **25%** wrong-sign (C2); PSR/NSR flat = "no step size"; ε=δ and the
+  **usable-ε window [0.058,0.703]** marked (C3, same δ/definition as Fig 1, wider here because
+  θ0 is smooth: C''≈0.03). Real estimators, no surrogates (D2); 20 seeds median+IQR (D3);
+  Hamiltonian-level under T4 (D4); δ/rates provisional/Q1-pending (D1).
 - **C3 (gate-bias cell)** ✅ NEW — `build_gate_bias.py` → `gate_bias.*`. Raw-PSR bias vs
   ∇C_noisy at 0.5×/1×/2× the T4 2q rate: **−0.020 / −0.028 / −0.039**, scaling ~√ε_gate
   (coherent-dominated); NSR ≡ 0 (no inserted op). FINDING: standard and short (symmetric)
