@@ -62,27 +62,39 @@ so `D1 = 2·Σ_j|v_j|` and therefore
 χ = diam(A) / (2 Σ|v_j|) = ρ / 2   ⇒   ρ = 2χ   (exact for Pauli generators).
 ```
 
-**Confirmed** on three test tangents (6 qubits), ratio ρ/χ = 2.000 in every case:
+**Confirmed** on the test tangents (6 qubits). For **single-Pauli** generators `ρ/χ =
+2.000` exactly; the general `D1 = Σ_j|v_j|·diam(H_j)` uses each generator's own diameter
+(the telescoping row below has diam(H_j)=4, so `ρ≠2χ` there):
 
-| tangent | diam(A) | Σ\|v\| | D1=2Σ\|v\| | ρ=diam/Σ\|v\| | χ=diam/D1 | ρ/χ |
+| tangent | diam(A) | Σ\|v\| | D1 | ρ=diam/Σ\|v\| | χ=diam/D1 | ρ/χ |
 |---|--:|--:|--:|--:|--:|--:|
 | uniform ZZ chain | 10.00 | 5.0 | 10.0 | 2.000 | 1.000 | 2.000 |
 | sign-alternating ZZ chain | 10.00 | 5.0 | 10.0 | 2.000 | 1.000 | 2.000 |
 | Heisenberg chain (XX+YY+ZZ) | 14.97 | 15.0 | 30.0 | 0.998 | 0.499 | 2.000 |
 | Heisenberg single bond | 4.00 | 3.0 | 6.0 | 1.333 | 0.667 | 2.000 |
+| **telescoping Σ(Zⱼ−Zⱼ₊₁)** (commuting) | **4.00** | **5.0** | **20.0** | 0.800 | **0.200** | 4.000 |
 
-**Recommendation:** relabel F3 to the single symbol **χ = ρ/2 ∈ (0,1]** (colorbar,
-annotations, boundary). The kick/PSR-wins boundary `ρ > 2√var` becomes
-**`χ > √var`**; the aligned/foldable extreme `ρ=2` becomes `χ=1`.
+**Recommendation:** relabel F3 to the single symbol **χ = ρ/2 ∈ (0,1]** for single-Pauli
+tangents (colorbar, annotations, boundary). The kick/PSR-wins boundary `ρ > 2√var`
+becomes **`χ > √var`**; the aligned/foldable extreme `ρ=2` becomes `χ=1`.
 
-**Anomaly worth flagging (a finding, not a bug):** *sign-alternating ZZ has the SAME
-diameter as uniform ZZ (χ=1)* — sign flips on **commuting** terms do not reduce the
-spectral diameter (each ZZ can independently reach ±1). Subextensivity (χ<1) requires
-**non-commuting** cancellation (Heisenberg χ≈0.5). If the paper's intuition was
-"sign-alternating → compressible", that is false for commuting alphabets; state the
-condition as non-commutativity, not sign structure.
+**The compression condition (CORRECTED per SEC6_FOLLOWUP C1 — my earlier
+"non-commutativity" claim was wrong).** Compression (small χ) = **failure of joint
+extremizability** of the weighted sum `Σ_j v_j H_j` (its joint value cannot reach
+`Σ_j|v_j|·diam(H_j)`). Reachable by EITHER mechanism, independently:
+- **(i) shared-support cancellation within a COMMUTING family.** The telescoping tangent
+  `Σ_j (Z_j − Z_{j+1})` is fully commuting yet `χ = O(1/m)` (row 5: it telescopes to
+  `Z_0−Z_m`, diam(A)=4, but D1 = Σ_j diam(Z_j−Z_{j+1}) = 4m → χ = 1/m; measured 0.200 at
+  m=5). Commuting families **can** compress.
+- **(ii) anticommuting / non-commuting contraction** — Heisenberg bonds (χ≈0.5); `X_a`
+  with `Z_aZ_b`.
 
-*(computation: `sec6_rho_chi.py` → `figures/sec6_rho_chi.json`.)*
+Sign flips alone do **not** compress: sign-alternating ZZ on a chain is still jointly
+extremizable (each bond value is independently ±1) ⇒ χ=1, identical to uniform ZZ. **Do
+not** write "requires non-commutativity" in any caption; state it as joint-extremizability
+failure. (The paper's companion table already encodes this; do not edit it.)
+
+*(computation: `sec6_rho_chi.py` → `figures/sec6_rho_chi.json`; telescoping row added.)*
 
 ### A.2  The `⟨σ⟩=1.37` annotation
 
@@ -102,13 +114,25 @@ executions **per gradient** (split per component by each method's own accounting
 FD = 2 execs/component, PSR = its branch draws, NSR = singleton draws), 60 iterations,
 20 seeds; same optimizer/schedule/`B` for all methods; only FD's ε grid varies.
 
-Two things I will fix before running (not deviations, just under-specified):
-- **Learning rate**: pick ONE `η` from the *noiseless* gradient's descent on the
-  program (a value that converges cleanly noiselessly), then freeze it for all
-  methods and seeds. Document `η`.
-- **`θ*` and the objective**: `θ* = argmin` of the *emulated noisy* landscape `C_noisy`
-  (grid + polish), and the plotted quantity is `C_noisy(θ_t) − C_noisy(θ*)`. This is the
-  device objective (no "rescale"/oracle framing), per the guide.
+Two things I fixed before running (not deviations, just under-specified):
+- **Learning rate**: one `η`=0.25 frozen for all methods and seeds (converges cleanly on
+  the noiseless descent). All seeds share the start `θ0 + N(0,0.08)` jitter.
+- **`θ*` and the objective**: `θ* = argmin` of the *emulated noisy* cost, plotted quantity
+  `C_noisy(θ_t) − C_noisy(θ*)` — the device objective, no rescale/oracle framing.
+
+**Two modeling points forced by making the loop honest (per SEC6_FOLLOWUP C2):**
+- **Cost observable & shot model.** `O = (1/P)Σ_i Z_iZ_{i+1} ∈ [-1,1]` (mean bond parity).
+  All bonds are DIAGONAL, so one Z-basis shot draws a bitstring giving every bond at once:
+  the shot model samples basis states from `diag ρ` and averages — the correct finite-shot
+  model for a summed diagonal cost. (A naive single-`[-1,1]` binomial on `⟨ΣZZ⟩∈[-P,P]`
+  saturates the clip and yields identically-zero gradients — a bug I caught and fixed.)
+- **Interior minimum via an amplitude regularizer.** The raw `⟨O⟩` minimum sits at the
+  coupling box edge (couplings want to grow), where NSR's Nyquist shifts exceed the
+  amplitude limit. I descend `C = ⟨O⟩ + (λ/2)|θ|²`, `λ=0.3` — a physical amplitude prior
+  giving an interior `θ*` (‖θ*‖∞≈1.43). `∇reg = λθ` is an EXACT classical add-on to the
+  SAMPLED `∇⟨O⟩` (consumes no shots, identical for every method), so the estimator
+  semantics stay pristine. NSR's `n≥1` tail shifts still clip near `θ*` — that is NSR's
+  amplitude-headroom (certificate) cost, and it is on-narrative.
 
 ### A.4  Which θ are differentiated (and single-qubit insertions)
 
@@ -168,32 +192,61 @@ source of truth.
 Each delivered item has script + PNG/PDF + JSON + a data note; 20 seeds median+IQR;
 execution-normalized; T/T2* in caption; T4 best-guess values flagged.
 
-- **P0-B (T4)** ✅ — `sec6_T4_noise_table.py` → `T4.csv` + `sec6_T4_noise_table.png`.
-  All channels θ-independent (flagged). Values best-guess pending calibration.
+- **P0-B (T4)** ⏸ HELD (Q1) — `sec6_T4_noise_table.py` → `T4.csv` + `.png` exist as
+  best-guess/provisional, but per FOLLOWUP Q1 **T4.csv is not final** until Fred confirms
+  the rates + δ=0.02 + provenance strings. All channels θ-independent (flagged).
 - **P1-A (F6, floor + amplification)** ✅ — `build_F6.py` → `F6_floor_amplification.*`.
-  TFIM θ·Z0Z1+ΣX, T/T2*=0.15. Panel L: PSR (symmetric kick) & NSR (stochastic) ride
-  `N^{-1/2}` to `∇C_noisy` (exact fine-FD target, logged), crossing below FD's δ/ε floor
-  (FD frozen at ε*=0.25 tuned once at N=1e4). Panel R: FD V-shape, PSR/NSR flat.
-  **Two findings surfaced (in the data note):** (i) the PSR estimator was
-  bootstrap-resampling the τ-pool → spurious variance floor (fixed: use all pool
-  samples). (ii) **T4's kick gate error biases raw PSR by ~0.028** (the kick is a
-  digital op with its own error; NSR is immune) — a real *pro-NSR* result, but a
-  Sec-5.2 gate-infidelity point, so it is **excluded from F6** (F6 = dephasing + δ).
-- **P1-B (F-loop)** ⏳ running — `build_Floop.py`, TFIM P=4. Modeling documented in the
-  data note (FD = real noisy secant + δ + shots; PSR/NSR = unbiased ∇C_noisy + shot
-  noise σ=2T√(P/B), the L1-functional model — PSR≈NSR for single-Pauli ZZ). θ* via
-  Nelder-Mead. Added `nsteps` to `NoisyQuTiPRunner` (backward-compat) for stiff mesolves.
+  TFIM θ·Z0Z1+ΣX, T/T2*=0.15. Panel L: PSR & NSR ride `N^{-1/2}` to `∇C_noisy` (exact
+  fine-FD target), crossing below FD's δ/ε floor (FD frozen at ε*=0.25). Panel R: FD
+  V-shape, PSR/NSR flat. The τ-pool bootstrap bug is fixed (use all pool samples). The
+  0.028 kick-gate bias is EXCLUDED here (F6 = dephasing + δ) and MOVED to C3 below.
+- **C3 (gate-bias cell)** ✅ NEW — `build_gate_bias.py` → `gate_bias.*`. Raw-PSR bias vs
+  ∇C_noisy at 0.5×/1×/2× the T4 2q rate: **−0.020 / −0.028 / −0.039**, scaling ~√ε_gate
+  (coherent-dominated); NSR ≡ 0 (no inserted op). FINDING: standard and short (symmetric)
+  kicks give an IDENTICAL bias — the T4 gate error is a fixed post-kick Z-channel, not
+  echoed by kick symmetry; the digital price is intrinsic to inserting the op. This is
+  Sec-6.3's complementary-failure-modes entry (PSR pays the digital price; NSR pays the
+  certificate scale). Error bars = shot std at N=1e4.
+- **P1-B (F-loop, REAL estimators)** ✅ — `build_Floop_real.py` → `F_loop_real.*` (C2
+  compliant; surrogate `build_Floop.py` retired). TFIM P=4 (5q), cost `⟨(1/P)ΣZZ⟩+λ/2|θ|²`
+  (λ=0.3, interior θ*), diagonal-readout shot model. **PSR** = real kick branches through
+  the noisy runner INCLUDING the T4 kick gate error → carries its ~0.028 digital bias in
+  the loop; **NSR** = real stochastic Nyquist sampler (gate-immune; tail-shift clip near
+  θ* = its headroom cost); **FD** = real noisy secant + δ + shots (only the FD ε-grid uses
+  the permitted side-variant form). B=1000/grad, η=0.25, 60 iters, 20 seeds, θ0+N(0,0.08)
+  shared start. Measured cost ≈2.1 s/PSR-grad, 1.7 s/NSR-grad → full run ≈78 min (feasible,
+  no reduction needed — reported per C2).
 - **P1-C (F3)** ✅ — `phase_who_wins_3panel.py` relabeled (PSR/NSR, χ=ρ/2, Hamiltonian-
   level under T4, ⟨σ⟩ kept, no compiled overlay).
 - **P2-A (Fig 1)** ✅ — `build_fig1.py` → `fig1_intro_trap.*`, single-column, T/T2*=0.5.
-- **P2-B (systems 6.5)** — **blocked at Hamiltonian level**: compile-scaling and the
-  NSR-vs-PSR compile asymmetry require the compiler, and **NSR has no compiled lowering**
-  (A.5). PSR C7 exists; NSR compile numbers unavailable until lowering is built. Not run.
+- **P2-B / Track P (systems, R0)** — reframed by FOLLOWUP R0 as **Track P** (pulse
+  generation to EVIDENCE the Sec-5 compiler claims, not a physics result): lower a
+  Nyquist-shifted TFIM through the SAME AAIS→pulse→ledger path and report lines-of-glue +
+  compiler components modified. Days-scale systems task; **not run autonomously** (flagged
+  for scheduling). NSR still has no compiled lowering, which is exactly what Track P builds.
 
-### Net uncertainties to discuss
-1. **T4 provenance** — confirm the noise rates + their sources so T4.csv can be the
-   single source of truth (P0-B).
-2. **δ value** — is 0.02 the intended control-noise magnitude (P1-A/P0-B)?
-3. **Compiled anchors / NSR compile numbers** — out of scope at Hamiltonian level;
-   confirm we drop them from Sec 6 (A.5, P2-B) or schedule NSR lowering as separate work.
-4. **η, θ*** — I will fix these from the noiseless program before the F-loop run (A.3).
+---
+
+## SEC6_FOLLOWUP (2026-08-13) — resolutions
+
+- **R0 two-track** — Track S = all Sec-6 physics at the Hamiltonian level (as run); Track P
+  = pulse-gen artifact to evidence Sec-5 compiler claims (lines-of-glue for NSR lowering).
+  Claims kept separate; every caption says "Hamiltonian-level under T4." Track P scheduled,
+  not run.
+- **C1 compressibility (CORRECTED)** — my "requires non-commutativity" was wrong. Condition
+  = failure of joint extremizability; commuting families CAN compress (telescoping
+  `Σ(Z_j−Z_{j+1})` → χ=0.200=1/m, added as row 5 of `sec6_rho_chi`). A.1 rewritten; no
+  caption will say "non-commutativity."
+- **C2 F-loop surrogate (FIXED)** — replaced by `build_Floop_real.py` with the REAL sampled
+  estimators (PSR incl. gate error, NSR stochastic sampler, FD real secant). Cost measured
+  and feasible (~78 min); no reduction needed. Surrogate retired.
+- **C3 gate-bias placement (DONE)** — measured at 0.5×/1×/2× rate (`build_gate_bias.py`),
+  moved to the Sec-6.3 complementary-failure-modes prose + data note.
+- **R1 accepted** — χ relabel + boundary `χ>√var` + extremes `χ=1`; ⟨σ⟩=1.37 stays in F3;
+  A.4 realization-row honesty note; F3 compiled overlay dropped.
+
+### Q-items — HELD for Fred (not acted on)
+- **Q1** T4 rates + δ=0.02 + provenance → **T4.csv stays provisional** until confirmed.
+- **Q2** F3 device-alphabet foldable panel (X_a + Z_aZ_b anticommute → χ→1/√2 inside the
+  device alphabet): add as 4th panel / replace (c) / leave — pending.
+- **Q3** F-loop `T/T2*=0.5` stressor variant (appendix) — decide after the 0.15 run lands.

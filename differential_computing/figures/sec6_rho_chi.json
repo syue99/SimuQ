@@ -1,6 +1,6 @@
 {
   "n_qubits": 6,
-  "note": "rho=diam/Sum|v|, chi=diam/(2 Sum|v|)=rho/2 for Pauli",
+  "note": "chi=diam(A)/D1, D1=Sum|v_j|diam(H_j); rho=diam/Sum|v|; rho=2chi only for single-Pauli generators. Compression=failure of joint extremizability.",
   "tangents": {
     "uniform_ZZ": {
       "diam": 10.0,
@@ -33,6 +33,14 @@
       "rho": 1.3333333333333333,
       "chi": 0.6666666666666666,
       "rho_over_chi": 2.0
+    },
+    "telescoping_Z": {
+      "diam": 4.0,
+      "sum_abs_v": 5.0,
+      "D1": 20.0,
+      "rho": 0.8,
+      "chi": 0.2,
+      "rho_over_chi": 4.0
     }
   }
 }

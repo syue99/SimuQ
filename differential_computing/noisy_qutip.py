@@ -135,6 +135,27 @@ class NoisyQuTiPRunner:
                 rho = self.noise.apply_gate_error(rho, self._kick_support(H))
         return rho
 
+    def make_probs_fn(self, psi0):
+        """Return probsfn(H_list) -> np.ndarray of computational-basis probabilities
+        p_k = <k|ρ|k>/Tr(ρ) (length 2^n).  This is the Z-basis readout distribution:
+        one hardware shot draws a bitstring ~ p, from which every DIAGONAL observable
+        (all Z_iZ_j parities simultaneously) is read off.  Correct finite-shot model for
+        summed diagonal costs like Σ_i Z_iZ_{i+1}, which a single-[-1,1] binomial cannot
+        represent (the sum ranges over [-P, P]).  Post-selection: divide by Tr(ρ).
+        """
+        import numpy as _np
+
+        def probsfn(H_list):
+            rho = self.run_sequence(H_list, psi0)
+            d = _np.real(rho.full().diagonal())
+            tr = float(rho.tr().real)
+            if abs(tr) > 1e-15:
+                d = d / tr
+            d = _np.clip(d, 0.0, None)
+            s = d.sum()
+            return d / s if s > 0 else d
+        return probsfn
+
     def make_expectation_fn(self, psi0, observable):
         """Return expfn(H_list) -> float = post-selected ⟨O⟩ = Tr(O·ρ)/Tr(ρ).
 
