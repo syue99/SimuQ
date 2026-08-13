@@ -1,6 +1,17 @@
-Figure 1. The finite-difference trap. Large steps ε (orange) mis-sign the gradient — the secant straddles a feature. But ε cannot be shrunk freely: it is bounded below by the control-setpoint resolution δ, and near that floor δ (amplified by 1/ε) scatters the estimate into a wide noise cone (purple, Sec. 6.2). Either sound strategy (PSR/NSR, blue) recovers the noisy slope with no step-size to tune.
+Figure 1. The finite-difference trap. Large ε (orange) mis-signs the gradient — the secant straddles a feature. Yet ε cannot shrink freely: it is floored by the control-setpoint resolution δ, where δ/ε amplification scatters the estimate (purple cone; Sec. 6.2). Either sound strategy (PSR/NSR, blue) recovers the noisy slope with no step size to tune.
 
-DATA NOTE (Fig 1): H(θ)=θ·Z0+X0, C_noisy=⟨Z0⟩ under T2* dephasing, Hamiltonian-level under T4. R8 grid sweep over T×θ*×ε_min (T/T2*=0.5 fixed) → 41 configs pass all four criteria; chosen: T=10 (T2=20), θ*=1.290, ε=[0.22, 0.29, 0.36]. Criteria: (1) secant slopes +0.82/+1.29/+0.84 — all wrong-signed vs ∇C_noisy=-3.39, min|slope|=0.82≥0.15 ✓; (2) anchor 0.077 from nearest extremum = 21% of period 0.373 ≥20% ✓; (3) |slope| 3.39 = 56% of max|slope| 6.06 ≥50% ✓; (4) no collisions ✓. Drawn tangent slope = analytic ∇C_noisy = -3.390 (h=1e-3), EQUAL by construction; np.gradient check -3.41 (grid-resolution consistent). ε-FLOOR (δ problem): ε is bounded below by the control resolution δ=0.02 (shown as the δ-wide bracket). At ε=0.03≈δ (60 realizations, N=4000 shots) the estimate scatters — slope mean -3.06, std 1.33, range [-6.57,+0.17], 3% wrong-signed — the noise cone. So one cannot escape the large-ε truncation by shrinking ε indefinitely: the usable window is [~δ, ~λ/2] and it collapses as features sharpen.
+DATA NOTE (Fig 1): H(θ)=θ·Z0+X0, C_noisy=⟨Z0⟩ under T2* dephasing, Hamiltonian-level under T4. R8 grid sweep over T×θ*×ε_min (T/T2*=0.5 fixed) → 41 configs pass; chosen NON-MARGINAL (R9): T=12 (T2=24), θ*=1.290, ε=[0.18, 0.25, 0.32]. Criteria: (1) secant slopes +0.77/+1.44/+0.65 — all wrong-signed vs ∇C_noisy=-4.35, min|slope|=0.65≥0.15 ✓; (2) anchor 0.077 from nearest extremum = 25% of period 0.313 ≥20% ✓ (margin); (3) |slope| 4.35 = 61% of max|slope| 7.13 ≥50% ✓; (4) no collisions ✓. Drawn tangent slope = analytic ∇C_noisy = -4.347 (h=1e-3), EQUAL by construction; np.gradient check -4.35. SMALL-ε (R10): ε floored by δ=0.02 (Q1-pending — cone geometry depends on δ; re-render if δ changes). Cone drawn at ε=0.03≈δ (1.5×δ; labelled ε≈δ): mean -4.01 vs true -4.35, std 1.66, 3% wrong-signed. ε-window sweep [δ,λ/2=0.16] @N=4000: best ε=0.056 (RMSE/|g|=0.28); usable window [0.026,0.072] (width 0.047, ~34% of [δ,λ/2]). HONESTY: FD is NOT trapped from below at this anchor — a usable ε exists; Fig 1 asserts only that the shift rules need no ε (safe), and defers FD's quantitative defeat to Sec 6.2/F6-R.
+
+ε-WINDOW SWEEP (bias/std/RMSE_rel/signerr vs ε):
+  ε=0.020  bias=+0.44  std=2.77  RMSE/|g|=0.64  signerr=11%
+  ε=0.026  bias=+0.34  std=1.94  RMSE/|g|=0.45  signerr=4%
+  ε=0.033  bias=+0.66  std=1.42  RMSE/|g|=0.36  signerr=1%
+  ε=0.043  bias=+0.87  std=0.94  RMSE/|g|=0.30  signerr=0%
+  ε=0.056  bias=+1.09  std=0.52  RMSE/|g|=0.28  signerr=0%
+  ε=0.072  bias=+1.57  std=0.28  RMSE/|g|=0.37  signerr=0%
+  ε=0.094  bias=+2.33  std=0.30  RMSE/|g|=0.54  signerr=0%
+  ε=0.121  bias=+3.33  std=0.43  RMSE/|g|=0.77  signerr=2%
+  ε=0.157  bias=+4.48  std=0.41  RMSE/|g|=1.03  signerr=61%
 
 SWEEP TABLE (top passing configs):
   T=10 θ*=1.29 ε=[0.22, 0.29, 0.36] secants=[0.82, 1.29, 0.84] nearfrac=0.21 gnorm=0.56

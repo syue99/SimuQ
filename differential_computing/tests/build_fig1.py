@@ -104,12 +104,14 @@ def sweep():
                            near_frac=near / period, gnorm=gnorm,
                            c1=bool(c1), c2=bool(c2), c3=bool(c3))
                 if c1 and c2 and c3:
-                    score = min(min(abs(s) for s in ss), (near / period) / EXTREMUM_FRAC,
-                                gnorm / STEEP_FRAC)
                     rows.append(rec)
-                    if best is None or score > best[0]:
-                        best = (score, dict(rec, T2=T / REGIME, maxslope=maxslope,
-                                            period=period, near=near))
+                    # R9: prefer a NON-MARGINAL config — maximize the criterion-2 margin
+                    # (nearfrac, i.e. mid-flank), then steepness, gated on solid secants.
+                    if min(abs(s) for s in ss) >= 0.55:
+                        score = (near / period) + 0.25 * gnorm
+                        if best is None or score > best[0]:
+                            best = (score, dict(rec, T2=T / REGIME, maxslope=maxslope,
+                                                period=period, near=near))
                 else:
                     npass = int(c1) + int(c2) + int(c3)
                     misses.append((npass, rec))
@@ -153,6 +155,33 @@ def compute():
     fan_stats = dict(mean=float(np.mean(fan_slopes)), std=float(np.std(fan_slopes)),
                      lo=float(np.min(fan_slopes)), hi=float(np.max(fan_slopes)),
                      frac_wrongsign=float(np.mean(np.sign(fan_slopes) != np.sign(g))))
+
+    # R10: bound the small-ε claim — sweep ε over [δ, λ/2] at fixed N; report bias, std,
+    # sign-error, RMSE/|g|; find best ε and the usable window (RMSE/|g| < WIN_THRESH).
+    WIN_THRESH = 0.50
+    lam = cfg["period"]
+    eps_grid = np.geomspace(R_CTRL, 0.5 * lam, 9)
+    ewin = []
+    for eps in eps_grid:
+        est = []
+        for _ in range(300):
+            dp, dm = rng.normal(0, R_CTRL), rng.normal(0, R_CTRL)
+            vp, vm = float(fn(a + eps + dp)), float(fn(a - eps + dm))
+            fp = 2 * rng.binomial(N_SHOTS_FAN, 0.5 * (1 + np.clip(vp, -1, 1))) / N_SHOTS_FAN - 1
+            fm = 2 * rng.binomial(N_SHOTS_FAN, 0.5 * (1 + np.clip(vm, -1, 1))) / N_SHOTS_FAN - 1
+            est.append((fp - fm) / (2 * eps))
+        est = np.array(est)
+        ewin.append(dict(eps=float(eps), bias=float(np.mean(est) - g), std=float(np.std(est)),
+                         rmse_rel=float(np.sqrt(np.mean((est - g) ** 2)) / abs(g)),
+                         signerr=float(np.mean(np.sign(est) != np.sign(g)))))
+    good = [w for w in ewin if w["rmse_rel"] < WIN_THRESH and w["signerr"] < 0.05]
+    best_e = min(ewin, key=lambda w: w["rmse_rel"])
+    ewin_stats = dict(win_thresh=WIN_THRESH, lam_half=float(0.5 * lam), delta=R_CTRL,
+                      best_eps=best_e["eps"], best_rmse_rel=best_e["rmse_rel"],
+                      window_lo=float(min(w["eps"] for w in good)) if good else None,
+                      window_hi=float(max(w["eps"] for w in good)) if good else None,
+                      window_width=float(max(w["eps"] for w in good) - min(w["eps"] for w in good))
+                      if good else 0.0)
     table = [dict(T=r["T"], anchor=round(r["anchor"], 3), eps=r["eps"],
                   secants=[round(s, 2) for s in r["secants"]],
                   near_frac=round(r["near_frac"], 2), gnorm=round(r["gnorm"], 2))
@@ -161,7 +190,8 @@ def compute():
                 z0=float(fn(a)), maxslope=cfg["maxslope"], period=cfg["period"],
                 near=cfg["near"], window=list(win), gx=list(map(float, gx)),
                 y=list(map(float, y)), secants=secants, n_pass=len(rows), sweep_table=table,
-                small_eps=SMALL_EPS, delta=R_CTRL, fan=fan, fan_stats=fan_stats)
+                small_eps=SMALL_EPS, delta=R_CTRL, fan=fan, fan_stats=fan_stats,
+                eps_window=ewin, eps_window_stats=ewin_stats)
 
 
 def main():
@@ -176,27 +206,30 @@ def main():
     fig, ax = plt.subplots(figsize=(COL, 2.7))
     ax.plot(gx, y, color=C_INK, lw=1.6, label=r"noisy landscape $C_{\rm noisy}(\theta)$")
 
-    # FD secants + per-secant ε labels (R7) — no slope literals
-    ramp = plt.cm.Oranges(np.linspace(0.55, 0.9, len(d["secants"])))
+    # FD secants + per-secant ε labels (R7) — ONE colour for all three (R11; ε labels
+    # disambiguate); no slope literals
     lab_off = [(4, -8, "top"), (3, 5, "bottom"), (7, -2, "center")]   # stagger → no overlap
-    for k, (sec, c) in enumerate(zip(d["secants"], ramp)):
+    for k, sec in enumerate(d["secants"]):
         e = sec["eps"]
-        ax.plot([a - e, a + e], [sec["fm"], sec["fp"]], "o-", color=c, lw=1.2, ms=2.6,
+        ax.plot([a - e, a + e], [sec["fm"], sec["fp"]], "o-", color=C_FD, lw=1.2, ms=2.6,
                 label="FD secants (wrong sign)" if k == 0 else None)
         dx, dy, va = lab_off[k % len(lab_off)]
         ax.annotate(rf"$\varepsilon={e:.2f}$", xy=(a + e, sec["fp"]), xytext=(dx, dy),
-                    textcoords="offset points", fontsize=5.6, color=c, va=va)
+                    textcoords="offset points", fontsize=5.6, color=C_FD, va=va)
 
     # small-ε δ-FLOOR (answers "what if we shrink ε"): ε cannot be set below the control
     # resolution δ, and near that floor the setpoint error δ (amplified by 1/ε) scatters the
     # secant. Drawn as a NOISE CONE: the envelope of slopes the FD estimate takes at ε≈δ.
     C_FAN = "#7b3fa0"; fs = d["fan_stats"]
-    cw = 0.13                                   # draw the SLOPE envelope wide enough to see
+    ylo, yhi = float(y.min()) - 0.12, float(y.max()) + 0.14      # frame; cone clipped to it
+    cw = 0.11                                   # draw the SLOPE envelope wide enough to see
     xc = np.array([a - cw, a + cw])
-    s_hi = fs["mean"] + 2 * fs["std"]; s_lo = fs["mean"] - 2 * fs["std"]   # representative ±2σ
-    ax.fill_between(xc, z0 + s_lo * (xc - a), z0 + s_hi * (xc - a), color=C_FAN,
-                    alpha=0.28, lw=0, zorder=1, label=r"FD at $\varepsilon\!\approx\!\delta$: noise cone")
-    ax.plot(xc, z0 + fs["mean"] * (xc - a), "--", color=C_FAN, lw=0.9, alpha=0.8, zorder=1)
+    s_hi = fs["mean"] + 1.8 * fs["std"]; s_lo = fs["mean"] - 1.8 * fs["std"]   # representative
+    ax.fill_between(xc, np.clip(z0 + s_lo * (xc - a), ylo, yhi),
+                    np.clip(z0 + s_hi * (xc - a), ylo, yhi), color=C_FAN, alpha=0.28, lw=0,
+                    zorder=1, clip_on=True, label=r"FD at $\varepsilon\!\approx\!\delta$: noise cone")
+    ax.plot(xc, np.clip(z0 + fs["mean"] * (xc - a), ylo, yhi), "--", color=C_FAN, lw=0.9,
+            alpha=0.8, zorder=1, clip_on=True)
     # explicit ε-floor indicator (upper-left, clear zone): a δ-wide bracket = the smallest
     # resolvable step; you cannot shrink ε below it.
     yb = float(y.max()) + 0.05; xb = win[0] + 0.12
@@ -219,45 +252,56 @@ def main():
 
     ax.set_xlabel(r"parameter $\theta$"); ax.set_ylabel(r"$C_{\rm noisy}(\theta)$")
     ax.set_xlim(*win)
-    ax.set_ylim(float(y.min()) - 0.12, float(y.max()) + 0.14)   # clip cone to landscape range
-    ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.28), fontsize=6.6,
-              handlelength=1.8, ncol=1)
+    ax.set_ylim(ylo, yhi)                                        # clip cone to landscape range
+    # R11: two-column legend below (compact — no longer sandwiches the x-label)
+    ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.26), fontsize=6.3,
+              handlelength=1.6, ncol=2, columnspacing=1.2)
     fig.tight_layout()
     for ext in ("pdf", "png"):
         fig.savefig(os.path.join(FIGDIR, f"fig1_intro_trap.{ext}"), bbox_inches="tight", pad_inches=0.02)
     plt.close(fig)
 
     # ---- deliverables: mini caption + data note (persisted, per R7) ----
-    fs = d["fan_stats"]
+    fs = d["fan_stats"]; ws = d["eps_window_stats"]
+    # R12 caption (~45 words) — precise: the claim is about the shift rules ("no step size to
+    # tune"), NOT that ε has no good value (that quantitative defeat lives in Sec 6.2/F6-R).
     mini_caption = (
-        "Figure 1. The finite-difference trap. Large steps ε (orange) mis-sign the gradient — "
-        "the secant straddles a feature. But ε cannot be shrunk freely: it is bounded below by "
-        "the control-setpoint resolution δ, and near that floor δ (amplified by 1/ε) scatters "
-        "the estimate into a wide noise cone (purple, Sec. 6.2). Either sound strategy "
-        "(PSR/NSR, blue) recovers the noisy slope with no step-size to tune.")
+        "Figure 1. The finite-difference trap. Large ε (orange) mis-signs the gradient — the "
+        "secant straddles a feature. Yet ε cannot shrink freely: it is floored by the "
+        "control-setpoint resolution δ, where δ/ε amplification scatters the estimate (purple "
+        "cone; Sec. 6.2). Either sound strategy (PSR/NSR, blue) recovers the noisy slope with "
+        "no step size to tune.")
     signs = "/".join(f"{s['slope']:+.2f}" for s in d["secants"])
     eps_used = [s["eps"] for s in d["secants"]]
+    win_txt = (f"usable window [{ws['window_lo']:.3f},{ws['window_hi']:.3f}] "
+               f"(width {ws['window_width']:.3f}, ~{ws['window_width']/(ws['lam_half']-ws['delta'])*100:.0f}% "
+               f"of [δ,λ/2])" if ws["window_lo"] else "usable window EMPTY")
     data_note = (
         f"DATA NOTE (Fig 1): H(θ)=θ·Z0+X0, C_noisy=⟨Z0⟩ under T2* dephasing, Hamiltonian-level "
         f"under T4. R8 grid sweep over T×θ*×ε_min (T/T2*={d['regime']:.1f} fixed) → "
-        f"{d['n_pass']} configs pass all four criteria; chosen: T={d['T']:.0f} (T2={d['T2']:.0f}), "
+        f"{d['n_pass']} configs pass; chosen NON-MARGINAL (R9): T={d['T']:.0f} (T2={d['T2']:.0f}), "
         f"θ*={a:.3f}, ε={eps_used}. Criteria: (1) secant slopes {signs} — all wrong-signed "
         f"vs ∇C_noisy={g:+.2f}, min|slope|={min(abs(s['slope']) for s in d['secants']):.2f}≥0.15 ✓; "
         f"(2) anchor {d['near']:.3f} from nearest extremum = {d['near']/d['period']*100:.0f}% of "
-        f"period {d['period']:.3f} ≥20% ✓; (3) |slope| {abs(g):.2f} = "
+        f"period {d['period']:.3f} ≥20% ✓ (margin); (3) |slope| {abs(g):.2f} = "
         f"{abs(g)/d['maxslope']*100:.0f}% of max|slope| {d['maxslope']:.2f} ≥50% ✓; (4) no "
         f"collisions ✓. Drawn tangent slope = analytic ∇C_noisy = {g:+.3f} (h=1e-3), EQUAL by "
-        f"construction; np.gradient check {d['g_plotted']:+.2f} (grid-resolution consistent). "
-        f"ε-FLOOR (δ problem): ε is bounded below by the control resolution δ={d['delta']} "
-        f"(shown as the δ-wide bracket). At ε={d['small_eps']}≈δ ({N_FAN} realizations, "
-        f"N={N_SHOTS_FAN} shots) the estimate scatters — slope mean {fs['mean']:+.2f}, std "
-        f"{fs['std']:.2f}, range [{fs['lo']:+.2f},{fs['hi']:+.2f}], {fs['frac_wrongsign']*100:.0f}% "
-        f"wrong-signed — the noise cone. So one cannot escape the large-ε truncation by shrinking "
-        f"ε indefinitely: the usable window is [~δ, ~λ/2] and it collapses as features sharpen.")
+        f"construction; np.gradient check {d['g_plotted']:+.2f}. "
+        f"SMALL-ε (R10): ε floored by δ={d['delta']} (Q1-pending — cone geometry depends on δ; "
+        f"re-render if δ changes). Cone drawn at ε={d['small_eps']}≈δ (1.5×δ; labelled ε≈δ): "
+        f"mean {fs['mean']:+.2f} vs true {g:+.2f}, std {fs['std']:.2f}, {fs['frac_wrongsign']*100:.0f}% "
+        f"wrong-signed. ε-window sweep [δ,λ/2={ws['lam_half']:.2f}] @N={N_SHOTS_FAN}: best "
+        f"ε={ws['best_eps']:.3f} (RMSE/|g|={ws['best_rmse_rel']:.2f}); {win_txt}. HONESTY: FD is "
+        f"NOT trapped from below at this anchor — a usable ε exists; Fig 1 asserts only that the "
+        f"shift rules need no ε (safe), and defers FD's quantitative defeat to Sec 6.2/F6-R.")
     d["mini_caption"] = mini_caption; d["data_note"] = data_note
     json.dump(d, open(cache, "w"), indent=2, default=float)
     with open(os.path.join(FIGDIR, "fig1_intro_trap_caption.txt"), "w") as f:
-        f.write(mini_caption + "\n\n" + data_note + "\n\nSWEEP TABLE (top passing configs):\n")
+        f.write(mini_caption + "\n\n" + data_note + "\n\nε-WINDOW SWEEP (bias/std/RMSE_rel/signerr vs ε):\n")
+        for w in d["eps_window"]:
+            f.write(f"  ε={w['eps']:.3f}  bias={w['bias']:+.2f}  std={w['std']:.2f}  "
+                    f"RMSE/|g|={w['rmse_rel']:.2f}  signerr={w['signerr']*100:.0f}%\n")
+        f.write("\nSWEEP TABLE (top passing configs):\n")
         for r in d["sweep_table"]:
             f.write(f"  T={r['T']:.0f} θ*={r['anchor']} ε={r['eps']} secants={r['secants']} "
                     f"nearfrac={r['near_frac']} gnorm={r['gnorm']}\n")

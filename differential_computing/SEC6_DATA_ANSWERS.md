@@ -232,20 +232,21 @@ execution-normalized; T/T2* in caption; T4 best-guess values flagged.
   T/T2*=0.5 fixed): the flip condition is ε>λ/2 (half the ripple period), independent of
   anchor, while secant magnitude peaks at the steep mid-flank — so a mid-flank anchor with
   ε_min bumped above λ/2 flips all three *with margin*. Sweep found 41 passing configs;
-  chosen **T=10, θ*=1.290, ε=0.22/0.29/0.36**: (1) secant slopes +0.82/+1.29/+0.84 all
-  wrong-signed, min 0.82≥0.15 (near-flat caveat gone); (2) anchor 21% of period off the
-  extremum; (3) |slope| 3.39 = 56% of max≥50%; (4) no collisions. Drawn tangent slope =
-  analytic ∇C_noisy = −3.39 (equal by construction). **REV 2 R7:** caption migrated in-figure
-  — muted info line (program·instrument·regime), per-secant ε labels, **PSR/NSR vocabulary
-  only** (no "kick-PSR/Nyquist" in any text), **no section refs inside the image**; ~2-line
-  mini caption (with the Sec-6.2 δ/ε forwarding clause) delivered in the sidecar + JSON.
-  **Small-ε δ-floor (answers "what if we shrink ε"):** at the mid-flank anchor FD is *not*
-  trapped from below — RMSE(ε) has a usable window (min ~27% at ε≈0.05). The honest statement
-  (not "every ε fails") is shown/said: (i) a **noise cone** at ε≈δ=0.03 (mean −3.06, σ 1.33,
-  reaching near-flat/wrong-sign) = the δ/ε scatter near the floor; (ii) a **"step floor ε≳δ"
-  δ-wide bracket** = ε cannot be set below the control resolution. Message: large ε mis-signs,
-  small ε is δ-floor-limited; the usable window collapses as features sharpen (quantified in
-  F6/Fig 6). Fan noise-model bug fixed (divide by NOMINAL 2ε, not the drifted separation).
+  chosen **NON-MARGINAL (REV3 R9) T=12, θ*=1.290, ε=0.18/0.25/0.32**: secants +0.77/+1.44/+0.65
+  all wrong-signed; anchor **25%** of period off the extremum (margin, not on-the-line);
+  |slope| 4.35 = **61%** of max; no collisions. Tangent slope = analytic ∇C_noisy = −4.35.
+  **REV 2 R7:** caption migrated in-figure — muted info line (program·instrument·regime),
+  per-secant ε labels, **PSR/NSR vocabulary only**, **no section refs inside the image**;
+  ~2-line mini caption (REV3 R12 text) delivered in the sidecar + JSON.
+  **Small-ε δ-floor (answers "what if we shrink ε", REV3 R10):** shown + said, honestly.
+  Shown — (i) a **noise cone** at ε=0.03≈δ (mean −4.01 vs true −4.35, σ 1.66, reaching
+  near-flat/wrong-sign) = the δ/ε scatter near the floor; (ii) a **"step floor ε≳δ"** δ-wide
+  bracket = ε cannot be set below the control resolution δ. Bounded (ε-window sweep [δ,λ/2]):
+  best ε=0.056 (RMSE/|g|=0.28), usable window [0.026,0.072] ≈34% of [δ,λ/2]. **HONESTY:** FD is
+  *not* trapped from below at this anchor — a usable ε exists; Fig 1 asserts only that the shift
+  rules need **no ε** (precise, safe) and defers FD's quantitative defeat to Sec 6.2/F6-R. δ=0.02
+  is Q1-pending — cone geometry depends on it (re-render if δ changes). Fan noise-model bug fixed
+  (divide by NOMINAL 2ε, not the drifted separation).
 - **P2-B / Track P (systems, R0)** — reframed by FOLLOWUP R0 as **Track P** (pulse
   generation to EVIDENCE the Sec-5 compiler claims, not a physics result): lower a
   Nyquist-shifted TFIM through the SAME AAIS→pulse→ledger path and report lines-of-glue +
