@@ -141,11 +141,11 @@ def draw(ax, Zg, Ps, ks, title):
     ax.contour(Pg, Kg, Zs, levels=[0.0], colors="k", linewidths=1.8)
     # region labels
     if (Zg < 0).mean() > 0.05:
-        ax.text(0.28, 0.86, "Nyquist\nwins", transform=ax.transAxes, color="#a0451a",
-                fontsize=10, weight="bold", ha="center")
+        ax.text(0.28, 0.86, "NSR\nwins", transform=ax.transAxes, color="#a0451a",
+                fontsize=11, weight="bold", ha="center")
     if (Zg > 0).mean() > 0.05:
-        ax.text(0.80, 0.18, "kick\nwins", transform=ax.transAxes, color="#10507a",
-                fontsize=10, weight="bold", ha="center")
+        ax.text(0.80, 0.18, "PSR\nwins", transform=ax.transAxes, color="#10507a",
+                fontsize=11, weight="bold", ha="center")
     ax.set_xlabel("# parameters  P"); ax.set_ylabel("# terms per parameter  k")
     ax.set_title(title, fontsize=9)
 
@@ -161,9 +161,9 @@ def main():
 
     Ps = list(range(1, 21)); ks = list(range(1, 15)); seeds = 6
     panels = [
-        ("random", "highent", "(a) general\n(random two-local, $\\rho\\!\\sim\\!$mixed)"),
-        ("zz", "highent", "(b) favors kick\n(ZZ-only tangents → aligned, $\\rho\\!\\to\\!2$)"),
-        ("heisenberg", "highent", "(c) favors Nyquist\n(Heisenberg bonds → foldable, $\\rho\\!\\ll\\!2$)"),
+        ("random", "highent", "(a) general\n(random two-local, $\\chi\\!\\sim\\!$mixed)"),
+        ("zz", "highent", "(b) favors PSR\n(ZZ-only tangents → aligned, $\\chi\\!\\to\\!1$)"),
+        ("heisenberg", "highent", "(c) favors NSR\n(Heisenberg bonds → foldable, $\\chi\\!\\ll\\!1$)"),
     ]
     fig, axs = plt.subplots(1, 3, figsize=(13.5, 4.4))
     for ax, (kind, st, title) in zip(axs, panels):
@@ -171,8 +171,9 @@ def main():
                          np.random.default_rng(1))
         draw(ax, Zg, Ps, ks, title + f"   ⟨σ⟩={sm:.2f}")
         print(f"{kind}/{st}: mean σ={sm:.3f}, Nyquist-win fraction={ (Zg<0).mean():.2f}")
-    fig.suptitle("Who needs fewer shots for the full gradient — kick reuse vs Nyquist folding "
-                 "(7q all-to-all two-local; Hamiltonian-level, no compilation)", fontsize=10)
+    fig.suptitle("F3 — who needs fewer shots for the full gradient: PSR reuse vs NSR folding "
+                 "(7q all-to-all two-local; Hamiltonian-level under T4 noise model; χ=diam(A)/2Σ|v|)",
+                 fontsize=9.5)
     fig.tight_layout(rect=[0, 0, 1, 0.95])
     out = os.path.join(FIGDIR, "phase_who_wins_3panel.png")
     fig.savefig(out, dpi=150, bbox_inches="tight"); plt.close(fig)

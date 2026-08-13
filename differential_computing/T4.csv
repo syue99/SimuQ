@@ -1,0 +1,7 @@
+channel,operator,rate (default),source,segments applied,θ-independent,note
+dressed T2* dephasing,Z_i  (sqrt(γφ/2)),"γφ = 1/T2*,  T2* = 5.0 μs","dressed-state T2*/scattering (literature, Evered/Bluvstein-class)",interaction / dressed-evolution segments,yes,"regime set by T/T2* (0.15 headline, 0.5 appendix); T=T/T2*·T2*"
+T1 relaxation,σ⁻_i  (sqrt(1/T1)),"1/T1,  T1 = ∞ (OFF)",amplitude damping (long-clock),all segments (1q / halt / transport),yes,off by default in Sec 6 figs; long-clock price of Sec 5.2 is dephasing-dominated
+"kick gate error, 1q (Z-type)",coh. exp(-iθZ) + incoh. Z-dephasing,ε_1q = 1e-4  (best-guess),Evered et al. 2026 (arXiv:2604.25987); 1q ≈ 0,single-qubit kick-insertion segments,yes,"Z/phase-dominated (Doppler, |r'>), X≈0; magnitude best-guess"
+"kick gate error, 2q (Z-type)",coh. exp(-iθZ) + incoh. Z-dephasing,ε_2q = 1e-3  (best-guess),Evered et al. 2026 (arXiv:2604.25987),two-qubit (ZZ) kick-insertion segments,yes,coherent fraction = 0.5 of ε (Doppler/laser-phase); rest incoherent Z
+post-selected leakage,"Γ|1><1|_i (no-jump, renorm.)",Γ = 0 (OFF),dressed |1> loss to dark ground sublevel,dressed segments,yes,off in Sec 6 gradient figs; conditional (post-selected) evolution when on
+control setpoint error δ,"additive θ-offset ~ N(0, r)",r = 0.02  (BEST-GUESS),control resolution — NOT a device calibration; default from landscape_device.py,"programmed θ setpoint: FD's θ±ε, PSR/NSR base θ",yes,floors FD's ε and enters as δ/ε; ε-free PSR/NSR see only a 2nd-order shift
