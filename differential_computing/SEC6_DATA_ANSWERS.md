@@ -200,14 +200,19 @@ execution-normalized; T/T2* in caption; T4 best-guess values flagged.
   (right panel is the 0.15 rebuild, A3). Error vs **∇C_noisy** (noisy gradient, stated on
   both axes, A1). x = **total executions for one gradient estimate** with per-method
   accounting in the note (A2). No "raw"/"oracle" (A4/B1). **Panel L:** PSR & NSR ride
-  `N^{-1/2}` — fitted **N^−0.49 / N^−0.48** (B4) — to ∇C_noisy; FD frozen at ε*=0.25
-  saturates at the **predicted δ/ε floor 0.025** (B5). **B2 disclosure:** faint
-  *PSR + gate channel* series floors at PSR's own **≈0.028** kick-gate bias (NSR immune) —
+  `N^{-1/2}` — fitted **N^−0.46 / N^−0.50** (B4) — to ∇C_noisy; FD frozen at ε*=0.17
+  saturates at the **predicted δ/ε floor 0.16 (≈42% of ∇C_noisy)** (B5). **Landscape choice:**
+  T bumped to **5** (T2=T/0.15) to SHARPEN the θ-landscape (C''≈10), and θ0=1.94 chosen to
+  MAXIMIZE the FD floor at a steep point (|∇C|≥0.35) — the earlier smooth θ0 floored at only
+  7%. Metric is **RMSE** (40 reps, bootstrap band); floor = shot-free FD RMSE (Monte-Carlo δ,
+  matches the saturation). N extended to **10⁶** so shot noise drops below the gate bias.
+  **Gate = 99.9% 2q (1e-3) / 99.99% 1q (1e-4)**, coherent-frac 0.5. **B2 disclosure:** faint
+  *PSR + gate channel* series floors at PSR's own **≈0.014** kick-gate bias (NSR immune) —
   the gate channel is excluded from the headline but shown, forwarded to Sec 6.3 in the
   caption only (D5). **Panel R:** FD V, both arms, over the predicted δ/ε floor curve (C1);
-  sign-flip markers, peak **25%** wrong-sign (C2); PSR/NSR flat = "no step size"; ε=δ and the
-  **usable-ε window [0.058,0.703]** marked (C3, same δ/definition as Fig 1, wider here because
-  θ0 is smooth: C''≈0.03). Real estimators, no surrogates (D2); 20 seeds median+IQR (D3);
+  sign-flip markers on BOTH arms, peak **100%** wrong-sign (C2); PSR/NSR flat = "no step size";
+  ε=δ and the **usable-ε window [0.070,0.169]** marked (C3, same δ/definition as Fig 1, narrow
+  now that θ0 is sharp). Real estimators, no surrogates (D2); 40 reps, RMSE+bootstrap band (D3);
   Hamiltonian-level under T4 (D4); δ/rates provisional/Q1-pending (D1).
 - **C3 (gate-bias cell)** ✅ NEW — `build_gate_bias.py` → `gate_bias.*`. Raw-PSR bias vs
   ∇C_noisy at 0.5×/1×/2× the T4 2q rate: **−0.020 / −0.028 / −0.039**, scaling ~√ε_gate

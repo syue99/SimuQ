@@ -37,17 +37,19 @@ from observable_program_generator import observable_program_generator
 from nyquist_shift import tangent_hamiltonian, bandwidth_K
 
 # ── T4 defaults (best-guess; see T4.csv) ──
-G_FIELD, T = 1.0, 1.5
+G_FIELD, T = 1.0, 5.0               # longer evolution → sharper θ-landscape → higher FD δ/ε floor
 T2 = T / 0.15                       # T/T2* = 0.15 headline
 R_CTRL = 0.02                       # control setpoint error δ (T4 best-guess)
+GRAD_MIN = 0.35                     # θ0 must have a steep gradient; among those, maximize the floor
 # T4's kick gate error is EXCLUDED from F6: it is a PSR-only bias (the kick is a
 # digital op with its own error → biases PSR by ~0.028; NSR/waveform-shift is
 # immune). That is a separate Sec-5.2 gate-infidelity finding (see data note), not
 # F6's shot-floor + δ/ε story. F6 noise = dressed T2* dephasing + control δ.
 GATE_2Q = None
 N_TARGET = 10000                   # fixed N for panel R + FD-ε tuning
-NGRID = [100, 316, 1000, 3162, 10000, 31623, 100000]
-R_SEED = 20
+# extend to 1e6 so shot noise drops below PSR's gate-channel bias → the B2 floor is visible
+NGRID = [100, 316, 1000, 3162, 10000, 31623, 100000, 316228, 1000000]
+R_SEED = 40                        # repetitions per point (RMSE stable on heavy-tailed δ error)
 OBS = qp.tensor(qp.sigmaz(), qp.sigmaz())
 PSI0 = qp.tensor(qp.basis(2, 0), qp.basis(2, 0))
 FIGDIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "figures"))
@@ -64,7 +66,8 @@ def shots(val, n, rng):
     return 2.0 * rng.binomial(n, 0.5 * (1 + np.clip(val, -1, 1)), size=None) / n - 1.0
 
 
-GATE_2Q_T4 = 1.0e-3                 # T4 kick gate error (Evered et al.) — for the B2 disclosure
+GATE_2Q_T4 = 1.0e-3                 # 99.9% 2q gate (Evered et al.) — for the B2 disclosure
+GATE_1Q_T4 = 1.0e-4                 # 99.99% 1q gate
 
 
 def main():
@@ -75,19 +78,35 @@ def main():
     # series (B2): it floors at PSR's own ~0.028 kick-gate bias; NSR is immune.
     ex = noisy.make_expectation_fn(PSI0, OBS)
     noisy_g = NoisyQuTiPRunner(2, noise=NoiseModel(n_qubits=2, T2=T2, gate_error_2q=GATE_2Q_T4,
-                                                   gate_coherent_frac=0.5))
+                                                   gate_error_1q=GATE_1Q_T4, gate_coherent_frac=0.5))
     ex_g = noisy_g.make_expectation_fn(PSI0, OBS)
     H, var = Htfim()
     C = lambda th: ex([[H.set_parameterizedHam({"th": float(th)}), T]])
 
-    # θ0: a point with a clear noisy gradient
-    scan = np.linspace(0.2, 2.2, 60); h = 1e-3
-    grads = np.array([(C(t + h) - C(t - h)) / (2 * h) for t in scan])
-    th0 = float(scan[np.argmax(np.abs(grads))])
+    # θ0: among STEEP points (|∇C_noisy| ≥ GRAD_MIN), pick the one that MAXIMIZES the FD δ/ε
+    # floor RATIO — a sharp+steep operating point where FD fails hard (a low-floor smooth
+    # point understates FD's failure). Floor = shot-free FD RMSE = truncation ⊕ δ-amplification.
+    h = 1e-3
+    def _floor_at(t, g, eps):
+        sec = (C(t + eps) - C(t - eps)) / (2 * eps)
+        cp = (C(t + eps + h) - C(t + eps - h)) / (2 * h)
+        cm = (C(t - eps + h) - C(t - eps - h)) / (2 * h)
+        return np.sqrt((sec - g) ** 2 + (np.sqrt(cp ** 2 + cm ** 2) * R_CTRL / (2 * eps)) ** 2)
+    scan = np.linspace(0.7, 2.5, 46)
+    best_t = None
+    for t in scan:
+        g = (C(t + h) - C(t - h)) / (2 * h)
+        if abs(g) < GRAD_MIN:
+            continue
+        fl = min(_floor_at(t, g, e) for e in np.geomspace(0.04, 0.8, 12))
+        if best_t is None or fl / abs(g) > best_t[0]:
+            best_t = (fl / abs(g), float(t))
+    th0 = best_t[1]
     grad_true = float((C(th0 + h) - C(th0 - h)) / (2 * h))       # TARGET ∇C_noisy (exact)
     C2 = float((C(th0 + 1e-2) - 2 * C(th0) + C(th0 - 1e-2)) / 1e-4)
     _, A = tangent_hamiltonian(H, var, th0); K = bandwidth_K(A, T)
-    print(f"TFIM θ0={th0:.3f}  ∇C_noisy={grad_true:+.4f}  C''={C2:+.3f}  K={K:.3f}  (target = exact fine-FD)")
+    print(f"TFIM θ0={th0:.3f}  ∇C_noisy={grad_true:+.4f}  C''={C2:+.3f}  K={K:.3f}  "
+          f"floor/|∇C|={best_t[0]*100:.0f}%  (steep+sharp point, max FD floor)")
 
     # grid for landscape samples (FD & NSR shifts)
     s_max = 24.5 / (2 * K)
@@ -142,15 +161,17 @@ def main():
         fm = 2 * rng.binomial(nper, 0.5 * (1 + np.clip(vm, -1, 1))) / nper - 1
         return (fp - fm) / (2 * eps)
 
-    def fd_floor_pred(eps):
-        # shot-free FD RMSE (the irreducible δ/ε floor): truncation bias + δ-setpoint
-        # amplification. bias(ε)=secant(ε)-∇C_noisy; std_δ(ε)=|C'(θ±ε)|·δ/(√2·ε).
-        sec = float((Cint(th0 + eps) - Cint(th0 - eps)) / (2 * eps))
-        bias = sec - grad_true
-        cp = (Cint(th0 + eps + 1e-3) - Cint(th0 + eps - 1e-3)) / 2e-3
-        cm = (Cint(th0 - eps + 1e-3) - Cint(th0 - eps - 1e-3)) / 2e-3
-        std_d = np.sqrt(cp ** 2 + cm ** 2) * R_CTRL / (2 * eps)
-        return float(np.sqrt(bias ** 2 + std_d ** 2))
+    _fl_rng = np.random.default_rng(12345)
+
+    def fd_floor_pred(eps, nmc=600):
+        # the irreducible δ/ε floor = shot-FREE FD RMSE (N→∞): truncation bias ⊕ the exact
+        # δ-setpoint spread (Monte-Carlo, so it stays correct on sharp/curved landscapes where
+        # a linear δ-propagation over-estimates). This is exactly where FD saturates.
+        dp = _fl_rng.normal(0, R_CTRL, nmc); dm = _fl_rng.normal(0, R_CTRL, nmc)
+        vp = Cint(np.clip(th0 + eps + dp, grid[0], grid[-1]))
+        vm = Cint(np.clip(th0 - eps + dm, grid[0], grid[-1]))
+        est = (vp - vm) / (2 * eps)
+        return float(np.sqrt(np.mean((est - grad_true) ** 2)))
 
     # tune FD ε once at N_TARGET (freeze)
     eps_grid = np.geomspace(0.02, 1.2, 22)
@@ -159,16 +180,17 @@ def main():
     eps_star = float(eps_grid[int(np.argmin(fd_tune))])
     print(f"FD ε* tuned at N={N_TARGET}: ε*={eps_star:.3f} (frozen for all N)")
 
-    # Panel L: RMSE vs N, 20 seeds, median + IQR
+    # Panel L: RMSE vs N (R_SEED reps/point); dispersion = bootstrap 25–75 band on the RMSE
     def sweepN(estfn):
-        med, lo, hi = [], [], []
+        rmse, lo, hi = [], [], []
         for N in NGRID:
-            errs = []
-            for s in range(R_SEED):
-                rng = np.random.default_rng(1000 + s)
-                errs.append(abs(estfn(N, rng) - grad_true))
-            q = np.percentile(errs, [25, 50, 75]); med.append(q[1]); lo.append(q[0]); hi.append(q[2])
-        return np.array(med), np.array(lo), np.array(hi)
+            errs = np.array([estfn(N, np.random.default_rng(1000 + s)) - grad_true
+                             for s in range(R_SEED)])
+            rmse.append(float(np.sqrt(np.mean(errs ** 2))))
+            boot = [np.sqrt(np.mean(errs[np.random.default_rng(9000 + b).integers(0, R_SEED, R_SEED)] ** 2))
+                    for b in range(200)]
+            lo.append(float(np.percentile(boot, 25))); hi.append(float(np.percentile(boot, 75)))
+        return np.array(rmse), np.array(lo), np.array(hi)
 
     psrL = sweepN(lambda N, r: psr_est(N, r))
     nsrL = sweepN(lambda N, r: nsr_est(N, r))
@@ -264,11 +286,11 @@ def main():
         "at T/T2*=0.15; error is RMSE against the noisy gradient ∇C_noisy(θ0) (exact fine-FD of "
         "the dephased landscape). (L) At equal execution budget, PSR and NSR ride N^(−1/2) to "
         "∇C_noisy while finite-shot FD at its best ε saturates at the predicted δ/ε floor. (R) No "
-        "FD step size escapes: small ε amplifies the δ/ε control-noise floor, large ε truncates "
-        "(wrong sign up to 25%), whereas PSR and NSR have no step size to tune. The digital gate "
-        "channel is excluded from the headline and disclosed as the faint 'PSR + gate channel' "
-        "series, which floors at PSR's own ≈0.028 kick-gate bias (NSR immune); it is isolated in "
-        "Sec. 6.3.")
+        f"FD step size escapes: small ε amplifies the δ/ε control-noise floor, large ε truncates "
+        f"(wrong sign up to {max_wrong*100:.0f}%), whereas PSR and NSR have no step size to tune. "
+        f"The digital gate channel (99.9% 2q / 99.99% 1q) is excluded from the headline and "
+        f"disclosed as the faint 'PSR + gate channel' series, which floors at PSR's own "
+        f"≈{psr_gate_bias:.3f} kick-gate bias (NSR immune); it is isolated in Sec. 6.3.")
     with open(os.path.join(FIGDIR, "F6_floor_amplification_caption.txt"), "w") as f:
         f.write(caption + "\n")
     print(f"wrote F6_floor_amplification.pdf/.png/.json + _caption.txt")
@@ -282,7 +304,7 @@ def main():
         f"(n=N/2 each), PSR={2*NSAMP} co-located ± branches (n=N/{2*NSAMP} each), NSR=N singleton "
         f"draws. REAL estimators (D2): PSR from observable_program_generator kick branches through "
         f"NoisyQuTiPRunner (short_kick), NSR from its stochastic (n,σ) sampler — no Gaussian "
-        f"surrogates. {R_SEED} seeds, median+IQR band (D3). "
+        f"surrogates. {R_SEED} reps/point; RMSE with a bootstrap 25–75 dispersion band (D3). "
         f"LEFT: fitted slopes PSR N^{exp_psr:.2f}, NSR N^{exp_nsr:.2f} (≈−0.5, B4); FD frozen at "
         f"ε*={eps_star:.2f} saturates at the predicted δ/ε floor {floor_star:.3f} (B5). "
         f"GATE CHANNEL (B2): excluded from the headline; DISCLOSED as the faint 'PSR + gate channel' "
