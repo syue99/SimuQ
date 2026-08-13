@@ -1,0 +1,38 @@
+{
+  "n_qubits": 6,
+  "note": "rho=diam/Sum|v|, chi=diam/(2 Sum|v|)=rho/2 for Pauli",
+  "tangents": {
+    "uniform_ZZ": {
+      "diam": 10.0,
+      "sum_abs_v": 5.0,
+      "D1": 10.0,
+      "rho": 2.0,
+      "chi": 1.0,
+      "rho_over_chi": 2.0
+    },
+    "sign_alt_ZZ": {
+      "diam": 10.0,
+      "sum_abs_v": 5.0,
+      "D1": 10.0,
+      "rho": 2.0,
+      "chi": 1.0,
+      "rho_over_chi": 2.0
+    },
+    "Heisenberg_chain": {
+      "diam": 14.974308535551703,
+      "sum_abs_v": 15.0,
+      "D1": 30.0,
+      "rho": 0.9982872357034469,
+      "chi": 0.49914361785172345,
+      "rho_over_chi": 2.0
+    },
+    "Heisenberg_1bond": {
+      "diam": 4.0,
+      "sum_abs_v": 3.0,
+      "D1": 6.0,
+      "rho": 1.3333333333333333,
+      "chi": 0.6666666666666666,
+      "rho_over_chi": 2.0
+    }
+  }
+}
