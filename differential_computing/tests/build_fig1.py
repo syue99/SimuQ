@@ -50,6 +50,13 @@ EPS_OFFSETS = (0.0, 0.07, 0.14)       # ε_mid/ε_max shift proportionally-ish f
 MIN_SEC_SLOPE = 0.15                  # criterion 1
 EXTREMUM_FRAC = 0.20                  # criterion 2 (≥20% of local period)
 STEEP_FRAC = 0.50                     # criterion 3 (≥50% of max|slope|)
+# small-ε "noise wall": answers "what if we shrink ε" — the control-setpoint error δ (a
+# resolution floor: ε cannot be set below it) + shot noise, amplified by 1/(2ε), swamp the
+# secant. Shown as a fan of noisy realizations at ε≈δ-scale.
+R_CTRL = 0.02                         # control setpoint error δ (T4 best-guess) = the FLOOR on ε
+SMALL_EPS = 0.03                      # a step near the δ floor (ε cannot go below ~δ)
+N_SHOTS_FAN = 4000                    # per ± evaluation
+N_FAN = 60                            # realizations (for the noise-cone envelope stats)
 FIGDIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "figures"))
 COL = 3.3
 plt.rcParams.update({"font.size": 8, "axes.labelsize": 8, "font.family": "serif",
@@ -88,7 +95,7 @@ def sweep():
             c3 = gnorm >= STEEP_FRAC
             c2 = near >= EXTREMUM_FRAC * period
             for emin in EPS_MIN_GRID:
-                es = [round(emin + o, 3) for o in EPS_OFFSETS]
+                es = [round(float(emin) + o, 3) for o in EPS_OFFSETS]
                 if a + es[-1] > SWEEP_WIN[1] or a - es[-1] < SWEEP_WIN[0]:
                     continue
                 ss = [float((Cint(a + e) - Cint(a - e)) / (2 * e)) for e in es]
@@ -126,6 +133,26 @@ def compute():
     g_plot = float(np.gradient(y, gx)[np.argmin(np.abs(gx - a))])
     secants = [dict(eps=e, fm=float(fn(a - e)), fp=float(fn(a + e)),
                     slope=float((fn(a + e) - fn(a - e)) / (2 * e))) for e in cfg["eps"]]
+
+    # small-ε noise wall: N_FAN noisy realizations of the ε≈δ secant (δ setpoint jitter on
+    # the ± points + shot noise), to SHOW what shrinking ε does — the estimate scatters.
+    rng = np.random.default_rng(0)
+    fan, fan_slopes = [], []
+    for _ in range(N_FAN):
+        dp, dm = rng.normal(0, R_CTRL), rng.normal(0, R_CTRL)
+        xp, xm = a + SMALL_EPS + dp, a - SMALL_EPS + dm
+        vp, vm = float(fn(xp)), float(fn(xm))
+        # shot noise: f = ⟨Z0⟩∈[-1,1] → binomial readout
+        fp = 2 * rng.binomial(N_SHOTS_FAN, 0.5 * (1 + np.clip(vp, -1, 1))) / N_SHOTS_FAN - 1
+        fm = 2 * rng.binomial(N_SHOTS_FAN, 0.5 * (1 + np.clip(vm, -1, 1))) / N_SHOTS_FAN - 1
+        # divide by the NOMINAL 2ε (the machine drifted by δ but you don't know it) — this is
+        # where δ/ε amplification enters; dividing by the true separation would cancel δ.
+        sl = (fp - fm) / (2 * SMALL_EPS)
+        fan.append(dict(xp=float(xp), xm=float(xm), fp=float(fp), fm=float(fm), slope=float(sl)))
+        fan_slopes.append(float(sl))
+    fan_stats = dict(mean=float(np.mean(fan_slopes)), std=float(np.std(fan_slopes)),
+                     lo=float(np.min(fan_slopes)), hi=float(np.max(fan_slopes)),
+                     frac_wrongsign=float(np.mean(np.sign(fan_slopes) != np.sign(g))))
     table = [dict(T=r["T"], anchor=round(r["anchor"], 3), eps=r["eps"],
                   secants=[round(s, 2) for s in r["secants"]],
                   near_frac=round(r["near_frac"], 2), gnorm=round(r["gnorm"], 2))
@@ -133,7 +160,8 @@ def compute():
     return dict(T=T, T2=T2, regime=REGIME, anchor=a, g_analytic=g, g_plotted=g_plot,
                 z0=float(fn(a)), maxslope=cfg["maxslope"], period=cfg["period"],
                 near=cfg["near"], window=list(win), gx=list(map(float, gx)),
-                y=list(map(float, y)), secants=secants, n_pass=len(rows), sweep_table=table)
+                y=list(map(float, y)), secants=secants, n_pass=len(rows), sweep_table=table,
+                small_eps=SMALL_EPS, delta=R_CTRL, fan=fan, fan_stats=fan_stats)
 
 
 def main():
@@ -159,11 +187,30 @@ def main():
         ax.annotate(rf"$\varepsilon={e:.2f}$", xy=(a + e, sec["fp"]), xytext=(dx, dy),
                     textcoords="offset points", fontsize=5.6, color=c, va=va)
 
+    # small-ε δ-FLOOR (answers "what if we shrink ε"): ε cannot be set below the control
+    # resolution δ, and near that floor the setpoint error δ (amplified by 1/ε) scatters the
+    # secant. Drawn as a NOISE CONE: the envelope of slopes the FD estimate takes at ε≈δ.
+    C_FAN = "#7b3fa0"; fs = d["fan_stats"]
+    cw = 0.13                                   # draw the SLOPE envelope wide enough to see
+    xc = np.array([a - cw, a + cw])
+    s_hi = fs["mean"] + 2 * fs["std"]; s_lo = fs["mean"] - 2 * fs["std"]   # representative ±2σ
+    ax.fill_between(xc, z0 + s_lo * (xc - a), z0 + s_hi * (xc - a), color=C_FAN,
+                    alpha=0.28, lw=0, zorder=1, label=r"FD at $\varepsilon\!\approx\!\delta$: noise cone")
+    ax.plot(xc, z0 + fs["mean"] * (xc - a), "--", color=C_FAN, lw=0.9, alpha=0.8, zorder=1)
+    # explicit ε-floor indicator (upper-left, clear zone): a δ-wide bracket = the smallest
+    # resolvable step; you cannot shrink ε below it.
+    yb = float(y.max()) + 0.05; xb = win[0] + 0.12
+    ax.errorbar([xb], [yb], xerr=[[d["delta"]], [d["delta"]]], fmt="none",
+                ecolor=C_FAN, elinewidth=1.1, capsize=2.5, zorder=6, clip_on=False)
+    ax.annotate(r"step floor $\varepsilon\gtrsim\delta$ (setpoint resolution)",
+                xy=(xb, yb), xytext=(xb + 0.06, yb), fontsize=5.5, color=C_FAN,
+                va="center", ha="left", annotation_clip=False)
+
     # short shift-rule tangent: slope = analytic derivative (equal by construction)
     xt = np.array([a - th, a + th])
     ax.plot(xt, z0 + g * (xt - a), color=C_PSR, lw=2.6, solid_capstyle="round",
-            label="shift-rule tangent (PSR/NSR)")
-    ax.plot([a], [z0], "o", color=C_INK, ms=4, zorder=6)
+            label="shift-rule tangent (PSR/NSR)", zorder=7)
+    ax.plot([a], [z0], "o", color=C_INK, ms=4, zorder=8)
 
     # R7 in-figure info line (muted, above the axes → collision-free); PSR/NSR-safe, no refs
     ax.text(0.0, 1.04, r"$H(\theta)=\theta Z_0+X_0$  ·  Hamiltonian-level, T4 noise  ·  "
@@ -172,6 +219,7 @@ def main():
 
     ax.set_xlabel(r"parameter $\theta$"); ax.set_ylabel(r"$C_{\rm noisy}(\theta)$")
     ax.set_xlim(*win)
+    ax.set_ylim(float(y.min()) - 0.12, float(y.max()) + 0.14)   # clip cone to landscape range
     ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.28), fontsize=6.6,
               handlelength=1.8, ncol=1)
     fig.tight_layout()
@@ -180,10 +228,13 @@ def main():
     plt.close(fig)
 
     # ---- deliverables: mini caption + data note (persisted, per R7) ----
+    fs = d["fan_stats"]
     mini_caption = (
-        "Figure 1. The finite-difference trap: FD secants mis-sign the gradient at every "
-        "step size ε, and shrinking ε only amplifies the δ/ε noise floor "
-        "(Sec. 6.2). Either sound strategy (PSR/NSR) recovers the noisy slope.")
+        "Figure 1. The finite-difference trap. Large steps ε (orange) mis-sign the gradient — "
+        "the secant straddles a feature. But ε cannot be shrunk freely: it is bounded below by "
+        "the control-setpoint resolution δ, and near that floor δ (amplified by 1/ε) scatters "
+        "the estimate into a wide noise cone (purple, Sec. 6.2). Either sound strategy "
+        "(PSR/NSR, blue) recovers the noisy slope with no step-size to tune.")
     signs = "/".join(f"{s['slope']:+.2f}" for s in d["secants"])
     eps_used = [s["eps"] for s in d["secants"]]
     data_note = (
@@ -196,7 +247,13 @@ def main():
         f"period {d['period']:.3f} ≥20% ✓; (3) |slope| {abs(g):.2f} = "
         f"{abs(g)/d['maxslope']*100:.0f}% of max|slope| {d['maxslope']:.2f} ≥50% ✓; (4) no "
         f"collisions ✓. Drawn tangent slope = analytic ∇C_noisy = {g:+.3f} (h=1e-3), EQUAL by "
-        f"construction; np.gradient check {d['g_plotted']:+.2f} (grid-resolution consistent).")
+        f"construction; np.gradient check {d['g_plotted']:+.2f} (grid-resolution consistent). "
+        f"ε-FLOOR (δ problem): ε is bounded below by the control resolution δ={d['delta']} "
+        f"(shown as the δ-wide bracket). At ε={d['small_eps']}≈δ ({N_FAN} realizations, "
+        f"N={N_SHOTS_FAN} shots) the estimate scatters — slope mean {fs['mean']:+.2f}, std "
+        f"{fs['std']:.2f}, range [{fs['lo']:+.2f},{fs['hi']:+.2f}], {fs['frac_wrongsign']*100:.0f}% "
+        f"wrong-signed — the noise cone. So one cannot escape the large-ε truncation by shrinking "
+        f"ε indefinitely: the usable window is [~δ, ~λ/2] and it collapses as features sharpen.")
     d["mini_caption"] = mini_caption; d["data_note"] = data_note
     json.dump(d, open(cache, "w"), indent=2, default=float)
     with open(os.path.join(FIGDIR, "fig1_intro_trap_caption.txt"), "w") as f:

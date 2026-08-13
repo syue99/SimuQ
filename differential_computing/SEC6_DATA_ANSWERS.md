@@ -239,6 +239,13 @@ execution-normalized; T/T2* in caption; T4 best-guess values flagged.
   — muted info line (program·instrument·regime), per-secant ε labels, **PSR/NSR vocabulary
   only** (no "kick-PSR/Nyquist" in any text), **no section refs inside the image**; ~2-line
   mini caption (with the Sec-6.2 δ/ε forwarding clause) delivered in the sidecar + JSON.
+  **Small-ε δ-floor (answers "what if we shrink ε"):** at the mid-flank anchor FD is *not*
+  trapped from below — RMSE(ε) has a usable window (min ~27% at ε≈0.05). The honest statement
+  (not "every ε fails") is shown/said: (i) a **noise cone** at ε≈δ=0.03 (mean −3.06, σ 1.33,
+  reaching near-flat/wrong-sign) = the δ/ε scatter near the floor; (ii) a **"step floor ε≳δ"
+  δ-wide bracket** = ε cannot be set below the control resolution. Message: large ε mis-signs,
+  small ε is δ-floor-limited; the usable window collapses as features sharpen (quantified in
+  F6/Fig 6). Fan noise-model bug fixed (divide by NOMINAL 2ε, not the drifted separation).
 - **P2-B / Track P (systems, R0)** — reframed by FOLLOWUP R0 as **Track P** (pulse
   generation to EVIDENCE the Sec-5 compiler claims, not a physics result): lower a
   Nyquist-shifted TFIM through the SAME AAIS→pulse→ledger path and report lines-of-glue +
