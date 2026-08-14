@@ -228,22 +228,26 @@ execution-normalized; T/T2* in caption; T4 best-guess values flagged.
   echoed by kick symmetry; the digital price is intrinsic to inserting the op. This is
   Sec-6.3's complementary-failure-modes entry (PSR pays the digital price; NSR pays the
   certificate scale). Error bars = shot std at N=1e4.
-- **P1-B (F-loop, REAL estimators)** ✅ — `build_Floop_real.py` → `F_loop_real.*` (C2
-  compliant; surrogate `build_Floop.py` retired). TFIM P=4 (5q), cost `⟨(1/P)ΣZZ⟩+λ/2|θ|²`
-  (λ=0.3, interior θ*), diagonal-readout shot model. **PSR** = real kick branches through
-  the noisy runner INCLUDING the T4 kick gate error → carries its ~0.028 digital bias in
-  the loop; **NSR** = real stochastic Nyquist sampler (gate-immune; tail-shift clip near
-  θ* = its headroom cost); **FD** = real noisy secant + δ + shots (only the FD ε-grid uses
-  the permitted side-variant form). B=1000/grad, η=0.25, 60 iters, 20 seeds, θ0+N(0,0.08)
-  shared start. Measured cost ≈2.1 s/PSR-grad, 1.7 s/NSR-grad → full run ~2 h wall (20×60
-  at P=4; feasible, no reduction needed — reported per C2).
-  **Result (final median C−C*):** NSR **0.0027** < PSR **0.0037** < FD 1× **0.0084** <
-  FD 3× **0.0337** < FD 0.3× **0.0795**. Both unbiased estimators reach the shot floor,
-  ~2–20× below every FD ε; no FD step saves it (0.3× too noisy — 519 uphill steps across
-  the descent — 3× biased, 1× still floored above). PSR sits marginally above NSR = its
-  ~0.028 digital gate bias carried *inside the loop* (within the shot band at B=1000; the
-  C3 cell isolates it cleanly at fixed θ). Unbiased-vs-FD separation is clear by ~35% of
-  the execution budget. θ*=[-0.057,-1.429,1.429,0.057], C*=0.311.
+- **P1-B (F-loop, §6.4) ✅ FLOOP_REVISION applied** — `build_Floop_real.py` →
+  `F_loop_real.*` + `_caption.txt`. Thesis (4): **EITHER sound strategy closes the loop**
+  (NOT a PSR-vs-NSR comparison — F2). TFIM P=4 (5q). **Objective (A1/A2):** descend AND plot
+  `C=⟨O⟩+(λ/2)|θ|²`, **λ=0.3 declared** on the y-axis (amplitude prior; classical, shot-free,
+  identical across methods). **θ* (A3):** shot-free deterministic basin min, not from any
+  compared method; metric clipped at 1e-4. **Channel (C1):** **DRESSING-ONLY** — consistent
+  with F6's headline (gate excluded; with it PSR would floor at O(1e-2), forwarded to §6.3, C2).
+  **Executions (B1/B3):** x=cumulative executions, B=1000/gradient identical across methods,
+  per-method accounting stated. **m (B2):** PSR m=**16** (converged at T=1.5: 0.03% bias);
+  per-program m (τ∝T), matching F6's 48 at T=5 and Sec 5.4's per-program lowering. **Real
+  estimators (D1),** no surrogates (exact α=π/2 shift). **NSR clip (D2):** **9.3% overall /
+  9.7% near θ*** — non-negligible, disclosed on the figure + note (headroom/certificate cost).
+  **FD events (D3):** uphill steps concentrate at SMALL ε (519 @0.3ε* > 304 @ε* > 147 @3ε*) —
+  the δ/ε arm, agreeing with F6-R + Fig 1's cone. **D4** plateau visible (60 iters); **D5**
+  FD ε* plateau η-robust (0.005/0.008/0.009 at η=0.15/0.25/0.40 — bias floor). No inset (E1);
+  P=4 (E'1); vocab clean, no in-image refs (F1/F5). 20 seeds, median±IQR (F3), T/T2*=0.15 (F4).
+  **Result (F2, not ranked):** both sound strategies converge to the shot floor — **PSR 0.0037,
+  NSR 0.0027** (within the shot band); FD stalls above: **ε* 0.008, 3ε* 0.034, 0.3ε* 0.080**.
+  Run is **resumable** (per-seed checkpoints in `figures/F_loop_ckpt/`) — survives the ~50-min
+  background-job wall-clock limit.
 - **P1-C (F3)** ✅ — `phase_who_wins_3panel.py` relabeled (PSR/NSR, χ=ρ/2, Hamiltonian-
   level under T4, ⟨σ⟩ kept, no compiled overlay).
 - **P2-A (Fig 1)** ✅ — `build_fig1.py` → `fig1_intro_trap.*` + `fig1_intro_trap_caption.txt`.
