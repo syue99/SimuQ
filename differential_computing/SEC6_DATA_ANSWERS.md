@@ -214,7 +214,7 @@ execution-normalized; T/T2* in caption; T4 best-guess values flagged.
   RMSE floor = |bias|, but the magnitude is operating-point-dependent; both use the SAME rate
   and trace to T4. 6.3 quotes C3's 0.028; F6 discloses its own 0.014. **Panel R:** FD V, both
   arms, over the predicted floor curve (C1); sign-flip markers, peak **100%** (C2); PSR/NSR flat
-  = "no step size"; ε=δ + **usable window [0.070,0.169]** (C3/**F8**, identical criterion to
+  = "no step size"; ε=δ + **usable window [0.083,0.202]** (C3/**F8**, identical criterion to
   Fig 1: RMSE/|∇C|<0.5 & signerr<5%); regime on **both** panel titles (**F7**). Right-panel
   horizontals ARE the left panel's PSR/NSR RMSE at N=10⁴, same run (**F3**). **F9 (prose):**
   FD is BELOW the sound strategies at small N (2 evals vs 96 branches), crossover **N≈3162** —
