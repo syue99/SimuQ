@@ -130,6 +130,22 @@ def main():
     pp_g = np.array([ex_g(H_tot[2 * i + 1]) for i in range(nb)]) #      (for the B2 disclosure)
     NSAMP = nb
 
+    # G1: PSR's 2m branches = the analog-PSR insertion-time (τ) integral sampled at m=n_sample
+    # points (Leng et al.; the compiled program of Sec 5.4 has the same branch count — NOT a
+    # simulator artefact). m is set by requiring the τ-quadrature DISCRETIZATION BIAS to fall
+    # below the shot floor at the largest budget. Measure it: exact (N→∞) PSR bias vs m.
+    def _exact_psr_bias(m):
+        o = np.random.rand; np.random.rand = lambda k: (np.arange(k) + 0.5) / k
+        try:
+            pr = observable_program_generator(H, T, n_sample=m, n_repetition=1,
+                                              diff_var=var, value=th0, short_kick=False)
+        finally:
+            np.random.rand = o
+        Ht, u, _ = pr[0]; b = len(Ht) // 2
+        em = np.array([ex(Ht[2 * i]) for i in range(b)]); ep = np.array([ex(Ht[2 * i + 1]) for i in range(b)])
+        return abs((T / b) * float(u) * np.sum(em - ep) - grad_true)
+    m_conv = {m: float(_exact_psr_bias(m)) for m in (16, 24, 48)}
+
     def _psr_from(pm_, pp_, Ntot, rng):
         nper = int(max(1, round(Ntot / (2 * NSAMP))))            # split N over 2·nb branches
         fm = 2 * rng.binomial(nper, 0.5 * (1 + np.clip(pm_, -1, 1))) / nper - 1
@@ -287,7 +303,11 @@ def main():
                    fd=fdL[0].tolist(), exp_psr=exp_psr, exp_nsr=exp_nsr, floor_star=floor_star,
                    psr_gate_bias=float(psr_gate_bias), win_lo=win_lo, win_hi=win_hi,
                    epsR=epsR.tolist(), fd_r=fd_r.tolist(), fd_wrong=fd_wrong.tolist(),
-                   floor_curve=floor_curve.tolist(), n_seeds=R_SEED),
+                   floor_curve=floor_curve.tolist(), n_seeds=R_SEED, m_nsample=NSAMP,
+                   m_convergence={str(k): v for k, v in m_conv.items()},
+                   psr_band=[psrL[1].tolist(), psrL[2].tolist()],   # bootstrap 25/75 (D3/G4a)
+                   nsr_band=[nsrL[1].tolist(), nsrL[2].tolist()],
+                   fd_band=[fdL[1].tolist(), fdL[2].tolist()]),
               open(os.path.join(FIGDIR, "F6_floor_amplification.json"), "w"), indent=2, default=float)
     win_txt = f"[{win_lo:.3f},{win_hi:.3f}]" if win_lo else "EMPTY"
     max_wrong = float(np.max(fd_wrong))
@@ -327,13 +347,26 @@ def main():
         f"SHOT-FREE (no setpoint error, no sampling in the reference). "
         f"EXECUTIONS (A2): x = total executions for ONE gradient estimate; FD=2 evals/component "
         f"(n=N/2 each), PSR={2*NSAMP} co-located ± branches (n=N/{2*NSAMP} each), NSR=N singleton "
-        f"draws. REAL estimators (D2): PSR from observable_program_generator branches through "
-        f"NoisyQuTiPRunner, NSR from its stochastic (n,σ) sampler — no Gaussian surrogates. "
-        f"{R_SEED} reps/point; RMSE with a bootstrap 25–75 dispersion band (D3). "
+        f"draws. G1 (why {2*NSAMP} branches for ONE parameter): PSR is the analog shift rule — the "
+        f"gradient is the insertion-time (τ) integral of the ±-shifted evolution, sampled at "
+        f"m={NSAMP} points → 2m branches (Leng et al.; the compiled program of Sec 5.4 has the SAME "
+        f"count — NOT a simulator artefact). m is set by pushing the τ-quadrature DISCRETIZATION "
+        f"bias below the shot floor at the largest budget: exact(N→∞) PSR bias is "
+        f"{m_conv[16]/abs(grad_true)*100:.0f}%/{m_conv[24]/abs(grad_true)*100:.0f}%/"
+        f"{m_conv[48]/abs(grad_true)*100:.1f}% at m=16/24/48, so m=16 would FLOOR PSR at ~8% (its "
+        f"discretization bias); m={NSAMP} keeps it below the ~2.5% shot floor at N=1e6. Cost is not "
+        f"overstated — fewer segments would bias PSR, not cheapen it. REAL estimators (D2): PSR "
+        f"from observable_program_generator branches through NoisyQuTiPRunner, NSR from its "
+        f"stochastic (n,σ) sampler — no Gaussian surrogates. {R_SEED} reps/point; RMSE with a "
+        f"bootstrap 25–75 band (D3; narrow at this rep count — see JSON for lo/hi). "
         f"LEFT: {fit_txt}. FD at a FIXED ε*={eps_star:.2f} (F6): ε* is tuned at N={N_TARGET} and is "
         f"the ASYMPTOTIC optimum (the δ/ε-vs-truncation trade-off is N-independent once shot noise "
         f"is sub-dominant), so freezing is harmless for the floor claim; it saturates at the "
-        f"predicted δ/ε floor {floor_star:.3f} (B5, = shot-free FD RMSE via Monte-Carlo δ). "
+        f"predicted δ/ε floor {floor_star:.3f} (B5, = shot-free FD RMSE from 600 Monte-Carlo δ "
+        f"draws, no shots). The FD series saturates marginally BELOW the line (~0.152 vs "
+        f"{floor_star:.3f}) — same quantity, a sampling gap between 600 MC draws and the "
+        f"{R_SEED}-rep series, expected not a mismatch. Floor is 42% of |∇C_noisy|; PSR reaches "
+        f"~2.5% at N=1e6. "
         f"{gate_txt}. "
         f"RIGHT: FD V, both arms, over the predicted δ/ε floor curve; PSR/NSR flat = 'no step size'. "
         f"The two horizontals ARE the left panel's PSR/NSR RMSE at N={N_TARGET} — same run, same "

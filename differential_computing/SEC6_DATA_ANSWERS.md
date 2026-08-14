@@ -320,3 +320,31 @@ differently. Concretely:
   (`F_loop_real.*`). So Q3 is **now actionable**; it is held only on Fred's go/appendix
   decision, not on any dependency. *Cost if greenlit:* one more ~2 h run at the same P/seeds
   with `T2 = T/0.5` (a one-line change), producing an appendix stressor figure.
+
+---
+
+## §6.2/§6.3 prose notes (F6 REV3 G3/G4 — for when the text is written)
+
+Numbers to carry into prose so F6, Fig 1, C3 and §6.3 read as consistent, not contradictory:
+
+1. **Gate bias is operating-point dependent — do NOT write "the" PSR gate bias.** It is
+   **order 10⁻²**: **0.028** at C3's point (θ0=1.59, T=1.5), **0.014** at F6's point
+   (θ0=1.94, T=5), the SAME 99.9%/99.99% rates. §6.3 must phrase it as "order 10⁻²,
+   operating-point dependent" and name both points; otherwise F6's caption (0.014) and §6.3
+   (0.028) look like a contradiction to the reader who checks.
+2. **The small-ε FD arm fails by AMPLIFICATION, not sign flips.** At ε=δ the sign-error rate
+   is only ~21% while RMSE is ~0.54 vs |∇C_noisy|=0.385 — **over 100% relative error**. Say
+   "the estimate is destroyed", not "the sign flips". The sign-flip story is the **large-ε**
+   arm (100%). (Fig 1's cone reported only 3% wrong-sign at its own point — again
+   operating-point dependence; one clause keeps the two figures consistent.)
+3. **PSR sits below NSR at every budget** (0.080 vs 0.094 at N=10⁴; ~0.0095 vs ~0.0107 at
+   10⁶) — **same −0.5 exponent, larger NSR prefactor**. This program is the ZZ coupling of a
+   TFIM: single-Pauli, aligned, **χ≈1** — exactly the regime T1/F3 predict PSR wins. One
+   clause makes this a free consistency check between §6.2 and §6.3. **Do not overclaim:** it
+   is a prefactor at one point, not a measurement of the transfer map.
+4. **State the floor as a percentage:** FD's floor **0.160 = 42% of |∇C_noisy|=0.385**; PSR
+   reaches **~2.5% at N=10⁶**. "The floor is real" is more persuasive as a percentage.
+5. **F6 is a 2-qubit instance; F3 is 7q.** No §6.2 sentence may imply F6 carries scale
+   evidence — scale lives in F3/C7.
+6. **Regime clause:** Fig 1 is T/T2*=0.5, F6 is 0.15 — one sentence so they are not read as
+   contradictory (the trap is not a stressor artefact).

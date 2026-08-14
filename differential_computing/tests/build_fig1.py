@@ -290,10 +290,13 @@ def main():
         f"SMALL-ε (R10): ε floored by δ={d['delta']} (Q1-pending — cone geometry depends on δ; "
         f"re-render if δ changes). Cone drawn at ε={d['small_eps']}≈δ (1.5×δ; labelled ε≈δ): "
         f"mean {fs['mean']:+.2f} vs true {g:+.2f}, std {fs['std']:.2f}, {fs['frac_wrongsign']*100:.0f}% "
-        f"wrong-signed. ε-window sweep [δ,λ/2={ws['lam_half']:.2f}] @N={N_SHOTS_FAN}: best "
-        f"ε={ws['best_eps']:.3f} (RMSE/|g|={ws['best_rmse_rel']:.2f}); {win_txt}. HONESTY: FD is "
-        f"NOT trapped from below at this anchor — a usable ε exists; Fig 1 asserts only that the "
-        f"shift rules need no ε (safe), and defers FD's quantitative defeat to Sec 6.2/F6-R.")
+        f"wrong-signed. ε-window sweep over [δ,λ/2={ws['lam_half']:.2f}] @N={N_SHOTS_FAN}: best "
+        f"ε={ws['best_eps']:.3f} (RMSE/|g|={ws['best_rmse_rel']:.2f}); {win_txt}. USABLE-WINDOW "
+        f"CRITERION (shared with F6, G2/F8): an ε is 'usable' iff RMSE/|∇C_noisy| < 0.5 AND "
+        f"sign-error < 5% — the window is the ε-range meeting BOTH (NOT the interval [δ,λ/2], "
+        f"which is only the swept range / the fraction's denominator). HONESTY: FD is NOT trapped "
+        f"from below at this anchor — a usable ε exists; Fig 1 asserts only that the shift rules "
+        f"need no ε (safe), and defers FD's quantitative defeat to Sec 6.2/F6-R.")
     d["mini_caption"] = mini_caption; d["data_note"] = data_note
     json.dump(d, open(cache, "w"), indent=2, default=float)
     with open(os.path.join(FIGDIR, "fig1_intro_trap_caption.txt"), "w") as f:
