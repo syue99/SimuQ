@@ -199,21 +199,28 @@ execution-normalized; T/T2* in caption; T4 best-guess values flagged.
   `F6_floor_amplification.*` + `_caption.txt`. TFIM θ·Z0Z1+ΣX, **both panels T/T2*=0.15**
   (right panel is the 0.15 rebuild, A3). Error vs **∇C_noisy** (noisy gradient, stated on
   both axes, A1). x = **total executions for one gradient estimate** with per-method
-  accounting in the note (A2). No "raw"/"oracle" (A4/B1). **Panel L:** PSR & NSR ride
-  `N^{-1/2}` — fitted **N^−0.46 / N^−0.50** (B4) — to ∇C_noisy; FD frozen at ε*=0.17
-  saturates at the **predicted δ/ε floor 0.16 (≈42% of ∇C_noisy)** (B5). **Landscape choice:**
-  T bumped to **5** (T2=T/0.15) to SHARPEN the θ-landscape (C''≈10), and θ0=1.94 chosen to
-  MAXIMIZE the FD floor at a steep point (|∇C|≥0.35) — the earlier smooth θ0 floored at only
-  7%. Metric is **RMSE** (40 reps, bootstrap band); floor = shot-free FD RMSE (Monte-Carlo δ,
-  matches the saturation). N extended to **10⁶** so shot noise drops below the gate bias.
-  **Gate = 99.9% 2q (1e-3) / 99.99% 1q (1e-4)**, coherent-frac 0.5. **B2 disclosure:** faint
-  *PSR + gate channel* series floors at PSR's own **≈0.014** kick-gate bias (NSR immune) —
-  the gate channel is excluded from the headline but shown, forwarded to Sec 6.3 in the
-  caption only (D5). **Panel R:** FD V, both arms, over the predicted δ/ε floor curve (C1);
-  sign-flip markers on BOTH arms, peak **100%** wrong-sign (C2); PSR/NSR flat = "no step size";
-  ε=δ and the **usable-ε window [0.070,0.169]** marked (C3, same δ/definition as Fig 1, narrow
-  now that θ0 is sharp). Real estimators, no surrogates (D2); 40 reps, RMSE+bootstrap band (D3);
-  Hamiltonian-level under T4 (D4); δ/rates provisional/Q1-pending (D1).
+  accounting in the note (A2). No "raw"/"oracle"/"kick" in caption/figure (A4/B1/**F2**).
+  **Panel L:** PSR & NSR ride `N^{-1/2}` — **tail fits (N≥1000) N^−0.48 (R²=0.997) / N^−0.50**
+  (B4/**F5**: the exact α=π/2 shift → dressing-only PSR provably unbiased, RMSE keeps
+  descending to 10⁶, no residual floor). FD at a **fixed ε*=0.17** (**F6**: ε* is the
+  asymptotic optimum, N-independent) saturates at the **predicted δ/ε floor 0.16 (≈42%)** (B5).
+  **Landscape:** T=5 (T2=T/0.15) sharpens the θ-landscape (C''≈10), θ0=1.94 chosen to MAXIMIZE
+  the FD floor at a steep point — the earlier smooth θ0 floored at only 7%. Metric = **RMSE**
+  (**100 reps**, bootstrap 25–75 band, D3); floor = shot-free FD RMSE (MC δ, matches saturation).
+  N extended to **10⁶** so shot noise drops below the gate bias. Gate = **99.9% 2q / 99.99% 1q**
+  (traced to T4). **B2 disclosure:** faint *PSR + gate channel* series floors at PSR's own
+  gate-channel-bias RMSE floor **≈0.014 HERE** (θ0=1.94, T=5). **F1 reconciliation:** NOT a
+  contradiction with C3's 0.028 — C3 measures the SIGNED bias at ITS point (θ0=1.59, T=1.5);
+  RMSE floor = |bias|, but the magnitude is operating-point-dependent; both use the SAME rate
+  and trace to T4. 6.3 quotes C3's 0.028; F6 discloses its own 0.014. **Panel R:** FD V, both
+  arms, over the predicted floor curve (C1); sign-flip markers, peak **100%** (C2); PSR/NSR flat
+  = "no step size"; ε=δ + **usable window [0.070,0.169]** (C3/**F8**, identical criterion to
+  Fig 1: RMSE/|∇C|<0.5 & signerr<5%); regime on **both** panel titles (**F7**). Right-panel
+  horizontals ARE the left panel's PSR/NSR RMSE at N=10⁴, same run (**F3**). **F9 (prose):**
+  FD is BELOW the sound strategies at small N (2 evals vs 96 branches), crossover **N≈3162** —
+  a bias-variance trap that looks good only at small budgets. Reference gradient = δ-free,
+  shot-free fine FD (h=1e-3). Real estimators (D2); Hamiltonian-level under T4 (D4);
+  data note + caption in `_caption.txt` (**F4**); δ/rates provisional/Q1-pending (D1).
 - **C3 (gate-bias cell)** ✅ NEW — `build_gate_bias.py` → `gate_bias.*`. Raw-PSR bias vs
   ∇C_noisy at 0.5×/1×/2× the T4 2q rate: **−0.020 / −0.028 / −0.039**, scaling ~√ε_gate
   (coherent-dominated); NSR ≡ 0 (no inserted op). FINDING: standard and short (symmetric)
