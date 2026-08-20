@@ -40,6 +40,7 @@ class SpecPlan:
     detuning_init: Dict[int, float]             # warm start: d_i per site
     rabi_init: Dict[int, Tuple[float, float]]   # warm start: (Ω_i, φ_i) per site
     dropped_zz_l1: float                        # Σ|J_ij|/4 over truncated pairs
+    theta_sum: Dict[int, float] = field(default_factory=dict)  # Σ_j θ_ij per site (kept pairs)
     report: dict = field(default_factory=dict)
 
     @property
@@ -270,6 +271,7 @@ def make_plan(qs, C_6, shells=1, park_base=(1000.0, 1000.0), park_spacing=5.0,
         detuning_init=detuning_init,
         rabi_init=rabi_init,
         dropped_zz_l1=dropped_l1,
+        theta_sum=theta_sum,
         report=dict(
             n=n, bonds=len(links), dressing_pairs=len(kept),
             shells=shells, R_um=R, theta=theta,
@@ -278,6 +280,26 @@ def make_plan(qs, C_6, shells=1, park_base=(1000.0, 1000.0), park_spacing=5.0,
             parked_sites=n_parked,
         ),
     )
+
+
+def nsr_shift_table(plan, s):
+    """Coefficient table for one NSR (waveform-shift) derivative branch.
+
+    The Nyquist branch evolves B + s·A on the SAME segment structure as the
+    source program (A = the uniform-ZZ tangent), so on the plan's frozen
+    geometry the branch is realized by rescaling the dressing amplitude and
+    detunings in closed form — no solve, no re-mapping, schedule structure
+    shared with the source compile. This O(n) table IS the entire marginal
+    compile cost of an NSR branch.
+
+    Returns {"o": float, "d": {site: float}} — Rabi values are unchanged
+    (the shift is along the ZZ tangent only).
+    """
+    scale = (plan.theta + s) / plan.theta
+    o = plan.dressing_init * scale
+    d = {i: plan.detuning_init[i] + 2.0 * plan.theta_sum[i] * (scale - 1.0)
+         for i in range(plan.n)}
+    return {"o": o, "d": d}
 
 
 def _classify(name):

@@ -93,7 +93,13 @@ Ordered by "genuinely new" vs "replot/relocate":
    Expected (measure, don't discover): NSR ≈ coefficient-only overhead; PSR adds bounded
    +k segments; neither combinatorial. Need dispersion (repetitions/point). `compile_scaling_data.json`
    may already hold this — verify it covers n=1000 and has repetitions; else re-time.
-   **UPDATE 2026-08-20:** `compile_scaling_native.json` supersedes `compile_scaling_data.json`
+   **UPDATE 2026-08-20b (FSCALE_REVISION applied):** `F_scale_data.json` + `F_scale_strip.*`
+   (Fig C strip, 1/3-width, 3 series source|NSR|PSR with the 0.3%-of-source ratio) +
+   `F_scale_appendix.*` (generic ceiling, 1D/2D, two-regime PSR slopes 1.1/1.5 with fit
+   windows, per-pass inset) supersede everything below. Builder tests/build_F_scale.py;
+   accounting + scope in figures/F_scale_data_note.md (timing scope = schedule ops + ledger,
+   NOT pulse-shape synthesis — G0 wording must follow; PSR totals at m=48 reported honestly).
+   **UPDATE 2026-08-20 (superseded):** `compile_scaling_native.json` supersedes `compile_scaling_data.json`
    (which caps at n=12 — the old all-pairs path's practical ceiling). New specializer layer
    (src/simuq/specializer.py, compile(specialize=True)) reaches n=1000 in ~60 s (fitted slope
    ~1.9; old path ~4.4), 3 reps/point below 5 s, max|dH| ≤ 4e-13, per-branch PSR map cost

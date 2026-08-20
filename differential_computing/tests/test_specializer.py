@@ -295,3 +295,27 @@ def test_grid_hardware_map():
     led = prov.get_pulse_ledger(program_idx=0, branch_idx=0)
     kinds = [e.channel_kind for e in led.entries if e.channel_kind]
     assert "dressing" in kinds and "kick" in kinds
+
+
+# ── NSR shift table (waveform-shift derivative branches) ─────────────────────
+
+def test_nsr_shift_table_realizes_shifted_target():
+    """The O(n) coefficient table must realize B + s·A exactly on the frozen
+    geometry: every kept pair's ZZ coefficient becomes θ+s and the detunings
+    keep cancelling the dressing's single-Z side effect."""
+    n, s = 7, 0.3
+    qs, _ = tfim_qs(n)
+    plan = specializer.make_plan(qs, C_6=rydberg2d.C_6)
+    tab = specializer.nsr_shift_table(plan, s)
+
+    theta_p = {}
+    for j, i in plan.dressing_pairs:
+        d2 = (plan.positions[i][0] - plan.positions[j][0]) ** 2 + \
+             (plan.positions[i][1] - plan.positions[j][1]) ** 2
+        th = tab["o"] * rydberg2d.C_6 / (4.0 * d2 ** 3)
+        assert th == pytest.approx(plan.theta + s, rel=1e-12)
+        theta_p[i] = theta_p.get(i, 0.0) + th
+        theta_p[j] = theta_p.get(j, 0.0) + th
+    for i in range(n):
+        # Z_i coefficient of patched model: d_i/2 − Σ_j θ'_ij must vanish
+        assert tab["d"][i] / 2.0 - theta_p[i] == pytest.approx(0.0, abs=1e-12)
