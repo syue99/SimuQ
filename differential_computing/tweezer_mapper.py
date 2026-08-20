@@ -244,8 +244,12 @@ def classify_instruction(ins):
     if "dressing" in name.lower():
         return ('dressing',)
     if name.startswith("c") and name.endswith("_zz"):
-        # format: "c{q0}{q1}_zz"  (single-digit indices, n ≤ 9)
-        return ('zz', int(name[1]), int(name[2]))
+        # new format: "c{q0}_{q1}_zz" (any n); legacy: "c{q0}{q1}_zz" (n ≤ 9)
+        body = name[1:-3]
+        if "_" in body:
+            q0_s, q1_s = body.split("_")
+            return ('zz', int(q0_s), int(q1_s))
+        return ('zz', int(body[0]), int(body[1]))
     return ('unknown',)
 
 
@@ -270,10 +274,16 @@ class TweezerMapper:
     """
 
     def __init__(self, n_qubits, sol_gvars, boxes, ramp_time=10.0,
-                 cz_gate_time=0.25, R_cz=2.5):
+                 cz_gate_time=0.25, R_cz=2.5, dressing_pairs=None):
         self.n         = int(n_qubits)
         self.sol_gvars = list(sol_gvars)
         self.boxes     = boxes
+        # Restrict the dressing Hamiltonian reconstruction to these (i, j)
+        # pairs (specialized machines truncate the 1/R^6 tail); None = all.
+        self.dressing_pairs = (
+            None if dressing_pairs is None
+            else sorted({(min(a, b), max(a, b)) for a, b in dressing_pairs})
+        )
         self.ramp_time = float(ramp_time)   # μs
         # Digital CZ used for ZZ *kick* segments (evolution ZZ stays analog):
         # physical gate duration and deep-blockade pair separation.
@@ -370,31 +380,37 @@ class TweezerMapper:
         n = self.n
         pos = self.interaction_positions()
 
-        # Build (I - Z_i)/2 in terms of TIHamiltonian ops
-        # n_i = I/2 - Z_i/2
-        H_total = TIHamiltonian.empty(sites_type, sites_name)
+        if self.dressing_pairs is not None:
+            pairs = self.dressing_pairs
+        else:
+            pairs = [(j, i) for i in range(n) for j in range(i)]
 
-        for i in range(n):
-            for j in range(i):
-                dsqr = (pos[i][0] - pos[j][0]) ** 2 + (pos[i][1] - pos[j][1]) ** 2
-                if dsqr < 1e-20:
-                    continue
-                Jij = float(o_coef) * C_6 / (dsqr ** 3)
+        # n_i * n_j = (I-Z_i)/2 * (I-Z_j)/2 = (I - Z_i - Z_j + Z_iZ_j)/4.
+        # Accumulate the flat term list and build the TIHamiltonian once —
+        # repeated H + h re-runs cleanHam per pair and is O(pairs^2).
+        terms = []
+        for j, i in pairs:
+            dsqr = (pos[i][0] - pos[j][0]) ** 2 + (pos[i][1] - pos[j][1]) ** 2
+            if dsqr < 1e-20:
+                continue
+            Jij = float(o_coef) * C_6 / (dsqr ** 3)
 
-                # n_i * n_j = (I-Z_i)/2 * (I-Z_j)/2
-                # = (I·I - I·Z_j - Z_i·I + Z_i·Z_j) / 4
-                I_H = TIHamiltonian.identity(sites_type, sites_name)
-                Zi = TIHamiltonian.op(sites_type, sites_name, i, "Z")
-                Zj = TIHamiltonian.op(sites_type, sites_name, j, "Z")
-                ZiZj_prod = productHamiltonian()
-                ZiZj_prod[i] = "Z"
-                ZiZj_prod[j] = "Z"
-                ZiZj = TIHamiltonian(sites_type, sites_name, [(ZiZj_prod, 1.0)])
+            id_prod = productHamiltonian()
+            Zi_prod = productHamiltonian()
+            Zi_prod[i] = "Z"
+            Zj_prod = productHamiltonian()
+            Zj_prod[j] = "Z"
+            ZiZj_prod = productHamiltonian()
+            ZiZj_prod[i] = "Z"
+            ZiZj_prod[j] = "Z"
+            terms.extend([
+                (id_prod, Jij * 0.25),
+                (Zi_prod, -Jij * 0.25),
+                (Zj_prod, -Jij * 0.25),
+                (ZiZj_prod, Jij * 0.25),
+            ])
 
-                ninj = (I_H + (-1.0) * Zj + (-1.0) * Zi + ZiZj) * 0.25
-                H_total = H_total + Jij * ninj
-
-        return H_total
+        return TIHamiltonian(sites_type, sites_name, terms)
 
     def _build_zz_H(self, J, q0, q1, sites_type, sites_name):
         """

@@ -83,6 +83,8 @@ def solve_aligned(
         tol = solver_args
         time_penalty = 0
         fix_time = False
+        switch_init = 0.5
+        sparse_jac = False
     else:
         tol = solver_args["tol"]
         if "time_penalty" in solver_args.keys():
@@ -90,6 +92,13 @@ def solve_aligned(
         else:
             time_penalty = 0
         fix_time = solver_args.get("fix_time", False)
+        # switch_init: initial value for the {0,1} switch relaxation vars.
+        # Warm-started native compiles set 1.0 so an exact analytic init is
+        # already a residual-zero point of the first round.
+        switch_init = solver_args.get("switch_init", 0.5)
+        # sparse_jac: hand scipy the known equation/variable support pattern
+        # so it finite-differences the Jacobian in O(nnz) instead of O(m·n).
+        sparse_jac = solver_args.get("sparse_jac", False)
     logger.info(ali)
     if verbose > 0:
         print("Start_solving for ", ali)
@@ -125,9 +134,38 @@ def solve_aligned(
     def is_id(tprod):
         return tprod == productHamiltonian()
 
+    def _contributor_support(evo_index, ins, mc, total_evo_num):
+        """Solver-variable indices an ins_fun contribution depends on."""
+        sup = {locate_timevar(mach, total_evo_num, evo_index),
+               locate_evo(mach, evo_index) + ins.index}
+        for var in mc.vars:
+            if var.index < len(mach.gvars):
+                sup.add(var.index)
+            else:
+                sup.add(
+                    locate_evo(mach, evo_index) + mach.num_inss
+                    + (var.index - len(mach.gvars))
+                )
+        return sup
+
     def build_eqs(fixed_values):
         eqs = []
+        eq_supports = []  # parallel to eqs: solver-variable indices per equation
         total_evo_num = len(qs.evos)
+
+        # Index machine instruction terms by product content once — build_eqs
+        # is then O(total terms) instead of O(#targets · #instructions).
+        # (i, j) preserves the original line/instruction iteration order.
+        term_index = {}
+        ins_max_bc = {}
+        for i in range(len(mach.lines)):
+            line = mach.lines[i]
+            for j in range(len(line.inss)):
+                ins = line.inss[j]
+                ins_max_bc[(i, j)] = _max_body_count(ins)
+                for mprod, mc in ins.h.ham:
+                    term_index.setdefault(mprod.to_tuple(), []).append((i, j, ins, mc))
+
         for evo_index in range(total_evo_num):
             (h, t) = qs.evos[evo_index]
             mark = [[0 for ins in line.inss] for line in mach.lines]
@@ -146,6 +184,7 @@ def solve_aligned(
                         raise Exception("Met complex coefficients, not implemented yet.")
                     tc = tc.real
                 eq = (lambda c: lambda x: -c)(tc * t)
+                support = {locate_timevar(mach, total_evo_num, evo_index)}
                 targ_bc = _body_count(tprod)
                 # Body-count filter: don't let multi-body instructions
                 # (dressing, ZZ) contribute to single-body ORIGINAL target
@@ -154,26 +193,22 @@ def solve_aligned(
                 # the solver needs all contributors in the equation so
                 # detuning can compensate dressing's single-qubit side-effects.
                 is_side_effect = (isinstance(tc, (int, float)) and tc == 0)
-                for i in range(len(mach.lines)):
-                    line = mach.lines[i]
-                    for j in range(len(line.inss)):
-                        ins = line.inss[j]
-                        if targ_bc <= 1 and _max_body_count(ins) > 1 and not is_side_effect:
-                            continue
-                        for mprod, mc in ins.h.ham:
-                            if tprod == mprod:  # This compares the contents of prodHams.
-                                eq = (lambda eq_, f_: lambda x: eq_(x) + f_(x))(
-                                    eq, ins_fun(mach, evo_index, ins.index, mc, total_evo_num)
-                                )
-                                mark[i][j] = 1
-                                # Check if other terms of machine instruction exists in targer Ham terms.
-                                for mprod_prime, _ in ins.h.ham:
-                                    mprod_prime_tup = mprod_prime.to_tuple()
-                                    if mprod_prime_tup not in targ_hash:
-                                        targ_terms.append((mprod_prime, 0))
-                                        targ_hash.add(mprod_prime_tup)
-                                break
+                for i, j, ins, mc in term_index.get(tprod.to_tuple(), []):
+                    if targ_bc <= 1 and ins_max_bc[(i, j)] > 1 and not is_side_effect:
+                        continue
+                    eq = (lambda eq_, f_: lambda x: eq_(x) + f_(x))(
+                        eq, ins_fun(mach, evo_index, ins.index, mc, total_evo_num)
+                    )
+                    support |= _contributor_support(evo_index, ins, mc, total_evo_num)
+                    mark[i][j] = 1
+                    # Check if other terms of machine instruction exists in targer Ham terms.
+                    for mprod_prime, _ in ins.h.ham:
+                        mprod_prime_tup = mprod_prime.to_tuple()
+                        if mprod_prime_tup not in targ_hash:
+                            targ_terms.append((mprod_prime, 0))
+                            targ_hash.add(mprod_prime_tup)
                 eqs.append((lambda eq_: lambda x: eq_(x))(eq))
+                eq_supports.append(support)
                 if verbose > 1:
                     print(len(eqs))
                 ind += 1
@@ -192,12 +227,14 @@ def solve_aligned(
                                         ins_fun(mach, evo_index, ins.index, mc, total_evo_num)
                                     )
                                 )
+                                eq_supports.append(_contributor_support(
+                                    evo_index, ins, mc, total_evo_num))
                     elif mark[i][j] == 0:
                         fixed_values[locate_switch(mach, evo_index, ins.index)] = 0
                         for lvar_index in ins.vars_index:
                             fixed_values[locate_lvar(mach, evo_index, lvar_index)] = 0
 
-        return eqs, fixed_values
+        return eqs, fixed_values, eq_supports
 
     def build_obj(eqs, fixed_values):
         lbs = []
@@ -222,7 +259,7 @@ def solve_aligned(
                 elif (i - len(mach.gvars)) % (mach.num_inss + len(mach.lvars)) < mach.num_inss:
                     lbs.append(0)
                     ubs.append(1)
-                    init.append(0.5)
+                    init.append(switch_init)
                 else:
                     ind = (i - len(mach.gvars)) % (mach.num_inss + len(mach.lvars)) - mach.num_inss
                     lbs.append(mach.lvars[ind].lower_bound)
@@ -256,13 +293,34 @@ def solve_aligned(
             )
         return eqs
 
+    def build_sparsity(eq_supports, fixed_values, with_penalty):
+        """Jacobian sparsity for [offset] + eqs (+ penalty rows), in the
+        reduced (free-variable) space that build_obj's mapper produces."""
+        from scipy.sparse import lil_matrix
+
+        free_index = {}
+        for i in range(nvar):
+            if fixed_values[i] is None:
+                free_index[i] = len(free_index)
+        n_pen = len(qs.evos) if with_penalty else 0
+        A = lil_matrix((1 + len(eq_supports) + n_pen, len(free_index)))
+        for r, sup in enumerate(eq_supports):
+            for v in sup:
+                if v in free_index:
+                    A[1 + r, free_index[v]] = 1
+        for k in range(n_pen):
+            v = locate_timevar(mach, len(qs.evos), k)
+            if v in free_index:
+                A[1 + len(eq_supports) + k, free_index[v]] = 1
+        return A
+
     if solver == "least_squares":
         # fix_time = True
         logger.info("Using Scipy's Least Square Solver.")
         import scipy.optimize as opt
 
         nvar = len(mach.gvars) + len(qs.evos) * (mach.num_inss + len(mach.lvars)) + len(qs.evos)
-        eqs, fixed_values = build_eqs([None for i in range(nvar)])
+        eqs, fixed_values, eq_supports = build_eqs([None for i in range(nvar)])
         if fix_time:
             for j in range(len(qs.evos)):
                 fixed_values[locate_timevar(mach, len(qs.evos), j)] = qs.evos[j][1]
@@ -278,6 +336,11 @@ def solve_aligned(
         else:
             f_solve = f
 
+        ls_kwargs = {}
+        if sparse_jac:
+            ls_kwargs["jac_sparsity"] = build_sparsity(
+                eq_supports, fixed_values, time_penalty != 0)
+
         if verbose > 0:
             print("#vars", nvar, "#eqs", len(eqs))
             print("inits: ", init)
@@ -287,7 +350,8 @@ def solve_aligned(
 
         start_time = time.time()
         sol_detail = opt.least_squares(
-            f_solve, init, bounds=(lbs, ubs), verbose=2 if verbose > 0 else 0
+            f_solve, init, bounds=(lbs, ubs), verbose=2 if verbose > 0 else 0,
+            **ls_kwargs
         )
         end_time = time.time()
         if verbose > 0:
@@ -315,6 +379,22 @@ def solve_aligned(
                         if _max_body_count(ins) > 1 and ins.nativeness == "native":
                             has_dressing = True
 
+        # Support-aware switch pruning: zeroing one switch only perturbs the
+        # equations whose support contains it, so evaluate just those instead
+        # of the full residual per candidate.
+        full_x = list(fixed_values)
+        _k = 0
+        for _i in range(nvar):
+            if fixed_values[_i] is None:
+                full_x[_i] = sol[_k]
+                _k += 1
+        eq_residuals = [eq(full_x) for eq in eqs]
+        var_to_eqs = {}
+        for _r, _sup in enumerate(eq_supports):
+            for _v in _sup:
+                var_to_eqs.setdefault(_v, []).append(_r)
+        ins_by_index = {ins.index: ins for line in mach.lines for ins in line.inss}
+
         map_var = []
         map_var_revert = [None for i in range(nvar)]
         new_fixed_values = [fixed_values[i] for i in range(len(fixed_values))]
@@ -332,31 +412,28 @@ def solve_aligned(
                 ):
                     # Identify the instruction for this switch
                     ins_offset = (i - len(mach.gvars)) % (mach.num_inss + len(mach.lvars))
-                    ins_obj = None
-                    for line in mach.lines:
-                        for ins in line.inss:
-                            if ins.index == ins_offset:
-                                ins_obj = ins
-                                break
-                        if ins_obj is not None:
-                            break
+                    ins_obj = ins_by_index.get(ins_offset)
 
                     # If dressing is active, keep single-qubit instructions
                     # (they compensate dressing side-effects)
                     if has_dressing and ins_obj is not None and _max_body_count(ins_obj) <= 1:
                         new_fixed_values[i] = 1
                     else:
-                        temp_store = sol[label]
-                        sol[label] = 0
-                        if np.linalg.norm(f(sol)[1:], 1) - sol_error > 1e-5:
+                        temp_store = full_x[i]
+                        full_x[i] = 0
+                        delta = sum(
+                            abs(eqs[r](full_x)) - abs(eq_residuals[r])
+                            for r in var_to_eqs.get(i, [])
+                        )
+                        full_x[i] = temp_store
+                        if delta > 1e-5:
                             new_fixed_values[i] = 1
                         else:
                             new_fixed_values[i] = 0
-                        sol[label] = temp_store
                 else:
                     new_init.append(sol[label])
 
-        eqs, fixed_values = build_eqs(new_fixed_values)
+        eqs, fixed_values, eq_supports = build_eqs(new_fixed_values)
         if fix_time:
             for j in range(len(qs.evos)):
                 fixed_values[locate_timevar(mach, len(qs.evos), j)] = qs.evos[j][1]
@@ -369,9 +446,15 @@ def solve_aligned(
         else:
             f_solve = f
 
+        ls_kwargs = {}
+        if sparse_jac:
+            ls_kwargs["jac_sparsity"] = build_sparsity(
+                eq_supports, fixed_values, time_penalty != 0)
+
         start_time = time.time()
         sol_detail = opt.least_squares(
-            f_solve, new_init, bounds=(lbs, ubs), verbose=2 if verbose > 0 else 0
+            f_solve, new_init, bounds=(lbs, ubs), verbose=2 if verbose > 0 else 0,
+            **ls_kwargs
         )
         end_time = time.time()
         if verbose > 0:
