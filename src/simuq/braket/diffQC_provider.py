@@ -257,8 +257,16 @@ class diffQCProvider(BaseProvider):
         state_prep=None,
         meas_prep=None,
         no_main_body=False,
+        specialize=False,
+        spec_shells=1,
         verbose=0,
     ):
+        """specialize=True routes rydberg2d through the target-aware
+        specializer (simuq.specializer): frozen chain geometry, pruned
+        ZZ/dressing pairs, analytic warm start, sparse-Jacobian solve.
+        spec_shells controls the dressing truncation radius (in units of the
+        chain spacing)."""
+        self._spec_plan = None
         if (provider, device) not in self.backend_aais.keys():
             raise Exception("Not supported hardware provider or device.")
         if aais not in self.backend_aais[(provider, device)]:
@@ -279,6 +287,24 @@ class diffQCProvider(BaseProvider):
                 if _BRAKET_AVAILABLE:
                     transpiler = BraketRydbergTranspiler(2)
                 mach = rydberg2d_global.generate_qmachine(nsite)
+            elif aais == "rydberg2d" and specialize:
+                if _BRAKET_AVAILABLE:
+                    transpiler = BraketRydbergTranspiler(2)
+                from simuq import specializer
+
+                plan = specializer.make_plan(qs, C_6=rydberg2d.C_6,
+                                             shells=spec_shells)
+                mach = rydberg2d.generate_qmachine(
+                    nsite,
+                    inits=plan.positions,
+                    fix_positions=True,
+                    links=plan.links,
+                    dressing_pairs=plan.dressing_pairs,
+                )
+                specializer.apply_warm_start(mach, plan)
+                self._spec_plan = plan
+                if verbose > 0:
+                    print(f"[diffQCProvider/specialize] {plan.report}")
             elif aais == "rydberg2d":
                 if _BRAKET_AVAILABLE:
                     transpiler = BraketRydbergTranspiler(2)
@@ -335,6 +361,30 @@ class diffQCProvider(BaseProvider):
                     "Currently SimuQ does not support measurement preparation "
                     "pulses for QuEra devices."
                 )
+
+            if self._spec_plan is not None:
+                # Specialized path: geometry is frozen and the warm start is
+                # analytic, so one sparse solve suffices (the first pass only
+                # existed to find a usable init).
+                trotter_args = {"num": trotter_num, "order": 1,
+                                "sequential": True, "randomized": False}
+                layout, sol_gvars, boxes, edges = generate_as(
+                    qs,
+                    mach,
+                    trotter_args=trotter_args,
+                    solver="least_squares",
+                    solver_args={"tol": tol, "fix_time": True,
+                                 "sparse_jac": True, "switch_init": 1.0},
+                    override_layout=list(range(nsite)),
+                    verbose=verbose,
+                )
+                # The machine has no position gvars — hand downstream (the
+                # tweezer mapper reads geometry from sol_gvars) the plan's
+                # frozen positions in the same [x1, y1, ...] layout.
+                sol_gvars = self._spec_plan.flat_positions
+                self.sol = [layout, sol_gvars, boxes, edges]
+                self.prog = [qs.num_sites, sol_gvars, boxes, edges, trotter_args]
+                return
 
             # First pass: solve with tight time penalty (used for layout / init)
             layout, sol_gvars, boxes, edges = generate_as(
@@ -587,11 +637,13 @@ class diffQCProvider(BaseProvider):
             sys.path.insert(0, _DIFF_COMPUTING_PATH)
         from tweezer_mapper import TweezerMapper
 
+        spec_plan = getattr(self, "_spec_plan", None)
         mapper = TweezerMapper(
             n_qubits=n_sites,
             sol_gvars=sol_gvars,
             boxes=boxes,
             ramp_time=0.01,
+            dressing_pairs=None if spec_plan is None else spec_plan.dressing_pairs,
         )
 
         self._branch_ops     = []   # (branch_op_list, ugrad, n_rep)

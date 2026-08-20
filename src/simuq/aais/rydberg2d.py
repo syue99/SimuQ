@@ -108,7 +108,17 @@ def generate_qmachine(n=2, inits=None, fix_positions=False, links=None, dressing
             dsqr = (x[i][0] - x[j][0]) ** 2 + (x[i][1] - x[j][1]) ** 2
             #Jij = J0/(1+(dsqr/rc)**6)
             #hlist.append(Jij * noper[i] * noper[j])
-            hlist.append(o * C_6 / (dsqr**3) * noper[i] * noper[j])  # C6/R^6, dsqr=R^2 so dsqr**3=R^6
+            if fix_positions:
+                # Same operator content as noper[i]*noper[j] minus the inert
+                # identity part (global phase). cleanHam merges all pairs'
+                # identity coefficients into a single O(#pairs)-deep
+                # Expression chain, which overflows Python recursion at
+                # n ~ 1000; every non-identity product appears in O(1)
+                # pairs, so dropping identity keeps expressions shallow.
+                c = C_6 / (4.0 * dsqr**3)
+                hlist.append(o * c * (q[i].Z * q[j].Z - q[i].Z - q[j].Z))
+            else:
+                hlist.append(o * C_6 / (dsqr**3) * noper[i] * noper[j])  # C6/R^6, dsqr=R^2 so dsqr**3=R^6
     dressing_h = hlist_sum(hlist)
     ins.set_ham(dressing_h)
 
