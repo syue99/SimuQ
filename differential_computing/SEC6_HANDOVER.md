@@ -93,6 +93,14 @@ Ordered by "genuinely new" vs "replot/relocate":
    Expected (measure, don't discover): NSR ≈ coefficient-only overhead; PSR adds bounded
    +k segments; neither combinatorial. Need dispersion (repetitions/point). `compile_scaling_data.json`
    may already hold this — verify it covers n=1000 and has repetitions; else re-time.
+   **UPDATE 2026-08-20:** `compile_scaling_native.json` supersedes `compile_scaling_data.json`
+   (which caps at n=12 — the old all-pairs path's practical ceiling). New specializer layer
+   (src/simuq/specializer.py, compile(specialize=True)) reaches n=1000 in ~60 s (fitted slope
+   ~1.9; old path ~4.4), 3 reps/point below 5 s, max|dH| ≤ 4e-13, per-branch PSR map cost
+   0.3→242 ms (slope ~1.5). Builder: tests/compile_scaling_native.py; plot:
+   tests/plot_compile_scaling_native.py → figures/compile_scaling_native.{png,pdf}. The
+   "source vs deriv" series split still needs a decision: current data gives source compile +
+   per-branch increment; NSR-deriv series not yet timed.
 
 ---
 
