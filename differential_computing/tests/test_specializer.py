@@ -214,3 +214,84 @@ def test_hardware_map_n20():
     assert "dressing" in kinds and "kick" in kinds
     # every position snapshot covers all atoms
     assert all(len(e.positions) == n for e in led.entries)
+
+
+# ── 2D grids ─────────────────────────────────────────────────────────────────
+
+def tfim_grid_qs(m, k, x_val=X_VAL, T_=T):
+    """Row-major m×k NN-grid TFIM: θ ΣZZ over grid bonds + ΣX."""
+    n = m * k
+    x = sp.Symbol("x")
+    qs = QSystem()
+    q = [Qubit(qs) for _ in range(n)]
+    bonds = []
+    for r in range(m):
+        for c in range(k):
+            i = r * k + c
+            if c + 1 < k:
+                bonds.append((i, i + 1))
+            if r + 1 < m:
+                bonds.append((i, i + k))
+    H = x * sum((q[a].Z * q[b].Z for a, b in bonds), 0 * q[0].Z)
+    for i in range(n):
+        H = H + q[i].X
+    qs.add_evolution(H.set_parameterizedHam({"x": x_val}), T_)
+    return qs, H, bonds
+
+
+def test_grid_plan_geometry_and_tail():
+    m, k = 3, 4
+    qs, _, bonds = tfim_grid_qs(m, k)
+    plan = specializer.make_plan(qs, C_6=rydberg2d.C_6)
+    assert sorted(plan.links) == sorted(bonds)
+    # shells=1 keeps exactly the grid bonds; diagonals (R*sqrt(2)) are dropped
+    assert sorted(plan.dressing_pairs) == sorted(bonds)
+    # lattice positions with spacing R, qubit 0 at origin
+    assert plan.positions[0] == (0.0, 0.0)
+    for r in range(m):
+        for c in range(k):
+            px, py = plan.positions[r * k + c]
+            assert px == pytest.approx(c * plan.R)
+            assert py == pytest.approx(r * plan.R)
+    # dropped tail is dominated by the (m-1)(k-1)*2 diagonals at J/8 each
+    n_diag = 2 * (m - 1) * (k - 1)
+    assert plan.dropped_zz_l1 > n_diag * abs(plan.theta) / 8 * 0.99
+    # per-bond relative tail ~12% — an order larger than the 1D chain's
+    assert 0.10 < plan.report["dropped_rel"] < 0.20
+
+
+def test_grid_warm_start_degree_pattern():
+    m, k = 3, 3
+    qs, _, _ = tfim_grid_qs(m, k)
+    plan = specializer.make_plan(qs, C_6=rydberg2d.C_6)
+    th = plan.theta
+    assert plan.detuning_init[0] == pytest.approx(2 * th * 2, rel=1e-9)  # corner
+    assert plan.detuning_init[1] == pytest.approx(2 * th * 3, rel=1e-9)  # edge
+    assert plan.detuning_init[4] == pytest.approx(2 * th * 4, rel=1e-9)  # center
+
+
+def test_grid_compile_matches_target():
+    qs, _, _ = tfim_grid_qs(3, 3)
+    prov = diffQCProvider()
+    prov.compile(qs, "quera", "Aquila", "rydberg2d", tol=0.1, specialize=True)
+    comp, boxes = compiled_ham(prov)
+    assert len(boxes) == 1
+    assert max_diff(comp, ham_dict(qs.evos[0][0])) < 1e-9
+    kinds = {classify_instruction(ins)[0]
+             for entries, _ in boxes for (_, ins, _, _) in entries}
+    assert kinds == {"detuning", "rabi", "dressing"}
+
+
+def test_grid_hardware_map():
+    m, k = 4, 4
+    qs, H, _ = tfim_grid_qs(m, k)
+    prov = diffQCProvider()
+    prov.compile(qs, "quera", "Aquila", "rydberg2d", tol=0.1, specialize=True)
+    np.random.seed(3)
+    progs = observable_program_generator(H, T, n_sample=1, n_repetition=1,
+                                         diff_var="x", value=X_VAL)
+    assert len(progs) == 2 * m * k - m - k
+    prov.run(progs[:1], None, T, backend="hardware")
+    led = prov.get_pulse_ledger(program_idx=0, branch_idx=0)
+    kinds = [e.channel_kind for e in led.entries if e.channel_kind]
+    assert "dressing" in kinds and "kick" in kinds

@@ -43,22 +43,38 @@ X_VAL = 0.8
 TOL = 0.1
 NS_GENERIC = [2, 3, 4, 5, 6, 8, 10, 12]
 NS_SPECIAL = [4, 6, 8, 10, 20, 50, 100, 200, 500, 1000]
+# 2D series: full m×k NN grids (n = m·k), diagonal 1/R^6 tail declared-dropped
+GRIDS_SPECIAL = [(4, 4), (7, 7), (10, 10), (14, 14), (22, 22), (32, 32)]
 REPS_SMALL = 3          # repetitions for dispersion when a compile is cheap
 SMALL_CUTOFF_S = 5.0    # single rep beyond this
 
 
-def build_parametrized_H(n):
+def chain_qs(n):
     x = sp.Symbol("x")
     qs = QSystem()
     q = [Qubit(qs) for _ in range(n)]
     H = x * sum((q[i].Z * q[i + 1].Z for i in range(n - 1)), 0 * q[0].Z)
     for i in range(n):
         H = H + q[i].X
+    qs.add_evolution(H.set_parameterizedHam({"x": X_VAL}), T)
     return qs, H
 
 
-def fresh_qs(n):
-    qs, H = build_parametrized_H(n)
+def grid_qs(m, k):
+    x = sp.Symbol("x")
+    qs = QSystem()
+    q = [Qubit(qs) for _ in range(m * k)]
+    bonds = []
+    for r in range(m):
+        for c in range(k):
+            i = r * k + c
+            if c + 1 < k:
+                bonds.append((i, i + 1))
+            if r + 1 < m:
+                bonds.append((i, i + k))
+    H = x * sum((q[a].Z * q[b].Z for a, b in bonds), 0 * q[0].Z)
+    for i in range(m * k):
+        H = H + q[i].X
     qs.add_evolution(H.set_parameterizedHam({"x": X_VAL}), T)
     return qs, H
 
@@ -82,8 +98,9 @@ def compiled_H_error(prov, qs):
                for k in set(comp) | set(targ))
 
 
-def time_compile(n, specialize):
-    qs, H = fresh_qs(n)
+def time_compile(builder, series, specialize):
+    qs, H = builder()
+    n = qs.num_sites
     prov = diffQCProvider()
     times = []
     t0 = time.perf_counter()
@@ -92,14 +109,14 @@ def time_compile(n, specialize):
     times.append(time.perf_counter() - t0)
     if times[0] < SMALL_CUTOFF_S:
         for _ in range(REPS_SMALL - 1):
-            qs_r, _ = fresh_qs(n)
+            qs_r, _ = builder()
             prov_r = diffQCProvider()
             t0 = time.perf_counter()
             prov_r.compile(qs_r, "quera", "Aquila", "rydberg2d", tol=TOL,
                            specialize=specialize, verbose=0)
             times.append(time.perf_counter() - t0)
     err = compiled_H_error(prov, qs)
-    row = dict(n=n, series="specialized" if specialize else "generic",
+    row = dict(n=n, series=series,
                compile_s=float(np.median(times)),
                compile_s_all=[float(t) for t in times],
                segs=len(prov.prog[2]), max_dH=float(err))
@@ -126,26 +143,46 @@ def main():
     figdir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "figures"))
     os.makedirs(figdir, exist_ok=True)
     cache = os.path.join(figdir, "compile_scaling_native.json")
-    if os.path.exists(cache):
-        rows = json.load(open(cache))
+    rows = json.load(open(cache)) if os.path.exists(cache) else []
+    have = {r["series"] for r in rows}
+    if rows:
         print(f"loaded cache ({len(rows)} rows) — delete {cache} to re-time")
-    else:
-        rows = []
+
+    def spec_print(r, extra=""):
+        print(f"  n={r['n']:>4}  compile={r['compile_s']:8.2f}s  "
+              f"branch={r['branch_ms']:6.1f}ms  M={r['M']:>4}  "
+              f"ledger={r['ledger_entries']:>5}  "
+              f"max|dH|={r['max_dH']:.1e}  dropped_zz={r['dropped_zz']:.3f}"
+              f"{extra}", flush=True)
+
+    dirty = False
+    if "generic" not in have:
         print("series=generic (all-pairs machine, free positions)")
         for n in NS_GENERIC:
-            r = time_compile(n, specialize=False)
+            r = time_compile(lambda n=n: chain_qs(n), "generic", specialize=False)
             rows.append(r)
             print(f"  n={n:>4}  compile={r['compile_s']:8.2f}s  "
                   f"max|dH|={r['max_dH']:.1e}", flush=True)
+        dirty = True
+    if "specialized" not in have:
         print("series=specialized (frozen chain, pruned, warm start)")
         for n in NS_SPECIAL:
-            r = time_compile(n, specialize=True)
+            r = time_compile(lambda n=n: chain_qs(n), "specialized",
+                             specialize=True)
             rows.append(r)
-            print(f"  n={n:>4}  compile={r['compile_s']:8.2f}s  "
-                  f"branch={r['branch_ms']:6.1f}ms  M={r['M']:>4}  "
-                  f"ledger={r['ledger_entries']:>5}  "
-                  f"max|dH|={r['max_dH']:.1e}  dropped_zz={r['dropped_zz']:.3f}",
-                  flush=True)
+            spec_print(r)
+        dirty = True
+    if "specialized2d" not in have:
+        print("series=specialized2d (frozen m×k grid; diagonal J/8 tail "
+              "declared-dropped)")
+        for m, k in GRIDS_SPECIAL:
+            r = time_compile(lambda m=m, k=k: grid_qs(m, k), "specialized2d",
+                             specialize=True)
+            r["grid"] = [m, k]
+            rows.append(r)
+            spec_print(r, extra=f"  grid={m}x{k}")
+        dirty = True
+    if dirty:
         json.dump(rows, open(cache, "w"), indent=1, default=float)
         print(f"cached: {cache}")
 

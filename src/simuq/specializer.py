@@ -6,8 +6,8 @@ the fully general machine (all-pairs ZZ lines, all-pairs dressing terms, free
 atom positions), it inspects the target Hamiltonian's interaction graph and
 produces a SpecPlan that:
 
-  1. synthesizes a concrete geometry for the interaction graph (currently 1D
-     chains) and freezes atom positions to constants,
+  1. synthesizes a concrete geometry for the interaction graph (1D chains
+     and full rectangular NN grids) and freezes atom positions to constants,
   2. prunes derived ZZ signal lines to the bonds actually present,
   3. truncates the dressing sum to pairs within a shell cutoff, with the
      dropped 1/R^6 tail reported as an explicit error bound,
@@ -88,8 +88,8 @@ def extract_target(h, num_sites):
 def _order_path(bonds, sites):
     """Order `sites` along the path graph defined by `bonds`.
 
-    Returns the site ordering, or raises NotImplementedError if the bond graph
-    on these sites is not a simple path (cycles, branches, disconnection).
+    Returns the site ordering, or None if the bond graph on these sites is
+    not a simple open path (cycles, branches, disconnection).
     """
     adj = {s: [] for s in sites}
     for a, b in bonds:
@@ -97,28 +97,81 @@ def _order_path(bonds, sites):
         adj[b].append(a)
     degs = {s: len(v) for s, v in adj.items()}
     if any(d > 2 for d in degs.values()):
-        raise NotImplementedError(
-            "Interaction graph has a site with degree > 2 — only 1D chains "
-            "are supported by the specializer so far.")
+        return None
     ends = [s for s, d in degs.items() if d == 1]
     if len(ends) != 2 or len(bonds) != len(sites) - 1:
-        raise NotImplementedError(
-            "Interaction graph is not a single open chain (cycle, or "
-            "multiple components among coupled sites).")
+        return None
     order = [min(ends)]
     prev = None
     while len(order) < len(sites):
         nxts = [s for s in adj[order[-1]] if s != prev]
         if len(nxts) != 1:
-            raise NotImplementedError("Interaction graph is not a simple path.")
+            return None
         prev = order[-1]
         order.append(nxts[0])
     return order
 
 
+def _detect_grid(bonds, sites):
+    """Detect a full row-major m×k rectangular NN grid on `sites`.
+
+    Sites are ranked by index (row-major: rank = r*k + c). Returns
+    {site: (col, row)} lattice coordinates, or None if the bond set is not
+    exactly the NN-bond set of some full m×k grid with m, k >= 2.
+    """
+    rank = {s: i for i, s in enumerate(sorted(sites))}
+    n_c = len(sites)
+    offsets = {abs(rank[a] - rank[b]) for a, b in bonds}
+    vert = sorted(o for o in offsets if o > 1)
+    if len(vert) != 1 or 1 not in offsets:
+        return None
+    k = vert[0]
+    if k < 2 or n_c % k != 0:
+        return None
+    m = n_c // k
+    if m < 2:
+        return None
+    expected = set()
+    for r in range(m):
+        for c in range(k):
+            i = r * k + c
+            if c + 1 < k:
+                expected.add((i, i + 1))
+            if r + 1 < m:
+                expected.add((i, i + k))
+    got = {tuple(sorted((rank[a], rank[b]))) for a, b in bonds}
+    if got != expected:
+        return None
+    inv = {i: s for s, i in rank.items()}
+    return {inv[r * k + c]: (c, r) for r in range(m) for c in range(k)}
+
+
+def _embed_interaction_graph(bonds, sites):
+    """Integer lattice coordinates {site: (ix, iy)} realizing every bond at
+    unit distance: open chains (any labeling) and full row-major m×k grids."""
+    order = _order_path(bonds, sites)
+    if order is not None:
+        return {s: (i, 0) for i, s in enumerate(order)}
+    coords = _detect_grid(bonds, sites)
+    if coords is not None:
+        return coords
+    raise NotImplementedError(
+        "Interaction graph is neither a single open chain nor a full "
+        "row-major m×k grid — other topologies are not supported by the "
+        "specializer yet.")
+
+
 def make_plan(qs, C_6, shells=1, park_base=(1000.0, 1000.0), park_spacing=5.0,
               uniform_rtol=1e-6):
-    """Build a SpecPlan for a QSystem whose coupled sites form a 1D chain.
+    """Build a SpecPlan for a QSystem whose coupled sites form a 1D chain or
+    a full row-major m×k NN grid.
+
+    2D note: the shells=1 cutoff keeps exactly the grid bonds; the diagonal
+    pairs sit at R*sqrt(2), so their J/8 coupling is NOT compiled and NOT
+    cancellable by the global dressing line — it lands in dropped_zz_l1
+    (~12% relative L1 on a grid vs ~1.4% on a chain). Consumers must treat
+    that field as the declared physical deviation of the device from the
+    compiled model.
 
     The plan is derived from the union of bonds over all evolution segments;
     warm-start coefficients come from segment 0 (the evolution Hamiltonian —
@@ -155,11 +208,11 @@ def make_plan(qs, C_6, shells=1, park_base=(1000.0, 1000.0), park_spacing=5.0,
     o_init = float(np.sign(theta))
 
     coupled = sorted({s for b in all_bonds for s in b})
-    order = _order_path(all_bonds, coupled)
+    coords = _embed_interaction_graph(all_bonds, coupled)
 
     positions = [None] * n
-    for k, site in enumerate(order):
-        positions[site] = (k * R, 0.0)
+    for site, (ix, iy) in coords.items():
+        positions[site] = (ix * R, iy * R)
     n_parked = 0
     for i in range(n):
         if positions[i] is None:
