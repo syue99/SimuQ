@@ -17,10 +17,11 @@ fails — the "NSR-only" row), and commuting Pauli families are jointly
 extremizable (chi = Theta(1)); covered by the theorem in 6.3 prose, not by
 a synthesised fake pool.
 
-Fill: min(N_PSR, N_NSR) executions-to-target (log, sequential one-hue map).
-Contours: measured crossing (solid black), compile-time PREDICTED crossing
-(dashed) from static certificates (sigma -> sqrt(2), diam -> 2*Sum|v|),
-2x / 10x margin contours (dotted gray). Running TFIM instance of Fig. A
+Fill: min(N_PSR, N_NSR) executions-to-target (log, neutral gray bands —
+hue is reserved for the winner washes: PSR blue #0072B2, NSR green #009E73,
+the paper-wide strategy colors). Solid black contour: measured crossing.
+The compile-time certificate prediction has no crossing on this plane
+(caption/note finding, not a contour). Running TFIM instance of Fig. A
 marked at (P=2, k=1) (per-bond theta_i); its global-theta rewrite at
 (P=1, k=2) shows k is a property of the program text.
 
@@ -187,26 +188,27 @@ def run_sweep():
 # ── figure ───────────────────────────────────────────────────────────────────
 
 INK, SEC, MUTED, GRID, SURFACE = "#0b0b0b", "#52514e", "#898781", "#e1e0d9", "#fcfcfb"
+C_PSR, C_NSR = "#0072B2", "#009E73"          # paper-wide strategy colors
 
 
 def render(data, with_aligned, outname):
     import matplotlib
     matplotlib.use("Agg")
+    import matplotlib.patheffects as pe
     import matplotlib.pyplot as plt
     from matplotlib.colors import LinearSegmentedColormap
     from scipy.ndimage import gaussian_filter
 
-    # sequential one-hue ramp (light = cheap, dark = expensive)
-    seq = LinearSegmentedColormap.from_list("seqblue", [
-        "#cde2fb", "#9ec5f4", "#6da7ec", "#3987e5", "#256abf", "#184f95",
-        "#0d366b"])
+    # neutral gray ramp for the cost fill — hue is reserved for the
+    # winner washes, so magnitude never competes with identity
+    grays = LinearSegmentedColormap.from_list(
+        "costgray", ["#f4f3f0", "#43423f"])
 
     g = data["general"]
     Ps, ks = data["meta"]["Ps"], data["meta"]["ks"]
     Pg, Kg = np.meshgrid(Ps, ks)
     Z = gaussian_filter(np.array(g["Z"]), sigma=0.8)
-    Zp = gaussian_filter(np.array(g["Zpred"]), sigma=0.8)
-    F = np.array(g["logminN"])
+    F = gaussian_filter(np.array(g["logminN"]), sigma=0.5)
 
     fig, ax = plt.subplots(figsize=(3.4, 3.2), dpi=300)
     fig.subplots_adjust(left=0.13, right=0.88, top=0.86, bottom=0.14)
@@ -216,41 +218,50 @@ def render(data, with_aligned, outname):
     for s in ax.spines.values():
         s.set_color(GRID)
 
-    pc = ax.pcolormesh(Pg, Kg, F, cmap=seq, shading="gouraud", rasterized=True)
+    # discrete half-decade bands so a cell can be read off the colorbar
+    lo = np.floor(F.min() * 2) / 2
+    hi = np.ceil(F.max() * 2) / 2
+    levels = np.arange(lo, hi + 0.25, 0.5)
+    pc = ax.contourf(Pg, Kg, F, levels=levels, cmap=grays)
     cb = fig.colorbar(pc, ax=ax, fraction=0.045, pad=0.02)
     cb.set_label("executions to target (best strategy)", fontsize=7, color=SEC)
     cb.ax.tick_params(labelsize=6.5, colors=MUTED)
-    lo, hi = np.floor(F.min()), np.ceil(F.max())
-    ticks = np.arange(lo, hi + 1)
+    ticks = np.arange(np.ceil(lo), np.floor(hi) + 1)
     cb.set_ticks(ticks)
     cb.set_ticklabels([f"$10^{{{int(t)}}}$" for t in ticks])
 
-    # measured crossing (solid black). The compile-time certificate
-    # prediction has no crossing on this plane (it says PSR-or-tie
-    # everywhere: the 2Σ|v| diameter certificate is loose for
-    # non-commuting mixed tangents) — that finding lives in the caption
-    # and note, not as a degenerate contour. The aligned-pool overlay,
-    # where the certificate is near-tight, is in the appendix variant.
+    # transparent winner washes over the gray fill, split at the measured
+    # crossing (solid black). The compile-time certificate prediction has
+    # no crossing on this plane (it says PSR-or-tie everywhere: the 2Σ|v|
+    # diameter certificate is loose for non-commuting mixed tangents) —
+    # that finding lives in the caption and note, not as a degenerate
+    # contour. The aligned-pool overlay, where the certificate is
+    # near-tight, is in the appendix variant.
+    ax.contourf(Pg, Kg, Z, levels=[-99.0, 0.0, 99.0],
+                colors=[C_NSR, C_PSR], alpha=0.30, antialiased=True,
+                zorder=3)
     ax.contour(Pg, Kg, Z, levels=[0.0], colors="k", linewidths=1.6, zorder=4)
-    m = ax.contour(Pg, Kg, Z, levels=[-1.0, -np.log10(2), np.log10(2), 1.0],
-                   colors=MUTED, linewidths=0.7, linestyles=":")
-    ax.clabel(m, fmt={-1.0: "10×", -np.log10(2): "2×",
-                      np.log10(2): "2×", 1.0: "10×"}, fontsize=5.5,
-              colors=MUTED)
     if with_aligned:
         Za = gaussian_filter(np.array(data["aligned"]["Z"]), sigma=0.8)
-        ax.contour(Pg, Kg, Za, levels=[0.0], colors=INK, linewidths=1.2,
-                   linestyles="dashdot")
+        ca = ax.contour(Pg, Kg, Za, levels=[0.0], colors=INK, linewidths=1.2,
+                        linestyles="dashdot", zorder=4)
+        ca.set(path_effects=[pe.withStroke(linewidth=2.6,
+                                           foreground="#ffffff")])
         ax.annotate("dash-dot: aligned (ZZ-only) crossing —\n"
                     "alignment (χ→1) shrinks the NSR region",
                     xy=(0.29, 0.955), xycoords="axes fraction", fontsize=5.8,
-                    color=SEC, va="top")
+                    color=INK, va="top", zorder=6,
+                    bbox=dict(facecolor="#ffffff", alpha=0.75,
+                              edgecolor="none", pad=1.5))
 
-    # side labels for the solid boundary
-    ax.text(0.84, 0.10, "PSR", transform=ax.transAxes, fontsize=9,
-            weight="bold", color=INK, ha="center")
-    ax.text(0.12, 0.88, "NSR", transform=ax.transAxes, fontsize=9,
-            weight="bold", color="#ffffff", ha="center")
+    # winner labels inside the washed regions, in the wash's own hue
+    halo = [pe.withStroke(linewidth=2.0, foreground="#ffffff")]
+    ax.text(0.13, 0.87, "NSR\nwins", transform=ax.transAxes, fontsize=8.5,
+            weight="bold", color="#00654a", ha="center", va="center",
+            path_effects=halo, zorder=5)
+    ax.text(0.80, 0.13, "PSR\nwins", transform=ax.transAxes, fontsize=8.5,
+            weight="bold", color="#00517e", ha="center", va="center",
+            path_effects=halo, zorder=5)
 
     # running instance of Fig. A: per-bond theta_i -> (P=2, k=1); the same
     # physics with one shared global theta -> (P=1, k=2)
@@ -300,8 +311,10 @@ def write_notes(data):
         "gives k=n−1). Alphabet = the device signature {X_a, Z_a, Z_aZ_b}; "
         "fill = min(N_PSR, N_NSR) to a fixed target (units R=1, Δτ=1; "
         "N_S = C_S²·ε_t⁻²·log(1/δ), so changing the target rescales the "
-        "colorbar and leaves the boundary fixed). Solid black: measured "
-        "crossing. The crossing computed at compile time from static "
+        "colorbar and leaves the boundary fixed). Shaded overlays mark the "
+        "winner: blue = PSR needs fewer executions, green = NSR does; "
+        "solid black: the measured crossing between them. The crossing "
+        "computed at compile time from static "
         "certificates alone (C_NSR from the Assumption-4.4 spectral "
         "certificate 2Σ|v|; C_PSR from the coefficient expressions with the "
         "worst-case branch deviation √2) does NOT cross on this plane: for "
@@ -309,8 +322,7 @@ def write_notes(data):
         "the certificate-guided compiler picks PSR everywhere here — the "
         "safe direction (looseness costs shots, never bias, Remark B.1), "
         f"forfeiting at most {certificate_forfeit(g):.1f}× shots at any "
-        "sampled point, bounded by the margin contours. "
-        "Dotted gray: 2× and 10× cost-ratio margins. Star: the TFIM instance "
+        "sampled point. Star: the TFIM instance "
         "of Fig. A (P=2 per-bond couplings, k=1); open circle: its "
         "global-coefficient rewrite. Operating point: high-entropy states, "
         f"mean per-branch shot std ⟨σ⟩≈{meta['sigma_mean']:.2f} "
