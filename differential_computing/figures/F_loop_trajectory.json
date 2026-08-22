@@ -1,0 +1,63 @@
+{
+  "theta_star": [
+    1.0,
+    1.0
+  ],
+  "a_star": 0.22056957269656619,
+  "b_star": 0.3882380365007992,
+  "w": 0.25,
+  "start": [
+    0.8019362586952951,
+    1.2511628045320065
+  ],
+  "mu_soft": 0.30982709734470815,
+  "C3_soft": 1.2400751658565066,
+  "delta": 0.02,
+  "oracle_eps": 0.15,
+  "B": 6000,
+  "tolerance": 0.03,
+  "seeds": 20,
+  "C_star": 0.0,
+  "summary": {
+    "PSR": {
+      "final_err": 0.02200875052512211,
+      "held_step": 10,
+      "term5_step": 10,
+      "frac_in_tol_at50": 0.8,
+      "C_final": 0.0002682300501386854,
+      "predicted_offset": null
+    },
+    "NSR": {
+      "final_err": 0.029104602217871256,
+      "held_step": 34,
+      "term5_step": 34,
+      "frac_in_tol_at50": 0.8,
+      "C_final": 0.0006499794058505453,
+      "predicted_offset": null
+    },
+    "FD \u03b5=0.15 (best \u03b5 \u2014 needs \u03b8*)": {
+      "final_err": 0.043702702330766244,
+      "held_step": null,
+      "term5_step": null,
+      "frac_in_tol_at50": 0.35,
+      "C_final": 0.0013041232004925066,
+      "predicted_offset": 0.44535683414345484
+    },
+    "FD \u03b5=0.7 (too large: fails)": {
+      "final_err": 0.5656854249492379,
+      "held_step": null,
+      "term5_step": null,
+      "frac_in_tol_at50": 0.0,
+      "C_final": 0.23763482239273376,
+      "predicted_offset": 0.4190861125312769
+    },
+    "FD \u03b5=0.04 (too small: unreliable)": {
+      "final_err": 0.03828421429114446,
+      "held_step": null,
+      "term5_step": null,
+      "frac_in_tol_at50": 0.25,
+      "C_final": 0.000773786953306474,
+      "predicted_offset": 1.6148706520470546
+    }
+  }
+}
