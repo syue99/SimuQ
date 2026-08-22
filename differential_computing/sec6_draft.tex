@@ -1,0 +1,220 @@
+% ============================================================================
+% SEC 6 DRAFT — per SEC6_OUTLINE_new.md (2026-08-19) with the
+% SEC6_FIGURE_REVISIONS_0821 rulings superseding its figure plan:
+%   F-phase WITHDRAWN -> F-select (one panel); F3's three panels absorbed as
+%   F-select's contours; F6 one panel + V inset; F-loop P=2 two-panel;
+%   F-scale = companion-table + strip float.
+% \owed{...} marks numbers gated on data runs still open per the 0821 doc
+% (F6 0.15-regime rerun + eps=0.05 rationale; F-loop small-eps arm, >=20-seed
+% IQR band, held-tolerance re-scoring). All other numbers are measured and
+% live in the cited data notes.
+% Budget ~2.4pp. Floats: T4, T-workloads (6.1); F6, F-loop (6.2, = Fig. A);
+% companion+F-select (6.3); F-scale float, T2 (6.4).
+% ============================================================================
+\newcommand{\owed}[1]{{\color{red}\textbf{[owed: #1]}}}
+
+\section{Evaluation}
+\label{sec:eval}
+
+Section~\ref{sec:compiler} leaves three handoffs open: whether analytic
+differentiation is worth compiling at all when a numerical fallback exists
+(\S\ref{sec:eval-fd}), how the compiler should choose between the two sound
+strategies it can emit (\S\ref{sec:eval-select}), and what differentiation
+costs as programs approach device scale (\S\ref{sec:eval-scale}). We answer
+them in that order: AD is needed, the physical realization matters, and the
+compiler scales.
+
+\subsection{Setup}
+\label{sec:eval-setup}
+
+\paragraph{Instrument.} Every compiled-pipeline result is produced by the
+emulator of Sec.~5.4: programs are compiled to machine-native Hamiltonian
+segments with their execution-normal-form orchestration, and each branch is
+simulated under a declared noise model --- the estimator we measure is the
+estimator the compiler ships. Noise follows Assumption~C.1: fixed-rate
+dephasing/decay on the interaction segments, gate infidelity
+$\varepsilon_{\mathrm{ins}}$ on inserted operations, and a control-setpoint
+error $\delta$ on drive amplitudes; the two uses of the excited state fail
+differently, so the dressing channel and the gate contribution are modeled
+separately. Table~\ref{tab:noise} (T4) is the sole home of every noise
+number in this section; rates are $\theta$-independent and drive-tracking
+noise is excluded. The headline regime is $T/T_2^{*}=0.15$ with $0.5$ as a
+stressor; each figure states its regime.
+
+\paragraph{Workloads.} Table~\ref{tab:workloads} lists the three program
+families: the running TFIM instance of Sec.~5.2
+($u^{X}_a=\Omega$, $u^{zz}=\theta$; both the per-bond form, $P$
+coefficients each touching $k{=}1$ term, and its global-coefficient
+rewrite, $P{=}1$ touching $k{=}n{-}1$ terms --- the same physics, two
+points of the design space of \S\ref{sec:eval-select}); a Heisenberg-bond
+program (non-commuting contraction, $\chi\approx0.5$); and a multi-stage
+non-commuting schedule exercising differentiation through segment
+composition. The table states which coefficients are differentiated and
+that no evaluated program requires a single-qubit insertion.
+
+\paragraph{Estimand.} Three objects are never mixed:
+\[
+\nabla C_{\mathrm{ideal}}
+\;\big|\;
+\nabla C_{\mathrm{noisy}}
+\;\big|\;
+\widehat{\nabla C},
+\]
+the ideal-dynamics gradient, the gradient of the objective the device
+actually realizes (the channel semantics of Appendix~C), and the physically
+realized estimate, which adds headroom truncation, insertion error, and
+setpoint error. All estimator error below is measured against
+$\nabla C_{\mathrm{noisy}}$: the device's landscape is the objective, and
+an estimator is judged by whether it descends \emph{that} landscape.
+Closed-loop runs share one optimizer (fixed-step gradient descent,
+identical step rule) and one budget --- every method spends the same
+number of quantum executions per gradient --- with success scored as
+\emph{reached and held} within tolerance, not passed through.
+
+\subsection{RQ1: analytic differentiation vs.\ the tuned numerical
+baseline}
+\label{sec:eval-fd}
+
+Sec.~4.4 admits finite differences as a derived transformation and defers
+its price. Figure~\ref{fig:A} (left, F6) prices it: gradient RMSE against
+$\nabla C_{\mathrm{noisy}}$ versus total executions $N$ for five series ---
+NSR, PSR, PSR with the gate channel enabled, FD at an oracle-tuned step
+$\varepsilon$ (chosen by retrospective global sweep; every FD run is
+finite-shot), and FD at a fixed default $\varepsilon$
+\owed{$\varepsilon=0.05$ rationale, F6-a}. The two sound strategies track
+$N^{-1/2}$ across the sampled range (fitted slopes in the data note); both
+FD series improve and then floor at their bias, which more shots never
+remove. The mechanism is Lemma~B.15's trap, model-free: shrinking
+$\varepsilon$ amplifies setpoint error as $\delta/\varepsilon$, growing it
+pays the $\varepsilon^{2}$ secant bias, and under noise the usable window
+between the walls narrows from the small-$\varepsilon$ side. The V-inset
+shows RMSE versus $\varepsilon$ at fixed $N$: the V's floor sits above
+both flat NSR/PSR reference lines for every $\varepsilon$
+\owed{0.15-regime rerun of the V data}. At low budgets
+($N\lesssim3{\times}10^{3}$) oracle-tuned FD is briefly competitive ---
+the sound strategies' advantage is a floor claim, not a speed claim. One
+sentence of theory contact: raw NSR and PSR converging to
+$\nabla C_{\mathrm{noisy}}$ at $N^{-1/2}$ \emph{through the full compiled
+pipeline} is simultaneously T1's soundness cell measured and the
+correctness evidence for the lowering itself.
+
+Figure~\ref{fig:A} (right, F-loop) shows the consequence where it matters:
+the same budget, spent in closed loop on the $P{=}2$ TFIM instance
+($T/T_2^{*}=0.15$, all methods at an identical 5000-execution budget per
+gradient, so optimization steps are directly comparable). The sound
+strategies reach and hold the target basin; FD stops a systematic offset
+short of $\theta^{*}$. The offset is not the resolution $\delta$ itself:
+it is (gradient bias)/(local curvature), $b(\varepsilon)\approx
+\delta/\varepsilon+(\varepsilon^{2}/24)\lvert C'''\rvert$ against
+$C''(\theta^{*})$, which is why the two FD arms plateau in different
+places --- at large $\varepsilon$ truncation dominates and the
+$\delta/\varepsilon$ term is negligible \owed{small-$\varepsilon$ arm
+(L3); $\ge$20-seed IQR band (L4); predicted-vs-measured plateau numbers}.
+$\delta$ is deterministic at an operating point --- it is the machine's
+amplitude resolution, not a per-shot draw --- which is exactly why the
+resulting bias is invisible to $N^{-1/2}$ averaging, the same reason the
+F6 floors exist. A biased estimator can still point in a better direction
+at particular operating points; so can a random direction. The claim the
+band supports is not that FD always loses but that it is
+\emph{unreliable}: its occasional advantage is point-specific and does not
+reproduce across seeds, and mapping where FD cannot be trusted is what
+this evaluation is for.
+
+\subsection{RQ2: choosing between NSR and PSR}
+\label{sec:eval-select}
+
+Sec.~5.3 lowers the same derivative semantics two ways and defers the
+choice; Corollary~5.2 makes both prices explicit:
+$N_{S}=C_{S}^{2}\,\epsilon^{-2}\log(1/\delta)$ with
+$C_{\mathrm{NSR}}=\overline{\Omega}_{\ell}R$ paid in statistics and
+headroom, and $C_{\mathrm{PSR}}=\Delta\tau\sup_{\tau}\sum_{j}\lvert
+\partial u_{j}/\partial\theta_{\ell}\rvert\,R$ paid in motion and one
+gate. Neither constant dominates the other, and that is the point: the
+choice is a compiler decision, made per program.
+
+Figure~\ref{fig:select} (F-select) draws the decision on the space the
+compiler actually sees: $P$ differentiated coefficients by $k$ touched
+alphabet terms, both properties of the program text --- $k$ is set by
+coefficient sharing, not physics (the running instance appears twice: its
+per-bond form at $(2,1)$ and its global-$\theta$ rewrite at $(1,n{-}1)$).
+The fill is what the chosen strategy costs
+($\min(N_{\mathrm{PSR}},N_{\mathrm{NSR}})$, target-independent up to a
+colorbar rescale since both are shot-noise limited here); the solid
+boundary is the measured crossing, with $2\times$/$10\times$ margins.
+PSR's cross-parameter branch reuse wins at large $P$; NSR's single
+combined shift wins where tangents are subextensive --- small $P$, large
+$k$, $15\%$ of the sampled plane even on this all-Pauli alphabet.
+Alignment moves the boundary: on the commuting ZZ-only pool the NSR region
+shrinks ($\chi\to1$; appendix variant), which is the joint-extremizability
+statement of the companion table measured. The table's remaining rows are
+covered by theorem rather than measurement: on this device alphabet every
+term is an involution, so the non-involutive, NSR-only regime --- and with
+it the $\chi=1/m$ telescoping compression, whose generator family
+$\sum_j(Z_j-Z_{j+1})$ is non-involutive --- cannot be instantiated;
+Assumption~4.7 fails there and only NSR applies. XX/YY terms are excluded
+by argument, not omission: the selection constants depend on
+$\operatorname{diam}(A_\ell)$ and the touched-term structure, not on which
+Pauli a term is, and Trotter-synthesised terms cost compilation, not
+shots, so they cannot move this boundary.
+
+Both constants are computable from program text alone, and
+Remark~B.1's promise is measured here: the certificate-guided choice
+(spectral certificate $2\sum_j\lvert v_j\rvert$, worst-case branch
+deviation $\sqrt2$) never selects NSR on this plane, while the measured
+NSR region is where the diameter certificate is loose --- measured
+diameters concentrate below the certificate for random-sign non-commuting
+tangents, while the $\sqrt2$ branch bound is nearly tight (measured
+$\langle\sigma\rangle=1.37$). The divergence is one-sided and priced:
+following the certificate forfeits at most $2.3\times$ shots at any
+sampled point ($2.8\times$ on the aligned pool) and never introduces bias
+--- static analysis with one-sided error, exactly as certified. The
+machine dimension needs one sentence, not a figure: gate infidelity adds a
+bias floor $\le C_{\mathrm{PSR}}\varepsilon_{\mathrm{ins}}$ to PSR that
+can flip the choice at poor gate fidelity; F6's PSR+gate series is the
+measurement, and its fitted floor slope against the computed
+$C_{\mathrm{PSR}}$ is reported in the data note. The same derivative
+semantics should compile to different physical strategies in different
+machine regimes.
+
+\subsection{RQ3: does differentiation scale through the compiler?}
+\label{sec:eval-scale}
+
+The claim is deliberately not ``SimuQ scales'': it is that making
+differentiation first-class adds only modest \emph{incremental} cost over
+the source compilation path. Figure~\ref{fig:scale} (companion table +
+strip) prices one gradient at device scale on the specialized 1D-chain
+path (every $n>12$ number is that path; the generic all-pairs solver caps
+at $n{=}12$ and lives in the appendix as a solver story, not a
+differentiation story). At $n{=}1000$ the source program compiles to
+machine-native schedule ops and its pulse ledger in $59.6\,$s; compiling
+one PSR derivative branch on top --- the structural re-map its inserted
+segment forces --- costs $175\,$ms, \textbf{0.29\%} of the source compile,
+and one NSR derivative branch costs a $191\,\mu$s coefficient table on the
+unchanged schedule ($+0$ segments). Both increments are marginal costs:
+the evolution solve is never re-run. The totals honor the asymmetry: a
+full PSR gradient at $m{=}48$ $\tau$-samples maps $2mM\approx9.6{\times}
+10^{4}$ branches ($4.7\,$h of mapper time, un-amortized --- branches share
+their segment structure, so template amortization is available but not yet
+claimed), while a full NSR gradient needs $2N{=}16$ tables,
+$3\,$ms. Timing runs through schedule-op emission and the ledger, not
+pulse-shape synthesis, and source compilation dominates everything a
+single branch does --- which strengthens, not weakens, the claim:
+differentiation is not the compilation bottleneck; the source path is.
+Table~\ref{tab:resources} (T2) closes the loop on execution cost: constant
+pulse depth per branch against the $10^{3}$--$10^{4}$ two-qubit gates a
+digital realization would pay at the $1.5{\times}10^{-4}$ parity
+threshold.
+
+\subsection{Takeaways}
+\label{sec:eval-takeaways}
+
+(1)~AD removes FD's tuning dimension and its bias floor, and the removal
+is visible where it matters, in closed loop against the device's own
+objective. (2)~Neither sound strategy dominates: program structure decides,
+the deciding constants are computable from program text before anything
+runs, and their certificate errs only on the side of the bias-free choice.
+(3)~Differentiation stays practical to $10^{3}$ qubits: its incremental
+compile cost is a fraction of a percent per branch over the source path.
+The derivative of an analog experiment is not an analytic formula; it is a
+first-class experiment program whose physical realization is selected, and
+compiled to the machine, by the same stack that compiles the original.
