@@ -84,7 +84,8 @@ def test_comb_node_to_op():
     assert op["op"] == "comb" and op["channel"] == 1 and op["duration"] == 0.25
     assert len(op["tones"]) == 2
     assert op["tones"][0] == {"atom": 0, "frequency": 80.0,
-                              "amplitude": 7.0, "phase": 0.0}
+                              "amplitude": 7.0, "phase": 0.0,
+                              "frequency_end": None}
     # kind is metadata only — not in the op dict
     assert "kind" not in op
 

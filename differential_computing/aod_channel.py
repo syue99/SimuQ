@@ -56,7 +56,7 @@ def encode_positions(positions):
     return float(np.max([np.sqrt(x ** 2 + y ** 2) for x, y in positions]))
 
 
-def make_aod_pulse(positions, ramp_time):
+def make_aod_pulse(positions, ramp_time, positions_from=None):
     """
     Build an AOD transport pulse descriptor.
 
@@ -66,21 +66,28 @@ def make_aod_pulse(positions, ramp_time):
 
     Parameters
     ----------
-    positions  : list of (x, y) tuples — target atom positions in μm
-    ramp_time  : float — AOD ramp + settle duration in μs
+    positions      : list of (x, y) tuples — target atom positions in μm
+    ramp_time      : float — AOD ramp + settle duration in μs
+    positions_from : list of (x, y) tuples or None — atom positions at the
+                     start of the move.  Required for chirped transport
+                     waveforms (frequency ramps f(start)→f(target)); None
+                     means the start configuration is unknown (legacy path).
 
     Returns
     -------
     dict with keys:
-        "type"      : "aod"
-        "positions" : list of (x, y) — full position record for logging
-        "amplitude" : float — encoded scalar proxy (max displacement in μm)
-        "freq_MHz"  : float — AOD carrier frequency (MHz)
-        "duration"  : float — ramp duration in μs  (to_pulsedsl converts → ns)
+        "type"           : "aod"
+        "positions"      : list of (x, y) — full position record for logging
+        "positions_from" : list of (x, y) or None — start-of-move positions
+        "amplitude"      : float — encoded scalar proxy (max displacement in μm)
+        "freq_MHz"       : float — AOD carrier frequency (MHz)
+        "duration"       : float — ramp duration in μs (to_pulsedsl converts → ns)
     """
     return {
         "type":      "aod",
         "positions": list(positions),
+        "positions_from": (list(positions_from)
+                           if positions_from is not None else None),
         "amplitude": encode_positions(positions),
         "freq_MHz":  AOD_FREQ_MHZ,
         "duration":  float(ramp_time),

@@ -78,15 +78,21 @@ class PlayNode:
 class Tone:
     """One tone in a multi-tone comb (one AOD/AOM addressing channel).
 
-    atom      : int   — which atom this tone addresses (via its AOD frequency)
-    frequency : float — tone/carrier frequency (the addressing knob)
-    amplitude : float — drive amplitude (detuning d, Rabi Ω, or position proxy)
-    phase     : float — rad (Rabi phase φ; 0 for detuning/position)
+    atom          : int   — which atom this tone addresses (via its AOD frequency)
+    frequency     : float — tone/carrier frequency (the addressing knob); for a
+                            chirped tone, the frequency at the START of the tone
+    amplitude     : float — drive amplitude (detuning d, Rabi Ω, or position proxy)
+    phase         : float — rad (Rabi phase φ; 0 for detuning/position)
+    frequency_end : float or None — chirp target frequency at the END of the
+                            tone (linear ramp).  None = constant-frequency tone.
+                            Used by AOD transport: the frequency ramp IS the
+                            tweezer move f(start position) → f(target position).
     """
     atom: int
     frequency: float
     amplitude: float
     phase: float = 0.0
+    frequency_end: Optional[float] = None
 
 
 @dataclass
@@ -116,7 +122,9 @@ class CombNode:
             "duration": float(self.duration),   # μs
             "tones": [
                 {"atom": int(t.atom), "frequency": float(t.frequency),
-                 "amplitude": float(t.amplitude), "phase": float(t.phase)}
+                 "amplitude": float(t.amplitude), "phase": float(t.phase),
+                 "frequency_end": (float(t.frequency_end)
+                                   if t.frequency_end is not None else None)}
                 for t in self.tones
             ],
         }
@@ -129,13 +137,19 @@ class AodNode:
     An AodNode is always a *position barrier*: the atoms are somewhere else
     after it, so any plays that need the new configuration must be sequenced
     (SEQ) after it, never PARA'd alongside it.
+
+    positions_from records where the atoms were at the start of the move, so
+    the physical-channel layer can synthesize chirped transport tones
+    (frequency ramps f(start) → f(target)).  None = unknown (legacy path).
     """
     positions: List[Tuple[float, float]]
     ramp_time: float
+    positions_from: Optional[List[Tuple[float, float]]] = None
 
     def to_op(self) -> dict:
         # Mirrors tweezer_mapper._op_aod exactly.
-        return {"op": "aod", **make_aod_pulse(self.positions, self.ramp_time)}
+        return {"op": "aod", **make_aod_pulse(self.positions, self.ramp_time,
+                                              self.positions_from)}
 
 
 @dataclass

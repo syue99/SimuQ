@@ -167,13 +167,15 @@ class TransportLog:
 # All time fields ("duration", "ramp_time", ...) are in μs.
 # diffQC_provider.to_pulsedsl() converts μs → ns (× 1000) for PulseDSL.
 
-def _op_aod(positions, ramp_time):
+def _op_aod(positions, ramp_time, positions_from=None):
     """
     AOD transport: move atoms to `positions` over `ramp_time` μs.
 
-    ramp_time : float in μs (same unit as T and tau throughout the pipeline).
+    ramp_time      : float in μs (same unit as T and tau throughout the pipeline).
+    positions_from : start-of-move positions (μm) — lets the physical-channel
+                     layer synthesize chirped transport tones f(start)→f(target).
     """
-    return {"op": "aod", **make_aod_pulse(positions, ramp_time)}
+    return {"op": "aod", **make_aod_pulse(positions, ramp_time, positions_from)}
 
 
 def _op_play(channel_idx, amplitude, duration, phase=0.0):
@@ -448,7 +450,8 @@ class TweezerMapper:
         ops = []
         # Skip AOD move if atoms are already at the target positions
         if not self._positions_match(pos):
-            ops.append(_op_aod(pos, self.ramp_time))
+            ops.append(_op_aod(pos, self.ramp_time,
+                               positions_from=self.current_positions))
             self.ledger.record(pos, zones, "aod", duration=self.ramp_time)
 
         self._update_positions(pos, zones)
@@ -497,7 +500,8 @@ class TweezerMapper:
         ops = []
         # Skip AOD move if atoms are already at the target positions
         if not self._positions_match(pos):
-            ops.append(_op_aod(pos, self.ramp_time))
+            ops.append(_op_aod(pos, self.ramp_time,
+                               positions_from=self.current_positions))
             self.ledger.record(pos, zones, "aod", duration=self.ramp_time)
 
         self._update_positions(pos, zones)
@@ -555,7 +559,8 @@ class TweezerMapper:
 
         ops = []
         if not self._positions_match(pos):
-            ops.append(_op_aod(pos, self.ramp_time))
+            ops.append(_op_aod(pos, self.ramp_time,
+                               positions_from=self.current_positions))
             self.ledger.record(pos, zones, "aod", duration=self.ramp_time)
         self._update_positions(pos, zones)
 
@@ -586,7 +591,8 @@ class TweezerMapper:
 
         ops = []
         if not self._positions_match(pos):
-            ops.append(_op_aod(pos, self.ramp_time))
+            ops.append(_op_aod(pos, self.ramp_time,
+                               positions_from=self.current_positions))
             self.ledger.record(pos, zones, "aod", duration=self.ramp_time)
 
         self._update_positions(pos, zones)
@@ -771,7 +777,8 @@ class TweezerMapper:
                     pos_int = self.interaction_positions()
                     if not self._positions_match(pos_int):
                         zones_int = ["interaction"] * self.n
-                        ops.append(_op_aod(pos_int, self.ramp_time))
+                        ops.append(_op_aod(pos_int, self.ramp_time,
+                                           positions_from=self.current_positions))
                         self.ledger.record(pos_int, zones_int, "aod",
                                            duration=self.ramp_time)
                         self._update_positions(pos_int, zones_int)
@@ -901,7 +908,8 @@ class TweezerMapper:
             elif kind == "aod":
                 flush()
                 seq.add(AodNode(positions=op["positions"],
-                                ramp_time=op["duration"]))
+                                ramp_time=op["duration"],
+                                positions_from=op.get("positions_from")))
             elif kind == "delay":
                 flush()
                 seq.add(DelayNode(duration=op["duration"]))

@@ -1,0 +1,181 @@
+"""
+awg_compile.py — AWG waveform synthesis from a PulseDSL schedule.
+
+The missing last mile of the pipeline: everything upstream (mapper → physical
+channels → to_pulsedsl_tree → RUN) produces a *symbolic* per-channel schedule
+of timed entries; this module turns that schedule into actual complex baseband
+sample arrays, one per physical channel — what an AWG would emit.
+
+Division of labor (user-set design):
+  - PulseDSL's scheduler is reused ONLY for timing — SEQ/PARA semantics place
+    every entry at its [t0, t1) ns window on its channel.
+  - The waveform CONTENT lives here: `to_pulsedsl_tree` attaches a callable
+    from this module to each Pulse's `waveform` field (PulseDSL carries it
+    through untouched), and `compile_waveforms` evaluates + sums them.
+  - Summing co-temporal same-channel entries is what makes COMB physically
+    real: a multi-tone comb becomes an actual multi-frequency sample array,
+    and a transport chirp becomes a moving tweezer.
+
+Units
+-----
+Schedule time is ns (integers — PulseDSL convention, μs × 1000 upstream).
+Tone frequencies are MHz, so phase(t) = 2π · f_MHz · 1e-3 · t_ns.
+Waveform callables take t in ns RELATIVE TO THE ENTRY START and return complex
+baseband amplitude; they accept numpy arrays (vectorized).
+
+This module has no PulseDSL dependency: `compile_waveforms` reads the Sched
+entries generically (the same fields `Sched.view()` reads).
+"""
+
+import numpy as np
+
+MHZ_NS = 1e-3   # cycles per ns for a 1 MHz tone
+
+
+class ConstantTone:
+    """Constant-envelope tone: A · exp(i(2π f t + φ)), t in ns, f in MHz.
+
+    f = 0 gives a plain constant envelope A·e^{iφ} — the faithful sampled form
+    of the solver's piecewise-constant pulses (detuning/Rabi/dressing/ZZ plays).
+    """
+
+    def __init__(self, amplitude, phase=0.0, freq_mhz=0.0):
+        self.amplitude = float(amplitude)
+        self.phase = float(phase)
+        self.freq_mhz = float(freq_mhz)
+
+    def __call__(self, t_ns):
+        t = np.asarray(t_ns, dtype=float)
+        return self.amplitude * np.exp(
+            1j * (2.0 * np.pi * self.freq_mhz * MHZ_NS * t + self.phase))
+
+    def __repr__(self):
+        return (f"ConstantTone(A={self.amplitude:.4g}, "
+                f"f={self.freq_mhz:.4g} MHz, phi={self.phase:.4g})")
+
+
+class ChirpTone:
+    """Phase-continuous linear frequency chirp f0 → f1 over duration_ns.
+
+    φ(t) = 2π·1e-3·(f0·t + (f1−f0)·t²/(2T)) + φ0, so the instantaneous
+    frequency f0 + (f1−f0)·t/T sweeps linearly — this is the tweezer-transport
+    waveform: the AOD deflection angle (∝ RF frequency) carries the atom from
+    the start position to the target.
+    """
+
+    def __init__(self, amplitude, f0_mhz, f1_mhz, duration_ns, phase=0.0):
+        if duration_ns <= 0:
+            raise ValueError("ChirpTone needs duration_ns > 0")
+        self.amplitude = float(amplitude)
+        self.f0_mhz = float(f0_mhz)
+        self.f1_mhz = float(f1_mhz)
+        self.duration_ns = float(duration_ns)
+        self.phase = float(phase)
+
+    def instantaneous_freq_mhz(self, t_ns):
+        t = np.asarray(t_ns, dtype=float)
+        return self.f0_mhz + (self.f1_mhz - self.f0_mhz) * t / self.duration_ns
+
+    def __call__(self, t_ns):
+        t = np.asarray(t_ns, dtype=float)
+        slope = (self.f1_mhz - self.f0_mhz) / self.duration_ns
+        phi = 2.0 * np.pi * MHZ_NS * (self.f0_mhz * t + 0.5 * slope * t * t)
+        return self.amplitude * np.exp(1j * (phi + self.phase))
+
+    def __repr__(self):
+        return (f"ChirpTone(A={self.amplitude:.4g}, "
+                f"{self.f0_mhz:.4g}->{self.f1_mhz:.4g} MHz, "
+                f"T={self.duration_ns:.4g} ns)")
+
+
+def tone_waveform(tone, duration_ns):
+    """Build the waveform callable for one pulse_tree.Tone.
+
+    Constant tone unless the Tone declares a chirp target (frequency_end).
+    """
+    f_end = getattr(tone, "frequency_end", None)
+    if f_end is None or float(f_end) == float(tone.frequency):
+        return ConstantTone(tone.amplitude, tone.phase, tone.frequency)
+    return ChirpTone(tone.amplitude, tone.frequency, f_end, duration_ns,
+                     phase=tone.phase)
+
+
+def _fallback_waveform(pulse):
+    """Constant-envelope fallback for entries without an attached waveform.
+
+    Covers PulseDSL-internal pulses (Delay's amplitude-0 Constant) and legacy
+    placeholder plays: amplitude/phase/frequency are read off the Pulse fields
+    and treated as a constant tone. v1 scope — every shape without an explicit
+    waveform samples as its constant envelope.
+    """
+    return ConstantTone(
+        float(getattr(pulse, "amplitude", 0.0) or 0.0),
+        float(getattr(pulse, "phase", 0.0) or 0.0),
+        float(getattr(pulse, "frequency", 0.0) or 0.0),
+    )
+
+
+def compile_waveforms(sched, n_channels=None, dt_ns=1.0):
+    """Compile a PulseDSL Sched into per-channel complex sample arrays.
+
+    Walks every ScheduleEntry on every channel row, evaluates its waveform on
+    its [t0, t1) window (t relative to entry start), and SUMS co-temporal
+    entries — realizing COMB tone superposition on shared modulators.
+
+    Parameters
+    ----------
+    sched      : PulseDSL Sched (the object Schedule() returns after RUN)
+    n_channels : int or None — number of channel rows to compile (decoder rows
+                 excluded).  None compiles every row that has entries.
+    dt_ns      : float — sample period in ns (default 1.0 = 1 GS/s)
+
+    Returns
+    -------
+    t_ns  : float ndarray — the common time grid [0, t_end)
+    waves : dict {channel index: complex ndarray} — one waveform per channel
+            (all-zero rows included so callers see silent channels explicitly)
+    """
+    rows = sched._Sched__schedule
+    if n_channels is None:
+        n_channels = len(rows)
+    rows = rows[:n_channels]
+
+    t_end = 0.0
+    for row in rows:
+        for e in row:
+            t_end = max(t_end, float(e._ScheduleEntry__t1))
+
+    n_samp = int(np.ceil(t_end / dt_ns)) if t_end > 0 else 0
+    t_ns = np.arange(n_samp, dtype=float) * dt_ns
+
+    waves = {}
+    for ch_idx, row in enumerate(rows):
+        w = np.zeros(n_samp, dtype=complex)
+        for e in row:
+            pulse = e._ScheduleEntry__pulse
+            t0 = float(e._ScheduleEntry__t0)
+            t1 = float(e._ScheduleEntry__t1)
+            i0 = int(np.ceil(t0 / dt_ns))
+            i1 = min(int(np.ceil(t1 / dt_ns)), n_samp)
+            if i1 <= i0:
+                continue
+            fn = pulse.waveform if pulse.waveform is not None \
+                else _fallback_waveform(pulse)
+            w[i0:i1] += fn(t_ns[i0:i1] - t0)
+        waves[ch_idx] = w
+    return t_ns, waves
+
+
+def waveform_summary(t_ns, waves, names=None):
+    """Human-readable per-channel summary (samples, active time, peak |A|)."""
+    lines = []
+    dt = float(t_ns[1] - t_ns[0]) if len(t_ns) > 1 else 1.0
+    for ch_idx in sorted(waves):
+        w = waves[ch_idx]
+        active = np.abs(w) > 1e-12
+        name = (names or {}).get(ch_idx, f"ch{ch_idx}")
+        lines.append(
+            f"{name:16s}: {len(w)} samples, "
+            f"{active.sum() * dt:.0f} ns active, "
+            f"peak |A| = {np.abs(w).max() if len(w) else 0.0:.4f}")
+    return "\n".join(lines)

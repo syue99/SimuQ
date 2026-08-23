@@ -146,10 +146,14 @@ def to_pulsedsl_tree(tree, channels, aod_ch, run=True):
         AodNode   -> Play(Pulse(Sine, ...), aod_ch)
         DelayNode -> Delay(dur_ns, aod_ch)
 
-    Pulse shapes are placeholders for now — Constant for native plays, Sine for
-    AOD transport.  The PlayNode.kind tag (detuning/rabi/dressing/zz) is carried
-    through map_hlist_tree for the later per-channel shape pass.  Durations are
-    converted μs -> ns (× 1000).
+    Every Pulse gets a real waveform callable attached (awg_compile module):
+    plays and comb tones become ConstantTones; comb tones declaring a chirp
+    target (Tone.frequency_end — AOD transport) become phase-continuous
+    ChirpTones.  awg_compile.compile_waveforms(schedule) then samples and sums
+    them into per-channel AWG arrays.  Envelope shaping per PlayNode.kind
+    (e.g. sigmatukey Rabi edges) is still deferred — v1 is faithful to the
+    solver's piecewise-constant pulses.  Durations are converted μs -> ns
+    (× 1000).
 
     Parameters
     ----------
@@ -173,6 +177,7 @@ def to_pulsedsl_tree(tree, channels, aod_ch, run=True):
     if _DIFF_COMPUTING_PATH not in sys.path:
         sys.path.insert(0, _DIFF_COMPUTING_PATH)
     from pulse_tree import Seq, Para, PlayNode, CombNode, AodNode, DelayNode
+    from awg_compile import ConstantTone, tone_waveform
 
     US_TO_NS = 1000
 
@@ -185,16 +190,21 @@ def to_pulsedsl_tree(tree, channels, aod_ch, run=True):
         if isinstance(node, Para):
             return PARA(*[translate(c) for c in node.children])
         if isinstance(node, PlayNode):
-            # Placeholder shape (Constant); real per-kind shapes deferred.
+            # Constant envelope — the faithful sampled form of the solver's
+            # piecewise-constant pulse (per-kind shaping deferred).
             pulse = Pulse(
                 shape=Shape.Constant,
                 amplitude=float(node.amplitude),
                 phase=float(node.phase),
                 duration=_us_to_ns(node.duration),
+                waveform=ConstantTone(float(node.amplitude),
+                                      float(node.phase)),
             )
             return Play(pulse, channels[int(node.channel)])
         if isinstance(node, CombNode):
             # Multi-tone superposition on one device → PulseDSL COMB.
+            # Constant tones for addressing combs; chirp tones (transport
+            # moves) where Tone.frequency_end declares a frequency ramp.
             dur_ns = _us_to_ns(node.duration)
             tone_pulses = [
                 Pulse(
@@ -203,6 +213,7 @@ def to_pulsedsl_tree(tree, channels, aod_ch, run=True):
                     phase=float(t.phase),
                     frequency=float(t.frequency),
                     duration=dur_ns,
+                    waveform=tone_waveform(t, dur_ns),
                 )
                 for t in node.tones
             ]

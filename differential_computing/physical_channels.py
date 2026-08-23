@@ -20,29 +20,36 @@ COMBs on shared addressing AODs:
 The AAIS, solver, boxes, ledger, and verify are untouched — this is purely the
 logical→physical channel layer feeding the PulseDSL scheduler.
 
-Tone frequency is the addressing knob.  The addressing-frequency assignment and
-the AOD position→frequency encoding here are PLACEHOLDERS (single-frequency
-proxies); the real 2-D (fx, fy) comb encoding is deferred.
+Tone frequency is the addressing knob.  The addressing-frequency assignment for
+detuning/Rabi is still a PLACEHOLDER (evenly spaced tone slots).  Transport is
+REAL infrastructure now: crossed X/Y AODs, one tone per trapped atom, with a
+linear position→frequency calibration map — a tweezer move is a linear
+frequency CHIRP f(start)→f(target) on each axis over the ramp time, and a
+parked atom keeps a constant hold tone (the trap must keep holding it).
 """
 
 from pulse_tree import Seq, Para, PlayNode, CombNode, AodNode, DelayNode, Tone
 
 
 # ── Fixed physical channel ids (independent of n) ─────────────────────────────
-TRANSPORT_AOD = 0   # trap/transport AOD: positions atoms (COMB, position tones)
-ADDR_DET      = 1   # addressing AOD: per-atom detuning (COMB, drive tones)
-ADDR_RABI     = 2   # addressing AOD: per-atom Rabi      (COMB, drive tones)
-DRESSING_AOM  = 3   # global dressing beam (interaction zone)
-GATE_AOM      = 4   # global gate beam (gate zone)
+TRANSPORT_AOD_X = 0  # crossed transport AOD, X axis (COMB, one tone per atom)
+ADDR_DET        = 1  # addressing AOD: per-atom detuning (COMB, drive tones)
+ADDR_RABI       = 2  # addressing AOD: per-atom Rabi      (COMB, drive tones)
+DRESSING_AOM    = 3  # global dressing beam (interaction zone)
+GATE_AOM        = 4  # global gate beam (gate zone)
+TRANSPORT_AOD_Y = 5  # crossed transport AOD, Y axis (COMB, one tone per atom)
 
-NUM_PHYSICAL_CHANNELS = 5
+TRANSPORT_AOD = TRANSPORT_AOD_X   # backward-compatible alias
+
+NUM_PHYSICAL_CHANNELS = 6
 
 CHANNEL_NAMES = {
-    TRANSPORT_AOD: "TRANSPORT_AOD",
-    ADDR_DET:      "ADDR_DET",
-    ADDR_RABI:     "ADDR_RABI",
-    DRESSING_AOM:  "DRESSING_AOM",
-    GATE_AOM:      "GATE_AOM",
+    TRANSPORT_AOD_X: "TRANSPORT_AOD_X",
+    ADDR_DET:        "ADDR_DET",
+    ADDR_RABI:       "ADDR_RABI",
+    DRESSING_AOM:    "DRESSING_AOM",
+    GATE_AOM:        "GATE_AOM",
+    TRANSPORT_AOD_Y: "TRANSPORT_AOD_Y",
 }
 
 # Placeholder addressing-frequency comb (MHz): one tone slot per atom.
@@ -60,10 +67,21 @@ def addr_frequency(atom):
     return ADDR_BASE_FREQ_MHZ + atom * ADDR_FREQ_SPACING_MHZ
 
 
-def position_to_freq(pos):
-    """Placeholder AOD position→frequency proxy (MHz) for transport tones."""
-    x, y = pos
-    return ADDR_BASE_FREQ_MHZ + abs(x) * 0.01 + abs(y) * 0.01
+# Transport AOD calibration: linear position→frequency map per axis.
+# Zone coordinates span roughly ±1000 μm (idle/gate zones), so κ = 0.05 MHz/μm
+# keeps every tone inside a 100 ± 50 MHz RF band — a realistic AOD bandwidth.
+TRANSPORT_BASE_FREQ_MHZ = 100.0
+TRANSPORT_KAPPA_MHZ_PER_UM = 0.05
+
+
+def coord_to_freq(coord_um):
+    """Transport AOD calibration: axis coordinate (μm) → RF tone frequency (MHz).
+
+    Crossed-AOD encoding: the X-axis AOD's tone at coord_to_freq(x) deflects a
+    tweezer to column x; the Y-axis AOD's tone at coord_to_freq(y) selects row
+    y.  Moving an atom = chirping its tone between the two frequencies.
+    """
+    return TRANSPORT_BASE_FREQ_MHZ + TRANSPORT_KAPPA_MHZ_PER_UM * float(coord_um)
 
 
 def _site_of(play, n):
@@ -120,15 +138,33 @@ def _consolidate_para(para, n):
     return Para(out)
 
 
-def _transport_comb(aod):
-    """Map a logical AOD move to a TRANSPORT_AOD comb (one tone per atom).
+def _transport_combs(aod):
+    """Map a logical AOD move to crossed X/Y transport combs (one tone per atom).
 
-    Tone frequency encodes the target position (placeholder proxy); amplitude is
-    a unit marker that the tone is present.  The 2-D fx/fy encoding is deferred.
+    For each atom the X-axis comb carries a tone chirping coord_to_freq(x_start)
+    → coord_to_freq(x_target) over the ramp time, and the Y-axis comb likewise
+    for y — the frequency ramp IS the tweezer move.  Atoms that stay put get a
+    constant hold tone (frequency_end=None): the trap keeps holding them while
+    others move.  Without start positions (legacy AodNode), all tones are
+    constant holds at the target frequencies.
+
+    Returns a Para of the two CombNodes — the two AOD axes drive concurrently
+    and the move ends when both ramps end.
     """
-    tones = [Tone(atom=i, frequency=position_to_freq(pos), amplitude=1.0)
-             for i, pos in enumerate(aod.positions)]
-    return CombNode(TRANSPORT_AOD, tones, aod.ramp_time, kind="transport")
+    starts = (aod.positions_from if aod.positions_from is not None
+              else aod.positions)
+    x_tones, y_tones = [], []
+    for i, ((x1, y1), (x0, y0)) in enumerate(zip(aod.positions, starts)):
+        fx0, fx1 = coord_to_freq(x0), coord_to_freq(x1)
+        fy0, fy1 = coord_to_freq(y0), coord_to_freq(y1)
+        x_tones.append(Tone(atom=i, frequency=fx0, amplitude=1.0,
+                            frequency_end=(fx1 if fx1 != fx0 else None)))
+        y_tones.append(Tone(atom=i, frequency=fy0, amplitude=1.0,
+                            frequency_end=(fy1 if fy1 != fy0 else None)))
+    return Para([
+        CombNode(TRANSPORT_AOD_X, x_tones, aod.ramp_time, kind="transport"),
+        CombNode(TRANSPORT_AOD_Y, y_tones, aod.ramp_time, kind="transport"),
+    ])
 
 
 def _map_play(play, n):
@@ -155,7 +191,7 @@ def to_physical(node, n):
     if isinstance(node, Para):
         return _consolidate_para(node, n)
     if isinstance(node, AodNode):
-        return _transport_comb(node)
+        return _transport_combs(node)
     if isinstance(node, DelayNode):
         return DelayNode(node.duration)
     if isinstance(node, PlayNode):
