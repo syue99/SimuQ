@@ -54,8 +54,11 @@ TRANSIT_DY_UM = 5.0      # y-offset lane: lift 5 um, travel, drop, so the
                          # moving pair never sweeps through parked atoms
 
 
-def build_schedule(verbose=True):
+def build_schedule(verbose=True, transit_dy=TRANSIT_DY_UM):
     """Compile the 2q running instance end-to-end under the module config.
+
+    transit_dy: y-offset lane for collision-free transit; None = direct
+    single-leg moves (atoms ride the AOD straight to the gate zone).
 
     Returns (schedule, mapper, meta): the PulseDSL Sched, the TweezerMapper
     (its ledger holds per-segment provenance), and a dict of the compile
@@ -85,7 +88,7 @@ def build_schedule(verbose=True):
                            ramp_time=AOD_SETTLE_US,
                            cz_gate_time=CZ_GATE_US,
                            aod_vmax=V_MAX_UM_US,
-                           transit_dy=TRANSIT_DY_UM)
+                           transit_dy=transit_dy)
 
     np.random.seed(1)
     programs = observable_program_generator(
@@ -122,7 +125,7 @@ def build_schedule(verbose=True):
         "interaction_positions": mapper.interaction_positions(),
         "gate_zone": (D_ZONE_UM, 0.0),
         "R_cz": mapper.R_cz,
-        "transit_dy": TRANSIT_DY_UM,
+        "transit_dy": transit_dy,
         "v_max": V_MAX_UM_US,
         "cz_gate_us": CZ_GATE_US,
     }

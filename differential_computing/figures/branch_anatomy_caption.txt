@@ -1,18 +1,15 @@
-Figure (branch anatomy, Sec 6): Machine anatomy of one two-qubit-kick (PSR)
-branch of the running instance, drawn from the compiled artifact (schedule +
-PulseLedger), not stylized. Left: zone architecture — the compiled pair
-(solver geometry) in the interaction zone under the global analog beams;
-pickup into the +5 um transit lane, 100 um hop to the focused gate zone
-(4 m/s min-jerk), drop to R_cz = 2.5 um, return (y not to scale). Right:
-the branch on an event-spaced time axis (equal width per inter-event
-interval; tick labels are the true times, 0-119.3 us). Lanes: (1) global
-dressing + addressing combs ON (real sampled envelopes) — OFF, frozen,
-through the insertion window (the halt-and-resume of Assumption 4.7);
-(2) AOD x(t) of both comb tones, 52 us min-jerk moves; (3) the single
-200 ns CZ play (amplitude pi) — the only physical insertion, priced at the
-benchmarked gate infidelity; (4) software-only frame updates — the virtual
-Rz(s*pi/2) pair where the branch sign s exists; (5) pair y(t) through the
-transit lane. Bottom strip: what each stage costs (dressed T2* under
-dressing; 114 us ground-state clock during the insertion window;
-benchmarked gate error; classical readout). Rates provisional pending T4
-confirmation (Q1).
+Figure (branch anatomy, Sec 6): One two-qubit-kick (PSR) branch of the
+running instance, drawn from the compiled artifact. Left: the two zones as
+the machine sees them — in the interaction zone the dressing laser is ON
+and the gate laser OFF (analog evolution ev(0,tau)/ev(tau,T)); in the gate
+zone the dressing laser is OFF and the gate laser ON (the 200 ns CZ, with
+the branch sign s living only in virtual Rz frame updates). The AOD carries
+the pair between zones (52 us min-jerk at 4 m/s over 100 um); atoms are
+held by AOD tweezers throughout (simplification — no pickup/handoff
+modeled). Right: the branch on an event-spaced time axis (equal width per
+inter-event interval; labels are the true times, 110 us total): the laser
+schedule (dressing + addressing comb envelopes ON / frozen OFF / CZ block /
+readout) over the AOD movement x(t), with the per-stage cost strip
+(dressed T2* during evolution; 105 us ground-state clock plus the
+benchmarked gate infidelity inside the insertion window; classical
+readout). Rates provisional pending T4 confirmation (Q1).
