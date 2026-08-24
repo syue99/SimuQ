@@ -50,6 +50,8 @@ D_ZONE_UM = 500.0        # interaction → gate zone separation
 T_EVOLVE_US = 5.0        # evolution time (dressing-on window, split by kick)
 CZ_GATE_US = 0.2         # 200 ns two-qubit gate
 AOD_SETTLE_US = 1.0      # floor on any move (AOD settle)
+TRANSIT_DY_UM = 5.0      # y-offset lane: lift 5 um, travel, drop, so the
+                         # moving pair never sweeps through parked atoms
 
 
 def main():
@@ -76,7 +78,8 @@ def main():
     mapper = TweezerMapper(n_qubits=n, sol_gvars=sol_gvars, boxes=boxes,
                            ramp_time=AOD_SETTLE_US,
                            cz_gate_time=CZ_GATE_US,
-                           aod_vmax=V_MAX_UM_US)
+                           aod_vmax=V_MAX_UM_US,
+                           transit_dy=TRANSIT_DY_UM)
 
     np.random.seed(1)
     programs = observable_program_generator(

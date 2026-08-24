@@ -391,15 +391,23 @@ class TestMapEvaluatedH:
         aod_ops = [o for o in ops if o["op"] == "aod"]
         assert len(aod_ops) >= 1
 
-    def test_dressing_and_zz_both_emitted(self):
-        """Both dressing and ZZ are emitted — solver uses both together."""
+    def test_dressing_suppresses_zz(self):
+        """Derived c{ij}_zz expresses the coupling the dressing field already
+        realizes — mapping both would play the ZZ evolution twice (module
+        header: pairwise ZZ 'only used when the box contains no dressing
+        instruction')."""
         m = self._mapper_with_boxes([
             ("dressing gloabl potential", "native",  [0.5]),
             ("c01_zz",                   "derived",  [1.0]),
         ])
         ops = m.map_evaluated_H(duration=1.0, t_cursor=0.0)
         assert len(m.log.dressing_moves) > 0, "Dressing should be emitted"
-        assert len(m.log.cz_moves) > 0, "ZZ should also be emitted"
+        assert len(m.log.cz_moves) == 0, \
+            "ZZ must be suppressed when the box has a dressing instruction"
+        # no gate-zone play emitted either
+        zz_ch = 2 * m.n + 1
+        assert not any(o["op"] == "play" and o["channel"] == zz_ch
+                       for o in ops)
 
     def test_zz_only_box_emits_cz(self):
         m   = self._mapper_with_boxes([("c01_zz", "derived", [2.0])])
@@ -574,3 +582,64 @@ class TestVelocityLimitedMoveTime:
         # generous accel cap: speed constraint binds again
         m.aod_accel = 1e3
         assert m._move_time(target) == pytest.approx(tau_v)
+
+
+class TestTransitLane:
+    """Collision-free transit: moves route through a y-offset lane."""
+
+    DY = 5.0
+
+    def _mapper(self):
+        m = _mapper_3q()
+        m.transit_dy = self.DY
+        m.ramp_time = 1.0
+        m.aod_vmax = 4.0
+        m.ledger = PulseLedger(m.n)
+        return m
+
+    def test_three_legs_lift_travel_drop(self):
+        m = self._mapper()
+        target = [(500.0, 0.0), (2.0, 0.0), (1.0, 1.73)]   # atom 0 moves
+        ops = m._transport_ops(target, ["gate", "interaction", "interaction"])
+        aods = [o for o in ops if o["op"] == "aod"]
+        assert len(aods) == 3
+        # lift: only y changes, by +DY
+        assert aods[0]["positions"][0] == pytest.approx((0.0, self.DY))
+        # travel: to target x at offset lane
+        assert aods[1]["positions"][0] == pytest.approx((500.0, self.DY))
+        # drop: lands on the target row
+        assert aods[2]["positions"][0] == pytest.approx((500.0, 0.0))
+        assert m.current_positions[0] == pytest.approx((500.0, 0.0))
+
+    def test_parked_atoms_hold_position_in_every_leg(self):
+        m = self._mapper()
+        target = [(500.0, 0.0), (2.0, 0.0), (1.0, 1.73)]
+        ops = m._transport_ops(target, ["gate", "interaction", "interaction"])
+        for o in ops:
+            assert o["positions"][1] == pytest.approx((2.0, 0.0))
+            assert o["positions"][2] == pytest.approx((1.0, 1.73))
+
+    def test_leg_durations_from_move_time(self):
+        m = self._mapper()
+        target = [(500.0, 0.0), (2.0, 0.0), (1.0, 1.73)]
+        aods = [o for o in m._transport_ops(target, ["gate"] * 3)
+                if o["op"] == "aod"]
+        # lift/drop: 5 um at 4 m/s -> (15/8)*5/4 = 2.34 us
+        assert aods[0]["duration"] == pytest.approx(15.0 * self.DY / 32.0)
+        assert aods[2]["duration"] == pytest.approx(15.0 * self.DY / 32.0)
+        # travel: 500 um -> 234.4 us
+        assert aods[1]["duration"] == pytest.approx(15.0 * 500.0 / 32.0)
+
+    def test_no_transit_dy_is_single_leg(self):
+        m = self._mapper()
+        m.transit_dy = None
+        target = [(500.0, 0.0), (2.0, 0.0), (1.0, 1.73)]
+        aods = [o for o in m._transport_ops(target, ["gate"] * 3)
+                if o["op"] == "aod"]
+        assert len(aods) == 1
+
+    def test_noop_when_already_at_target(self):
+        m = self._mapper()
+        ops = m._transport_ops(list(m.current_positions),
+                               ["interaction"] * m.n)
+        assert ops == []

@@ -277,7 +277,7 @@ class TweezerMapper:
 
     def __init__(self, n_qubits, sol_gvars, boxes, ramp_time=10.0,
                  cz_gate_time=0.25, R_cz=2.5, dressing_pairs=None,
-                 aod_accel=None, aod_vmax=None):
+                 aod_accel=None, aod_vmax=None, transit_dy=None):
         self.n         = int(n_qubits)
         self.sol_gvars = list(sol_gvars)
         self.boxes     = boxes
@@ -300,6 +300,11 @@ class TweezerMapper:
         #               τ_v = (15/8)·d / v_max.
         self.aod_accel = None if aod_accel is None else float(aod_accel)
         self.aod_vmax = None if aod_vmax is None else float(aod_vmax)
+        # Collision-free transit: when set, every relocation routes moving
+        # atoms through a y-offset lane (lift by transit_dy μm → travel →
+        # drop onto the target row) so the moving tweezers never sweep
+        # through parked atoms' rows.  None = direct single-leg move.
+        self.transit_dy = None if transit_dy is None else float(transit_dy)
         # Digital CZ used for ZZ *kick* segments (evolution ZZ stays analog):
         # physical gate duration and deep-blockade pair separation.
         self.cz_gate_time = float(cz_gate_time)   # μs
@@ -408,6 +413,55 @@ class TweezerMapper:
                 np.sqrt(10.0 * d / (np.sqrt(3.0) * self.aod_accel))))
         return tau
 
+    def _transit_legs(self, target_positions):
+        """Route one relocation as collision-free minimum-jerk legs.
+
+        With transit_dy set, atoms that actually move are lifted off their
+        row by transit_dy μm, travel in the offset lane, and drop onto the
+        target row — so their tweezers never sweep through parked atoms:
+            leg 1 (lift)  : moving atoms → (x_cur, y_cur + dy)
+            leg 2 (travel): moving atoms → (x_tgt, y_tgt + dy)
+            leg 3 (drop)  : all atoms at target_positions
+        Parked atoms hold their position in every leg.  Degenerate legs are
+        filtered by the caller's positions check.  Without transit_dy the
+        single direct leg is returned.
+        """
+        if self.transit_dy is None:
+            return [list(target_positions)]
+        dy = self.transit_dy
+        cur = self.current_positions
+        moving = {i for i, ((tx, ty), (cx, cy))
+                  in enumerate(zip(target_positions, cur))
+                  if abs(tx - cx) > 1e-9 or abs(ty - cy) > 1e-9}
+        lift = [(cx, cy + dy) if i in moving else (cx, cy)
+                for i, (cx, cy) in enumerate(cur)]
+        travel = [(target_positions[i][0], target_positions[i][1] + dy)
+                  if i in moving else pos
+                  for i, pos in enumerate(lift)]
+        return [lift, travel, list(target_positions)]
+
+    def _transport_ops(self, target_positions, zones):
+        """Emit the AOD op(s) relocating current_positions → target and
+        update the mapper's position/zone state.
+
+        One schedule op per non-degenerate transit leg; each leg's duration
+        comes from _move_time (speed/acceleration caps).  Ledger records one
+        aod entry per emitted leg.  No-op when already at the target (state
+        still updates, since zones may change without motion).
+        """
+        ops = []
+        if not self._positions_match(target_positions):
+            for leg in self._transit_legs(target_positions):
+                if self._positions_match(leg):
+                    continue
+                ramp = self._move_time(leg)
+                ops.append(_op_aod(leg, ramp,
+                                   positions_from=self.current_positions))
+                self.ledger.record(leg, zones, "aod", duration=ramp)
+                self.current_positions = list(leg)
+        self._update_positions(target_positions, zones)
+        return ops
+
     def _build_dressing_H(self, o_coef, sites_type, sites_name):
         """
         Build the dressing TIHamiltonian from solver params.
@@ -488,15 +542,7 @@ class TweezerMapper:
 
         self.log.log_dressing(t_cursor, pos, o_coef)
 
-        ops = []
-        # Skip AOD move if atoms are already at the target positions
-        if not self._positions_match(pos):
-            ramp = self._move_time(pos)
-            ops.append(_op_aod(pos, ramp,
-                               positions_from=self.current_positions))
-            self.ledger.record(pos, zones, "aod", duration=ramp)
-
-        self._update_positions(pos, zones)
+        ops = self._transport_ops(pos, zones)
 
         # Dressing channel: play on ch[2n] (UV laser driving dressing interaction)
         dressing_ch = 2 * self.n
@@ -539,15 +585,7 @@ class TweezerMapper:
 
         self.log.log_cz(t_cursor, (q0, q1), R_target, J)
 
-        ops = []
-        # Skip AOD move if atoms are already at the target positions
-        if not self._positions_match(pos):
-            ramp = self._move_time(pos)
-            ops.append(_op_aod(pos, ramp,
-                               positions_from=self.current_positions))
-            self.ledger.record(pos, zones, "aod", duration=ramp)
-
-        self._update_positions(pos, zones)
+        ops = self._transport_ops(pos, zones)
 
         # ZZ channel: play on ch[2n+1] (gate-zone laser)
         zz_ch = 2 * self.n + 1
@@ -600,13 +638,7 @@ class TweezerMapper:
         J_blockade = C_6 / self.R_cz ** 6
         self.log.log_cz(t_cursor, (q0, q1), self.R_cz, J_blockade)
 
-        ops = []
-        if not self._positions_match(pos):
-            ramp = self._move_time(pos)
-            ops.append(_op_aod(pos, ramp,
-                               positions_from=self.current_positions))
-            self.ledger.record(pos, zones, "aod", duration=ramp)
-        self._update_positions(pos, zones)
+        ops = self._transport_ops(pos, zones)
 
         zz_ch = 2 * self.n + 1
         ops.append(_op_play(zz_ch, amplitude=theta_cp,
@@ -633,14 +665,7 @@ class TweezerMapper:
         pos = self.interaction_positions()
         zones = ["interaction"] * self.n
 
-        ops = []
-        if not self._positions_match(pos):
-            ramp = self._move_time(pos)
-            ops.append(_op_aod(pos, ramp,
-                               positions_from=self.current_positions))
-            self.ledger.record(pos, zones, "aod", duration=ramp)
-
-        self._update_positions(pos, zones)
+        ops = self._transport_ops(pos, zones)
         return ops
 
     def _native_ops(self, cls, ins_lvars, duration):
@@ -715,6 +740,14 @@ class TweezerMapper:
         """
         ops = []
         for box_entries, _box_duration in self.boxes:
+            # Dressing priority (module header): the derived c{ij}_zz
+            # instructions express the couplings the global dressing field
+            # already realizes through the solved geometry, so mapping both
+            # would play the ZZ evolution twice (dressing AND a gate-zone
+            # dwell).  ZZ entries are mapped only in dressing-free boxes.
+            has_dressing = any(
+                classify_instruction(ins)[0] == 'dressing'
+                for (_, _), ins, _, _ in box_entries)
             for (_, _), ins, _, ins_lvars in box_entries:
                 cls = classify_instruction(ins)
                 if cls[0] in ('detuning', 'rabi'):
@@ -729,7 +762,7 @@ class TweezerMapper:
                         duration=duration,
                         t_cursor=t_cursor,
                     ))
-                elif cls[0] == 'zz':
+                elif cls[0] == 'zz' and not has_dressing:
                     q0, q1 = cls[1], cls[2]
                     ops.extend(self._cz_ops(
                         q0, q1,
@@ -820,14 +853,8 @@ class TweezerMapper:
                         q0, q1, coeff, duration, t_cursor))
                     # After CZ, return to interaction zone for subsequent segments
                     pos_int = self.interaction_positions()
-                    if not self._positions_match(pos_int):
-                        zones_int = ["interaction"] * self.n
-                        ramp = self._move_time(pos_int)
-                        ops.append(_op_aod(pos_int, ramp,
-                                           positions_from=self.current_positions))
-                        self.ledger.record(pos_int, zones_int, "aod",
-                                           duration=ramp)
-                        self._update_positions(pos_int, zones_int)
+                    ops.extend(self._transport_ops(
+                        pos_int, ["interaction"] * self.n))
 
         # Store original Hj as the kick Hamiltonian in the ledger.
         # The per-channel entries above provide hardware ops; this entry
