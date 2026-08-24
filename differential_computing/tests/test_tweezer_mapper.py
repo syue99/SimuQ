@@ -458,3 +458,66 @@ class TestMapHlist:
         _, _, ledger2 = m.map_hlist(self._build_hlist())
         assert len(ledger1.entries) == len(ledger2.entries)
 
+
+
+# ── Minimum-jerk move timing (aod_accel) ─────────────────────────────────────
+
+class TestMinJerkMoveTime:
+    """Per-move durations from the min-jerk peak-acceleration constraint
+    [Cicali et al., PRApplied 24, 024070, Eq. (6)]: tau = sqrt(10 d / (sqrt(3) a_pk))."""
+
+    A_PK = 4.0415e-5   # um/us^2  (= 40.4 m/s^2: their 7 um in 1 ms)
+
+    def _mapper(self, **kw):
+        m = _mapper_3q()
+        m.aod_accel = kw.get("aod_accel", self.A_PK)
+        m.ramp_time = kw.get("ramp_time", 1.0)
+        return m
+
+    def test_move_time_matches_closed_form(self):
+        m = self._mapper()
+        m.current_positions = [(0.0, 0.0), (2.0, 0.0), (1.0, 1.73)]
+        target = [(100.0, 0.0), (2.0, 0.0), (1.0, 1.73)]   # atom 0 hops 100 um
+        tau = m._move_time(target)
+        expect = np.sqrt(10.0 * 100.0 / (np.sqrt(3.0) * self.A_PK))
+        assert tau == pytest.approx(expect, rel=1e-12)
+        assert tau == pytest.approx(3777.8, rel=1e-3)      # ~3.8 ms in us
+
+    def test_move_time_uses_largest_displacement(self):
+        m = self._mapper()
+        m.current_positions = [(0.0, 0.0), (2.0, 0.0), (1.0, 1.73)]
+        target = [(10.0, 0.0), (2.0, 50.0), (1.0, 1.73)]   # atom 1 moves most
+        expect = np.sqrt(10.0 * 50.0 / (np.sqrt(3.0) * self.A_PK))
+        assert m._move_time(target) == pytest.approx(expect, rel=1e-12)
+
+    def test_sqrt_distance_scaling(self):
+        m = self._mapper()
+        m.current_positions = [(0.0, 0.0), (2.0, 0.0), (1.0, 1.73)]
+        t100 = m._move_time([(100.0, 0.0), (2.0, 0.0), (1.0, 1.73)])
+        t25 = m._move_time([(25.0, 0.0), (2.0, 0.0), (1.0, 1.73)])
+        assert t100 / t25 == pytest.approx(2.0, rel=1e-9)
+
+    def test_settle_floor_and_zero_move(self):
+        m = self._mapper(ramp_time=5.0)
+        m.current_positions = [(0.0, 0.0), (2.0, 0.0), (1.0, 1.73)]
+        # zero displacement and sub-floor hops both return the floor
+        assert m._move_time(m.current_positions) == pytest.approx(5.0)
+        tiny = [(1e-9, 0.0), (2.0, 0.0), (1.0, 1.73)]
+        assert m._move_time(tiny) == pytest.approx(5.0)
+
+    def test_legacy_fixed_ramp_when_accel_none(self):
+        m = self._mapper(aod_accel=None, ramp_time=7.5)
+        m.aod_accel = None
+        m.current_positions = [(0.0, 0.0), (2.0, 0.0), (1.0, 1.73)]
+        far = [(500.0, 0.0), (2.0, 0.0), (1.0, 1.73)]
+        assert m._move_time(far) == pytest.approx(7.5)
+
+    def test_dressing_ops_emit_minjerk_duration(self):
+        m = self._mapper()
+        m.ledger = PulseLedger(m.n)
+        m.current_positions = [(100.0, 0.0), (2.0, 0.0), (1.0, 1.73)]
+        expect = m._move_time(m.rest_positions())   # before positions update
+        ops = m._dressing_ops(o_coef=0.5, duration=1.0, t_cursor=0.0)
+        aod = [o for o in ops if o["op"] == "aod"][0]
+        assert aod["duration"] == pytest.approx(expect)
+        assert expect > 3000.0   # a ~100 um return hop is ms-scale

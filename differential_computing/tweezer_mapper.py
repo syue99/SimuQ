@@ -276,7 +276,8 @@ class TweezerMapper:
     """
 
     def __init__(self, n_qubits, sol_gvars, boxes, ramp_time=10.0,
-                 cz_gate_time=0.25, R_cz=2.5, dressing_pairs=None):
+                 cz_gate_time=0.25, R_cz=2.5, dressing_pairs=None,
+                 aod_accel=None):
         self.n         = int(n_qubits)
         self.sol_gvars = list(sol_gvars)
         self.boxes     = boxes
@@ -287,6 +288,12 @@ class TweezerMapper:
             else sorted({(min(a, b), max(a, b)) for a, b in dressing_pairs})
         )
         self.ramp_time = float(ramp_time)   # μs
+        # Minimum-jerk transport timing (Cicali et al., PRApplied 24, 024070):
+        # peak acceleration in μm/μs² (e.g. 40 m/s² = 4.04e-5 μm/μs², their
+        # experimental operating point: 7 μm in 1 ms).  When set, each move's
+        # duration comes from its own distance via _move_time(); ramp_time
+        # then acts as the settle-time floor.  None = fixed ramp_time (legacy).
+        self.aod_accel = None if aod_accel is None else float(aod_accel)
         # Digital CZ used for ZZ *kick* segments (evolution ZZ stays analog):
         # physical gate duration and deep-blockade pair separation.
         self.cz_gate_time = float(cz_gate_time)   # μs
@@ -366,6 +373,26 @@ class TweezerMapper:
             abs(cx - tx) < 1e-9 and abs(cy - ty) < 1e-9
             for (cx, cy), (tx, ty) in zip(self.current_positions, target_positions)
         )
+
+    def _move_time(self, target_positions):
+        """AOD ramp duration in μs for a relocation from current_positions.
+
+        With aod_accel set, the minimum-jerk profile x(t) = d(10s³−15s⁴+6s⁵)
+        has peak acceleration a_pk = 10d/(√3 τ²), so the move duration at the
+        configured acceleration is τ = √(10 d / (√3 a_pk)), taken at the
+        largest single-atom displacement d (all tweezers ride one AOD ramp
+        window); ramp_time remains the floor (AOD settle time).  Without
+        aod_accel, the fixed ramp_time is used.
+        """
+        if self.aod_accel is None:
+            return self.ramp_time
+        d = max(np.hypot(tx - cx, ty - cy)
+                for (tx, ty), (cx, cy)
+                in zip(target_positions, self.current_positions))
+        if d <= 0.0:
+            return self.ramp_time
+        tau = float(np.sqrt(10.0 * d / (np.sqrt(3.0) * self.aod_accel)))
+        return max(tau, self.ramp_time)
 
     def _build_dressing_H(self, o_coef, sites_type, sites_name):
         """
@@ -450,9 +477,10 @@ class TweezerMapper:
         ops = []
         # Skip AOD move if atoms are already at the target positions
         if not self._positions_match(pos):
-            ops.append(_op_aod(pos, self.ramp_time,
+            ramp = self._move_time(pos)
+            ops.append(_op_aod(pos, ramp,
                                positions_from=self.current_positions))
-            self.ledger.record(pos, zones, "aod", duration=self.ramp_time)
+            self.ledger.record(pos, zones, "aod", duration=ramp)
 
         self._update_positions(pos, zones)
 
@@ -500,9 +528,10 @@ class TweezerMapper:
         ops = []
         # Skip AOD move if atoms are already at the target positions
         if not self._positions_match(pos):
-            ops.append(_op_aod(pos, self.ramp_time,
+            ramp = self._move_time(pos)
+            ops.append(_op_aod(pos, ramp,
                                positions_from=self.current_positions))
-            self.ledger.record(pos, zones, "aod", duration=self.ramp_time)
+            self.ledger.record(pos, zones, "aod", duration=ramp)
 
         self._update_positions(pos, zones)
 
@@ -559,9 +588,10 @@ class TweezerMapper:
 
         ops = []
         if not self._positions_match(pos):
-            ops.append(_op_aod(pos, self.ramp_time,
+            ramp = self._move_time(pos)
+            ops.append(_op_aod(pos, ramp,
                                positions_from=self.current_positions))
-            self.ledger.record(pos, zones, "aod", duration=self.ramp_time)
+            self.ledger.record(pos, zones, "aod", duration=ramp)
         self._update_positions(pos, zones)
 
         zz_ch = 2 * self.n + 1
@@ -591,9 +621,10 @@ class TweezerMapper:
 
         ops = []
         if not self._positions_match(pos):
-            ops.append(_op_aod(pos, self.ramp_time,
+            ramp = self._move_time(pos)
+            ops.append(_op_aod(pos, ramp,
                                positions_from=self.current_positions))
-            self.ledger.record(pos, zones, "aod", duration=self.ramp_time)
+            self.ledger.record(pos, zones, "aod", duration=ramp)
 
         self._update_positions(pos, zones)
         return ops
@@ -777,10 +808,11 @@ class TweezerMapper:
                     pos_int = self.interaction_positions()
                     if not self._positions_match(pos_int):
                         zones_int = ["interaction"] * self.n
-                        ops.append(_op_aod(pos_int, self.ramp_time,
+                        ramp = self._move_time(pos_int)
+                        ops.append(_op_aod(pos_int, ramp,
                                            positions_from=self.current_positions))
                         self.ledger.record(pos_int, zones_int, "aod",
-                                           duration=self.ramp_time)
+                                           duration=ramp)
                         self._update_positions(pos_int, zones_int)
 
         # Store original Hj as the kick Hamiltonian in the ledger.
