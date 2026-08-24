@@ -179,40 +179,51 @@ def main():
             w[m] += fn(t[m] - t0)
         return np.abs(w)
 
-    def freq_at(ch_idx, t, linear=False):
-        """Instantaneous transport frequency (MHz) on grid t; NaN in gaps."""
-        f = np.full(len(t), np.nan)
-        for e in rows[ch_idx]:
-            wf = e._ScheduleEntry__pulse.waveform
-            t0 = float(e._ScheduleEntry__t0)
-            t1 = float(e._ScheduleEntry__t1)
-            m = (t >= t0) & (t < t1)
-            if not m.any():
-                continue
-            if isinstance(wf, ChirpTone):
-                if linear:
-                    f[m] = wf.f0_mhz + (wf.f1_mhz - wf.f0_mhz) \
-                        * (t[m] - t0) / wf.duration_ns
-                else:
-                    f[m] = wf.instantaneous_freq_mhz(t[m] - t0)
-            elif getattr(wf, "freq_mhz", 0.0):
-                f[m] = wf.freq_mhz
-        return f
-
     fig, (ax_f, ax_g) = plt.subplots(2, 1, sharex=True, figsize=(13, 7.5),
                                      height_ratios=[1.2, 1.0])
 
     # ── panel 1: AOD transport frequency, X and Y combined ───────────────────
-    for ch_idx, color, lab in ((pc.TRANSPORT_AOD_X, "C0", "AOD X"),
-                               (pc.TRANSPORT_AOD_Y, "C1", "AOD Y")):
-        ax_f.plot(t_warp, freq_at(ch_idx, t_real), lw=1.6, color=color,
-                  label=lab)
-        ax_f.plot(t_warp, freq_at(ch_idx, t_real, linear=True), lw=0.8,
-                  ls="--", color=color, alpha=0.5)
-    ax_f.plot([], [], lw=0.8, ls="--", color="gray", label="linear (old)")
+    # Per-ENTRY plotting: both atoms ride the same ramp as co-temporal comb
+    # tones, so each tone gets its own curve (a single per-channel array
+    # would overwrite one tone with the other).
+    warp = lambda t: np.interp(t, bounds, np.arange(len(bounds), dtype=float))
+    for ch_idx, color, lab in ((pc.TRANSPORT_AOD_X, "C0", "AOD X tones"),
+                               (pc.TRANSPORT_AOD_Y, "C1", "AOD Y tones")):
+        seen = False
+        for e in rows[ch_idx]:
+            wf = e._ScheduleEntry__pulse.waveform
+            t0 = float(e._ScheduleEntry__t0)
+            t1 = float(e._ScheduleEntry__t1)
+            if isinstance(wf, ChirpTone):
+                tt = np.linspace(0.0, wf.duration_ns, 300)
+                ax_f.plot(warp(t0 + tt), wf.instantaneous_freq_mhz(tt),
+                          lw=1.5, color=color, alpha=0.9,
+                          label=None if seen else lab)
+                lin = wf.f0_mhz + (wf.f1_mhz - wf.f0_mhz) * tt / wf.duration_ns
+                ax_f.plot(warp(t0 + tt), lin, lw=0.7, ls="--", color=color,
+                          alpha=0.4)
+                seen = True
+            elif getattr(wf, "freq_mhz", 0.0):
+                ax_f.plot(warp(np.array([t0, t1])), [wf.freq_mhz] * 2,
+                          lw=1.5, color=color, alpha=0.9,
+                          label=None if seen else lab)
+                seen = True
+    ax_f.plot([], [], lw=0.7, ls="--", color="gray", label="linear (old)")
     ax_f.legend(fontsize=8, loc="center right")
     ax_f.set_ylabel("AOD frequency (MHz)", fontsize=9)
     ax_f.tick_params(labelsize=8)
+
+    # the physical channel signal: both tones summed on one modulator —
+    # the multi-tone beat envelope of the X comb (right axis, gray)
+    ax_b = ax_f.twinx()
+    ax_b.fill_between(t_warp, env_at(pc.TRANSPORT_AOD_X, t_real), 0,
+                      color="gray", alpha=0.18, lw=0)
+    ax_b.plot([], [], color="gray", alpha=0.5, lw=4,
+              label="|A| of X comb (2-tone beat)")
+    ax_b.set_ylabel("|A| (X comb)", fontsize=8, color="gray")
+    ax_b.tick_params(labelsize=7, colors="gray")
+    ax_b.set_ylim(bottom=0)
+    ax_b.legend(fontsize=7, loc="lower right")
     move_us = sorted({wf.duration_ns * 1e-3
                       for ch in (pc.TRANSPORT_AOD_X, pc.TRANSPORT_AOD_Y)
                       for e in rows[ch]
