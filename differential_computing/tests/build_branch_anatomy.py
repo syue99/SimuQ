@@ -176,9 +176,9 @@ def render(data):
     nb = len(bounds)
     warp = lambda t: np.interp(t, bounds, np.arange(nb, dtype=float))
 
-    fig = plt.figure(figsize=(8.6, 4.3))
-    gs = fig.add_gridspec(1, 2, width_ratios=[0.95, 1.0], wspace=0.06,
-                          left=0.012, right=0.985, top=0.895, bottom=0.05)
+    fig = plt.figure(figsize=(5.9, 4.0))
+    gs = fig.add_gridspec(1, 2, width_ratios=[1.18, 1.0], wspace=0.04,
+                          left=0.012, right=0.99, top=0.88, bottom=0.03)
     gsA = gs[0, 0].subgridspec(3, 1, height_ratios=[1.0, 0.40, 1.0],
                                hspace=0.24)
 
@@ -187,7 +187,6 @@ def render(data):
     move_us = (bounds[2] - bounds[1]) * 1e-3
     C_AOD = "#d9822b"
 
-    # interaction box (wide) and gate zone (narrow column)
     IB = (-28, -7, 26, 14)
     GB = (16, -9.5, 6, 19)
     lattice = [(x, y) for x in (-25, -20, -15, -10)
@@ -197,7 +196,7 @@ def render(data):
 
     def zone_boxes(ax, dress_on, gate_on):
         bx, by, bw, bh = IB
-        ax.add_patch(Rectangle((bx, by), bw, bh, ec=C_ANALOG, lw=1.0,
+        ax.add_patch(Rectangle((bx, by), bw, bh, ec=C_ANALOG, lw=0.9,
                                fc=C_ANALOG if dress_on else "none",
                                alpha=0.14 if dress_on else 1.0))
         if dress_on:
@@ -207,15 +206,15 @@ def render(data):
                                   (cx + bw / 2 - 1, by + bh),
                                   (cx - bw / 2 + 1, by + bh)], closed=True,
                                  fc=C_ANALOG, alpha=0.30, ec="none"))
-        ax.text(bx + bw / 2, by + bh + 1.5,
+        ax.text(bx + bw / 2, by + bh + 1.6,
                 "dressing ON" if dress_on else "dressing OFF",
-                fontsize=6.8, ha="center",
+                fontsize=6.2, ha="center",
                 color=C_ANALOG if dress_on else "#999999",
                 fontweight="bold" if dress_on else "normal")
-        ax.text(bx + bw / 2, by - 2.6, "interaction zone", fontsize=6.8,
+        ax.text(bx + bw / 2, by - 2.8, "interaction zone", fontsize=6.2,
                 ha="center", color=C_ANALOG)
         bx, by, bw, bh = GB
-        ax.add_patch(Rectangle((bx, by), bw, bh, ec=C_DIGITAL, lw=1.0,
+        ax.add_patch(Rectangle((bx, by), bw, bh, ec=C_DIGITAL, lw=0.9,
                                fc=C_DIGITAL if gate_on else "none",
                                alpha=0.14 if gate_on else 1.0))
         if gate_on:
@@ -225,118 +224,113 @@ def render(data):
                                   (gb_cx - bw / 2 + 0.5, by + bh)],
                                  closed=True, fc=C_DIGITAL, alpha=0.30,
                                  ec="none"))
-        ax.text(gb_cx, by + bh + 1.5,
-                "gate ON" if gate_on else "gate OFF", fontsize=6.8,
+        ax.text(gb_cx, by + bh + 1.6,
+                "gate ON" if gate_on else "gate OFF", fontsize=6.2,
                 ha="center", color=C_DIGITAL if gate_on else "#999999",
                 fontweight="bold" if gate_on else "normal")
-        ax.text(gb_cx, by - 2.6, "gate zone", fontsize=6.8, ha="center",
+        ax.text(gb_cx, by - 2.8, "gate zone", fontsize=6.2, ha="center",
                 color=C_DIGITAL)
 
     def dots(ax, vacated):
         for (px, py) in lattice:
             if (px, py) in pair_sites:
                 if vacated:
-                    ax.plot(px, py, "o", ms=5.5, mfc="none", mec="gray",
-                            mew=0.8, alpha=0.6)
+                    ax.plot(px, py, "o", ms=4.8, mfc="none", mec="gray",
+                            mew=0.7, alpha=0.6)
                 continue
-            ax.plot(px, py, "o", ms=2.4, color="gray", alpha=0.4)
+            ax.plot(px, py, "o", ms=2.0, color="gray", alpha=0.4)
 
-    def pair(ax, positions, ms=6):
+    def pair(ax, positions, ms=5.2):
         for px, py in positions:
             ax.plot(px, py, "o", ms=ms, color=C_ATOM, zorder=6)
-            ax.plot(px, py, "o", ms=ms + 4.5, mfc="none", mec="#e6a817",
-                    mew=1.2, zorder=6)
+            ax.plot(px, py, "o", ms=ms + 4, mfc="none", mec="#e6a817",
+                    mew=1.1, zorder=6)
 
-    def badge(ax, x, y, num, col):
-        ax.text(x, y, num, fontsize=7.5, color="white", ha="center",
+    def badge(ax, x, y, num, col, fs=6.8):
+        ax.text(x, y, num, fontsize=fs, color="white", ha="center",
                 va="center",
-                bbox=dict(boxstyle="circle,pad=0.18", fc=col, ec="none"))
+                bbox=dict(boxstyle="circle,pad=0.16", fc=col, ec="none"))
 
-    # scene 1 — evolve
     ax1 = fig.add_subplot(gsA[0, 0])
-    ax1.set_xlim(-30, 30); ax1.set_ylim(-10.5, 15.5); ax1.axis("off")
+    ax1.set_xlim(-30, 30); ax1.set_ylim(-10.8, 15.5); ax1.axis("off")
     zone_boxes(ax1, dress_on=True, gate_on=False)
     dots(ax1, vacated=False)
     pair(ax1, pair_sites)
     badge(ax1, -28.8, 14.0, "1", C_ANALOG)
     ax1.text(-25.4, 14.0, "evolve ev$(0,\\tau)$ / ev$(\\tau,T)$",
-             fontsize=7.6, color=C_ATOM, ha="left", va="center")
+             fontsize=6.9, color=C_ATOM, ha="left", va="center")
 
-    # scene 2 — transit (thin)
     ax2 = fig.add_subplot(gsA[1, 0])
     ax2.set_xlim(-30, 30); ax2.set_ylim(-4.5, 4.5); ax2.axis("off")
-    pair(ax2, [(12.0, 0.0), (16.0, 0.0)], ms=5.5)
+    pair(ax2, [(12.0, 0.0), (16.0, 0.0)], ms=4.8)
     ax2.annotate("", xy=(27, 1.8), xytext=(19.5, 1.8),
-                 arrowprops=dict(arrowstyle="-|>", color=C_AOD, lw=1.2,
-                                 ls="--", mutation_scale=11))
+                 arrowprops=dict(arrowstyle="-|>", color=C_AOD, lw=1.1,
+                                 ls="--", mutation_scale=10))
     ax2.annotate("", xy=(19.5, -1.8), xytext=(27, -1.8),
-                 arrowprops=dict(arrowstyle="-|>", color=C_AOD, lw=1.0,
-                                 ls="--", mutation_scale=11, alpha=0.7))
+                 arrowprops=dict(arrowstyle="-|>", color=C_AOD, lw=0.9,
+                                 ls="--", mutation_scale=10, alpha=0.7))
     badge(ax2, -28.8, 2.4, "2", C_AOD)
     badge(ax2, -28.8, -2.4, "4", C_AOD)
     ax2.text(-25.4, 0.0, f"AOD moves pair ({move_us:.0f} μs)",
-             fontsize=7.2, color=C_AOD, ha="left", va="center")
+             fontsize=6.6, color=C_AOD, ha="left", va="center")
 
-    # scene 3 — insert CZ
     ax3 = fig.add_subplot(gsA[2, 0])
-    ax3.set_xlim(-30, 30); ax3.set_ylim(-10.5, 15.5); ax3.axis("off")
+    ax3.set_xlim(-30, 30); ax3.set_ylim(-10.8, 15.5); ax3.axis("off")
     zone_boxes(ax3, dress_on=False, gate_on=True)
     dots(ax3, vacated=True)
-    pair(ax3, [(gb_cx - 1.5, 0.0), (gb_cx + 1.5, 0.0)], ms=5.5)
+    pair(ax3, [(gb_cx - 1.5, 0.0), (gb_cx + 1.5, 0.0)], ms=4.8)
     badge(ax3, -28.8, 14.0, "3", C_DIGITAL)
-    ax3.text(-25.4, 14.0, "insert CZ (200 ns)", fontsize=7.6,
+    ax3.text(-25.4, 14.0, "insert CZ (200 ns)", fontsize=6.9,
              color=C_ATOM, ha="left", va="center")
     ax3.annotate(f"$R_{{cz}}$ = {R_cz:g} μm",
-                 xy=(gb_cx - 1.5, -0.8), xytext=(3.5, -7.6), fontsize=6.8,
+                 xy=(gb_cx - 1.5, -0.8), xytext=(3.0, -7.8), fontsize=6.2,
                  ha="center", color=C_ATOM,
                  arrowprops=dict(arrowstyle="-", color=C_ATOM, lw=0.6))
 
-    fig.text(0.022, 0.945, "Space", fontsize=10.5, color=C_ANALOG,
+    fig.text(0.02, 0.935, "Space", fontsize=9.5, color=C_ANALOG,
              fontweight="bold")
 
-    # ═══ Panel B: VERTICAL timeline (time flows down, matching 1-4) ═════════
+    # ═══ vertical timeline: two THIN strips ═════════════════════════════════
     axB = fig.add_subplot(gs[0, 1])
     names = stage_names(bounds, cz)
-    n_rows = nb - 1 + 1                       # stages + meas
-    axB.set_xlim(-2.15, 4.15)
-    axB.set_ylim(n_rows + 0.12, -0.55)        # inverted: time flows DOWN
+    n_rows = nb          # 5 stages + meas
+    axB.set_xlim(-1.55, 2.55)
+    axB.set_ylim(n_rows + 0.10, -0.60)     # time flows DOWN
     axB.axis("off")
-    fig.text(0.55, 0.945, "Time (event-spaced, one branch)",
-             fontsize=10.5, color=C_ANALOG, fontweight="bold")
+    fig.text(0.60, 0.935, "Time (event-spaced)", fontsize=9.5,
+             color=C_ANALOG, fontweight="bold")
 
-    LX, LW = 0.0, 1.15        # laser column
-    AX, AW = 1.55, 1.15       # AOD column
+    LX, LW = 0.0, 0.5
+    AX, AW = 0.8, 0.5
     xcz_v = warp((cz["t0"] + cz["t1"]) / 2)
 
-    # row scaffolding, stage labels, badges, true-time ticks
+    for i in range(nb + 1):
+        axB.plot([LX - 0.05, AX + AW + 0.05], [i, i], color="gray",
+                 lw=0.35, alpha=0.30)
     for i in range(nb):
-        axB.plot([LX - 0.08, AX + AW + 0.08], [i, i], color="gray",
-                 lw=0.4, alpha=0.30)
         v = bounds[i] * 1e-3
-        axB.text(AX + AW + 0.14, i, f"{v:.4g}" if v < 100 else f"{v:.0f}",
-                 fontsize=6.2, ha="left", va="center", color="#444444")
-    axB.plot([LX - 0.08, AX + AW + 0.08], [nb, nb], color="gray", lw=0.4,
-             alpha=0.30)
-    axB.text(AX + AW + 0.14, nb - 0.5, "", fontsize=6)
-    axB.text(AX + AW + 0.14, -0.45, "t (μs)", fontsize=6.4, ha="left",
+        axB.text(AX + AW + 0.10, i, f"{v:.4g}" if v < 100 else f"{v:.0f}",
+                 fontsize=5.6, ha="left", va="center", color="#444444")
+    axB.text(AX + AW + 0.10, -0.42, "t (μs)", fontsize=5.8, ha="left",
              color="#444444")
     stage_badges = (("1", C_ANALOG), ("2", C_AOD), ("3", C_DIGITAL),
                     ("4", C_AOD), ("1", C_ANALOG))
     for i, nm in enumerate(names):
         num, col = stage_badges[i]
-        badge(axB, -2.0, i + 0.5, num, col)
-        axB.text(-1.62, i + 0.5, nm, fontsize=7.2, ha="left", va="center",
+        badge(axB, -1.40, i + 0.5, num, col, fs=6.2)
+        axB.text(-1.13, i + 0.5, nm, fontsize=6.4, ha="left", va="center",
                  color=C_ATOM)
-    axB.text(-1.62, nb - 0.5, "meas", fontsize=7.2, ha="left",
+    axB.text(-1.13, xcz_v + 0.28, "+ $R_z$ (sw)", fontsize=5.2,
+             ha="left", va="center", color=C_SOFT)
+    axB.text(-1.13, n_rows - 0.5, "meas", fontsize=6.4, ha="left",
              va="center", color=C_SOFT)
 
-    # column headers
-    axB.text(LX + LW / 2, -0.30, "lasers", fontsize=7.4, ha="center",
+    axB.text(LX + LW / 2, -0.32, "lasers", fontsize=6.2, ha="center",
              color=C_ATOM)
-    axB.text(AX + AW / 2, -0.30, "AOD $x(t)$ + comb $|A|$", fontsize=7.4,
-             ha="center", color=C_ATOM)
+    axB.text(AX + AW / 2, -0.32, "AOD $x(t)$", fontsize=6.2, ha="center",
+             color=C_ATOM)
 
-    # ── laser column ────────────────────────────────────────────────────────
+    # laser strip
     env_max = max(max(b["env"]) for b in
                   data["dressing"] + data["addr_rabi"])
     for key, alpha in (("addr_rabi", 0.55), ("dressing", 0.95)):
@@ -345,30 +339,17 @@ def render(data):
             e = np.asarray(b["env"]) / env_max * LW
             axB.fill_betweenx(warp(t), LX, LX + e, color=C_ANALOG,
                               alpha=0.30 * alpha, lw=0)
-            axB.plot(LX + e, warp(t), color=C_ANALOG, lw=0.5, alpha=alpha)
-    axB.plot([LX, LX], [1, nb - 2], color=C_ANALOG, lw=0.8, alpha=0.6)
-    axB.add_patch(Rectangle((LX, warp(cz["t0"])), LW * 0.85,
+            axB.plot(LX + e, warp(t), color=C_ANALOG, lw=0.4, alpha=alpha)
+    axB.plot([LX, LX], [1, nb - 2], color=C_ANALOG, lw=0.7, alpha=0.6)
+    axB.add_patch(Rectangle((LX, warp(cz["t0"])), LW,
                             warp(cz["t1"]) - warp(cz["t0"]),
-                            fc=C_DIGITAL, alpha=0.8, ec="none"))
-    axB.text(LX + LW * 0.42, xcz_v - 0.16, "CZ", fontsize=7.4,
-             ha="center", color="white", fontweight="bold")
-    axB.text(LX + LW * 0.42, xcz_v + 0.20, "+ virtual $R_z$\n(software)",
-             fontsize=5.8, ha="center", va="center", color="white")
-    axB.text(LX + 0.50, 1.5, "OFF\n(frozen)", fontsize=6.6, ha="center",
-             va="center", color=C_ANALOG, alpha=0.9)
-    axB.text(LX + 0.50, 3.72, "OFF", fontsize=6.6, ha="center",
-             va="center", color=C_ANALOG, alpha=0.9)
-    axB.text(LX + LW - 0.12, 0.5, "ON", fontsize=6.6, ha="center",
-             color=C_ANALOG, fontweight="bold")
-    axB.text(LX + LW - 0.12, nb - 1.5, "ON", fontsize=6.6, ha="center",
-             color=C_ANALOG, fontweight="bold")
-    axB.add_patch(Rectangle((LX, nb - 1 + 0.15), LW * 0.7, 0.7,
-                            fc="none", ec=C_SOFT, ls="--", lw=0.8))
-    axB.text(LX + LW * 0.35, nb - 1 + 0.5, "readout", fontsize=6.2,
-             ha="center", va="center", color=C_SOFT)
+                            fc=C_DIGITAL, alpha=0.85, ec="none"))
+    axB.text(LX + LW / 2, xcz_v, "CZ", fontsize=6.6, ha="center",
+             va="center", color="white", fontweight="bold")
+    axB.add_patch(Rectangle((LX, nb - 1 + 0.22), LW, 0.56, fc="none",
+                            ec=C_SOFT, ls="--", lw=0.7))
 
-
-    # ── AOD column ──────────────────────────────────────────────────────────
+    # AOD strip: x(t) tones over grey comb |A|
     aenv_max = max(max(b["env"]) for b in data["aod_x_env"])
     for b in data["aod_x_env"]:
         t = np.linspace(b["t0"], b["t1"], len(b["env"]))
@@ -378,25 +359,21 @@ def render(data):
     for tr in data["x_tones"]:
         t = np.asarray(tr["t"]); um = np.asarray(tr["um"])
         axB.plot(AX + (um - um.min()) / gz_x * AW, warp(t), color=C_AOD,
-                 lw=1.0)
-    axB.text(AX + AW / 2, 1.5, f"move\n{move_us:.0f} μs", fontsize=6.6,
-             ha="center", va="center", color=C_AOD)
-    axB.text(AX + AW - 0.25, 2.5, "gate\nzone", fontsize=6.4, ha="center",
-             va="center", color=C_AOD)
+                 lw=0.9)
 
-    # ── cost column (far right, terse) ──────────────────────────────────────
-    xc = AX + AW + 0.62
+    # terse cost brackets, rotated
+    xc = AX + AW + 0.52
     for ya, yb, lab, col in (
             (0, 1, "$T/T_2^*$", C_ANALOG),
-            (1, nb - 2, f"{(bounds[-2] - bounds[1]) * 1e-3:.0f} μs clock\n"
-             "+ $\\epsilon_{ins}$", C_DIGITAL),
+            (1, nb - 2, f"{(bounds[-2] - bounds[1]) * 1e-3:.0f} μs + "
+             "$\\epsilon_{ins}$", C_DIGITAL),
             (nb - 2, nb - 1, "$T/T_2^*$", C_ANALOG)):
-        axB.plot([xc, xc], [ya + 0.05, yb - 0.05], color=col, lw=1.0)
-        axB.text(xc + 0.10, (ya + yb) / 2, lab, fontsize=6.2, ha="left",
-                 va="center", color=col)
+        axB.plot([xc, xc], [ya + 0.05, yb - 0.05], color=col, lw=0.9)
+        axB.text(xc + 0.09, (ya + yb) / 2, lab, fontsize=5.4, ha="left",
+                 va="center", rotation=90, color=col)
 
     out = os.path.join(FIG_DIR, "branch_anatomy")
-    fig.savefig(out + ".png", dpi=170, bbox_inches="tight")
+    fig.savefig(out + ".png", dpi=185, bbox_inches="tight")
     fig.savefig(out + ".pdf", bbox_inches="tight")
     print(f"saved {out}.png / .pdf")
 
