@@ -41,12 +41,12 @@ import physical_channels as pc
 # (Cicali et al.'s Eq.-(6) min-jerk profile, whose peak speed is (15/8)·d/τ,
 # so a zone hop of d takes τ = (15/8)·d/v_max and needs peak acceleration
 # a_pk = 10d/(√3 τ²) = (128/45√3)·v_max²/d — the accel is derived, not a cap).
-# At 4 m/s a 100 μm hop would take only 47 μs; the 100–500 μs move budget
-# implies a zone separation of ~200–1000 μm, so the walkthrough uses 500 μm:
-# τ ≈ 235 μs per hop, a_pk ≈ 1.64·16/500e-6 ≈ 5.3e4 m/s².  Transport still
-# dominates the schedule: ~2 orders over dressing, ~3 over the gate.
+# At 4 m/s the ~100 μm zone hop takes (15/8)·d/v ≈ 47 μs — the transport
+# budget in use.  The figure uses an EVENT-SPACED time axis (equal width
+# between consecutive critical times; tick labels carry the true times) so
+# the 200 ns CZ and the μs dressing segments stay readable beside the moves.
 V_MAX_UM_US = 4.0        # peak tweezer speed, μm/μs (numerically = m/s)
-D_ZONE_UM = 500.0        # interaction → gate zone separation
+D_ZONE_UM = 100.0        # interaction → gate zone separation
 T_EVOLVE_US = 5.0        # evolution time (dressing-on window, split by kick)
 CZ_GATE_US = 0.2         # 200 ns two-qubit gate
 AOD_SETTLE_US = 1.0      # floor on any move (AOD settle)
@@ -140,95 +140,126 @@ def main():
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    t_us = t_ns * 1e-3
+    n_ch = pc.NUM_PHYSICAL_CHANNELS
 
-    # locate the CZ gate window (shortest GATE_AOM entry) for annotation
-    gate_entries = [(float(e._ScheduleEntry__t0), float(e._ScheduleEntry__t1))
-                    for e in rows[pc.GATE_AOM]]
-    cz_t0, cz_t1 = min(gate_entries, key=lambda w: w[1] - w[0])
+    # ── event-spaced time axis ───────────────────────────────────────────────
+    # Critical times = every entry boundary on every channel.  Each
+    # inter-event interval gets EQUAL width on the axis; tick labels carry
+    # the true times, so duration ratios are read off the labels, not the
+    # spacing — this keeps the 200 ns CZ visible beside a 47 us move.
+    bset = {0.0}
+    for row in rows[:n_ch]:
+        for e in row:
+            bset.add(float(e._ScheduleEntry__t0))
+            bset.add(float(e._ScheduleEntry__t1))
+    bounds = []
+    for b in sorted(bset):
+        if not bounds or b - bounds[-1] > 1.0:   # merge <1 ns duplicates
+            bounds.append(b)
+    K = 160
+    t_real = np.concatenate([
+        np.linspace(bounds[i], bounds[i + 1], K, endpoint=False)
+        for i in range(len(bounds) - 1)])
+    t_warp = np.concatenate([
+        i + np.linspace(0.0, 1.0, K, endpoint=False)
+        for i in range(len(bounds) - 1)])
 
-    fig, (ax_f, ax_g) = plt.subplots(2, 1, sharex=True, figsize=(12, 7),
+    def env_at(ch_idx, t):
+        """|A| envelope of one channel on an arbitrary time grid (ns)."""
+        w = np.zeros(len(t), dtype=complex)
+        for e in rows[ch_idx]:
+            t0 = float(e._ScheduleEntry__t0)
+            t1 = float(e._ScheduleEntry__t1)
+            m = (t >= t0) & (t < t1)
+            if not m.any():
+                continue
+            p_ = e._ScheduleEntry__pulse
+            fn = p_.waveform if p_.waveform is not None \
+                else _fallback_waveform(p_)
+            w[m] += fn(t[m] - t0)
+        return np.abs(w)
+
+    def freq_at(ch_idx, t, linear=False):
+        """Instantaneous transport frequency (MHz) on grid t; NaN in gaps."""
+        f = np.full(len(t), np.nan)
+        for e in rows[ch_idx]:
+            wf = e._ScheduleEntry__pulse.waveform
+            t0 = float(e._ScheduleEntry__t0)
+            t1 = float(e._ScheduleEntry__t1)
+            m = (t >= t0) & (t < t1)
+            if not m.any():
+                continue
+            if isinstance(wf, ChirpTone):
+                if linear:
+                    f[m] = wf.f0_mhz + (wf.f1_mhz - wf.f0_mhz) \
+                        * (t[m] - t0) / wf.duration_ns
+                else:
+                    f[m] = wf.instantaneous_freq_mhz(t[m] - t0)
+            elif getattr(wf, "freq_mhz", 0.0):
+                f[m] = wf.freq_mhz
+        return f
+
+    fig, (ax_f, ax_g) = plt.subplots(2, 1, sharex=True, figsize=(13, 7.5),
                                      height_ratios=[1.2, 1.0])
 
     # ── panel 1: AOD transport frequency, X and Y combined ───────────────────
-    move_us = []
     for ch_idx, color, lab in ((pc.TRANSPORT_AOD_X, "C0", "AOD X"),
                                (pc.TRANSPORT_AOD_Y, "C1", "AOD Y")):
-        seen = False
-        for e in rows[ch_idx]:
-            wf = e._ScheduleEntry__pulse.waveform
-            if not isinstance(wf, ChirpTone):
-                continue
-            t0 = float(e._ScheduleEntry__t0)
-            tt = np.linspace(0.0, wf.duration_ns, 400)
-            ax_f.plot((t0 + tt) * 1e-3, wf.instantaneous_freq_mhz(tt),
-                      lw=1.6, color=color, label=None if seen else lab)
-            seen = True
-            lin = wf.f0_mhz + (wf.f1_mhz - wf.f0_mhz) * tt / wf.duration_ns
-            ax_f.plot((t0 + tt) * 1e-3, lin, lw=0.8, ls="--", color=color,
-                      alpha=0.5)
-            if ch_idx == pc.TRANSPORT_AOD_X:
-                move_us.append(wf.duration_ns * 1e-3)
-        if not seen:   # only constant hold tones on this axis
-            for e in rows[ch_idx]:
-                wf = e._ScheduleEntry__pulse.waveform
-                f0 = getattr(wf, "freq_mhz", None)
-                if not f0:
-                    continue
-                t0 = float(e._ScheduleEntry__t0)
-                t1 = float(e._ScheduleEntry__t1)
-                ax_f.plot([t0 * 1e-3, t1 * 1e-3], [f0, f0], lw=1.6,
-                          color=color, label=None if seen else lab)
-                seen = True
+        ax_f.plot(t_warp, freq_at(ch_idx, t_real), lw=1.6, color=color,
+                  label=lab)
+        ax_f.plot(t_warp, freq_at(ch_idx, t_real, linear=True), lw=0.8,
+                  ls="--", color=color, alpha=0.5)
     ax_f.plot([], [], lw=0.8, ls="--", color="gray", label="linear (old)")
     ax_f.legend(fontsize=8, loc="center right")
     ax_f.set_ylabel("AOD frequency (MHz)", fontsize=9)
     ax_f.tick_params(labelsize=8)
+    move_us = sorted({wf.duration_ns * 1e-3
+                      for ch in (pc.TRANSPORT_AOD_X, pc.TRANSPORT_AOD_Y)
+                      for e in rows[ch]
+                      for wf in [e._ScheduleEntry__pulse.waveform]
+                      if isinstance(wf, ChirpTone)})
     d_big = max(move_us) * V_MAX_UM_US * 8.0 / 15.0            # um
     a_pk_si = 1e6 * 128.0 * V_MAX_UM_US ** 2 / (
         45.0 * np.sqrt(3.0) * d_big)                           # m/s^2
     ax_f.set_title(
         f"transport: {d_big:.0f} um min-jerk hop, v_pk = "
-        f"{V_MAX_UM_US:.0f} m/s -> {max(move_us):.0f} us per move "
-        f"(needs a_pk ~ {a_pk_si:.1e} m/s^2)", fontsize=9)
+        f"{V_MAX_UM_US:.0f} m/s -> {max(move_us):.0f} us travel + "
+        f"{min(move_us):.1f} us lift/drop ({TRANSIT_DY_UM:.0f} um lane); "
+        f"a_pk ~ {a_pk_si:.1e} m/s^2", fontsize=9)
 
-    # ── panel 2: all gate/drive channels, |A| envelope, one color each ───────
-    gate_chs = ((pc.DRESSING_AOM, "C2", "dressing (ZZ)"),
-                (pc.GATE_AOM, "C3", "gate zone (CZ)"),
-                (pc.ADDR_RABI, "C4", "addressing Rabi"),
-                (pc.ADDR_DET, "C5", "addressing detuning"))
-    for ch_idx, color, lab in gate_chs:
-        ax_g.plot(t_us, np.abs(waves[ch_idx]), lw=1.0, color=color,
+    # ── panel 2: all drive channels, |A| envelope, one color each ────────────
+    for ch_idx, color, lab in ((pc.DRESSING_AOM, "C2", "dressing (ZZ)"),
+                               (pc.GATE_AOM, "C3", "gate zone (CZ)"),
+                               (pc.ADDR_RABI, "C4", "addressing Rabi"),
+                               (pc.ADDR_DET, "C5", "addressing detuning")):
+        ax_g.plot(t_warp, env_at(ch_idx, t_real), lw=1.0, color=color,
                   label=lab)
     ax_g.legend(fontsize=8, loc="center right")
     ax_g.set_ylabel("|A| envelope", fontsize=9)
-    ax_g.set_xlabel("t (us)", fontsize=9)
     ax_g.tick_params(labelsize=8)
-    ax_g.set_title("drive channels (10 MS/s envelope view; us/ns pulses "
-                   "are subpixel -- see annotations)", fontsize=9)
+    ax_g.set_title("drive channels", fontsize=9)
 
-    # subpixel events: annotate the 200 ns CZ and the us dressing segments
-    ax_g.annotate("CZ 200 ns", xy=(cz_t0 * 1e-3, 0.80),
-                  xycoords=("data", "axes fraction"), color="C3", fontsize=8,
-                  ha="left", xytext=(8, 0), textcoords="offset points",
-                  arrowprops=dict(arrowstyle="-", color="C3", lw=0.8))
-    for e in rows[pc.DRESSING_AOM]:
-        t0 = float(e._ScheduleEntry__t0)
-        t1 = float(e._ScheduleEntry__t1)
-        ax_g.annotate(f"dressing {(t1 - t0) * 1e-3:.1f} us",
-                      xy=(t0 * 1e-3, 0.75),
-                      xycoords=("data", "axes fraction"), color="C2",
-                      fontsize=8, ha="left", xytext=(4, 8),
-                      textcoords="offset points",
-                      arrowprops=dict(arrowstyle="-", color="C2", lw=0.8))
+    # event-spaced ticks: one per critical time, labeled with the true time
+    def fmt_us(b_ns):
+        v = b_ns * 1e-3
+        return f"{v:.4g}" if v < 100 else f"{v:.1f}"
+    ax_g.set_xticks(np.arange(len(bounds)))
+    ax_g.set_xticklabels([fmt_us(b) for b in bounds], rotation=45,
+                         ha="right", fontsize=7)
+    ax_g.set_xlim(0, len(bounds) - 1)
+    ax_g.set_xlabel("t (us) — event-spaced axis: equal width per interval, "
+                    "labels are true times", fontsize=9)
+    for ax in (ax_f, ax_g):
+        for i in range(len(bounds)):
+            ax.axvline(i, color="gray", lw=0.4, alpha=0.25)
 
-    fig.suptitle("One 2q PSR branch -- transport chirps vs drive channels. "
-                 "move ~ 100s of us >> dressing ~ us >> gate = 200 ns",
-                 fontsize=11)
+    fig.suptitle("One 2q PSR branch -- transport chirps vs drive channels "
+                 "(event-spaced time). CZ = 200 ns, dressing ~ us, "
+                 f"travel ~ {max(move_us):.0f} us", fontsize=11)
     out = os.path.join(os.path.dirname(__file__), "awg_waveforms_2q.png")
     fig.savefig(out, dpi=160, bbox_inches="tight")
     print(f"\nSaved waveform figure: {out}")
-    print("move durations (us):", [f"{m:.1f}" for m in move_us])
+    print("move durations (us):", [f"{m:.2f}" for m in move_us])
 
 
 if __name__ == "__main__":
