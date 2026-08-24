@@ -521,3 +521,56 @@ class TestMinJerkMoveTime:
         aod = [o for o in ops if o["op"] == "aod"][0]
         assert aod["duration"] == pytest.approx(expect)
         assert expect > 3000.0   # a ~100 um return hop is ms-scale
+
+
+class TestVelocityLimitedMoveTime:
+    """Speed-capped min-jerk timing: v_pk = (15/8) d/tau <= v_max."""
+
+    V_MAX = 4.0   # um/us (= m/s)
+
+    def _mapper(self):
+        m = _mapper_3q()
+        m.aod_vmax = self.V_MAX
+        m.ramp_time = 1.0
+        return m
+
+    def test_move_time_matches_closed_form(self):
+        m = self._mapper()
+        m.current_positions = [(0.0, 0.0), (2.0, 0.0), (1.0, 1.73)]
+        target = [(500.0, 0.0), (2.0, 0.0), (1.0, 1.73)]
+        tau = m._move_time(target)
+        assert tau == pytest.approx(15.0 * 500.0 / (8.0 * self.V_MAX))
+        assert tau == pytest.approx(234.375)   # 500 um at 4 m/s: ~234 us
+
+    def test_peak_speed_of_profile_hits_cap(self):
+        # the emitted min-jerk trajectory at tau_v really peaks at v_max
+        m = self._mapper()
+        m.current_positions = [(0.0, 0.0), (2.0, 0.0), (1.0, 1.73)]
+        d = 500.0
+        tau = m._move_time([(d, 0.0), (2.0, 0.0), (1.0, 1.73)])
+        s = np.linspace(0.0, 1.0, 200001)
+        x = d * (10 * s**3 - 15 * s**4 + 6 * s**5)
+        v_pk = np.abs(np.gradient(x, s * tau)).max()
+        assert v_pk == pytest.approx(self.V_MAX, rel=1e-4)
+
+    def test_linear_distance_scaling(self):
+        # velocity-limited: tau proportional to d (vs sqrt(d) accel-limited)
+        m = self._mapper()
+        m.current_positions = [(0.0, 0.0), (2.0, 0.0), (1.0, 1.73)]
+        t500 = m._move_time([(500.0, 0.0), (2.0, 0.0), (1.0, 1.73)])
+        t125 = m._move_time([(125.0, 0.0), (2.0, 0.0), (1.0, 1.73)])
+        assert t500 / t125 == pytest.approx(4.0, rel=1e-9)
+
+    def test_binding_constraint_wins_when_both_set(self):
+        m = self._mapper()
+        m.current_positions = [(0.0, 0.0), (2.0, 0.0), (1.0, 1.73)]
+        target = [(500.0, 0.0), (2.0, 0.0), (1.0, 1.73)]
+        tau_v = m._move_time(target)
+        # add a very slow accel cap: accel constraint must now dominate
+        m.aod_accel = 4.0415e-5
+        tau_both = m._move_time(target)
+        tau_a = np.sqrt(10.0 * 500.0 / (np.sqrt(3.0) * 4.0415e-5))
+        assert tau_both == pytest.approx(tau_a) and tau_both > tau_v
+        # generous accel cap: speed constraint binds again
+        m.aod_accel = 1e3
+        assert m._move_time(target) == pytest.approx(tau_v)

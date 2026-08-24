@@ -37,13 +37,16 @@ import physical_channels as pc
 
 # ── Realistic device timing (user config, 2026-08-24) ────────────────────────
 # CZ gate ~200 ns; dressing segments on the order of 1–10 μs (T = 5 μs here,
-# split by the kick's sampled τ); interaction→gate zone = 100 μm, timed by the
-# minimum-jerk peak acceleration of Cicali et al. PRApplied 24, 024070 — their
-# experimental point (7 μm in 1 ms) gives a_pk = 10d/(√3 τ²) ≈ 40 m/s², so the
-# 100 μm move takes √(10·d/(√3·a_pk)) ≈ 3.8 ms.  Transport dominates the
-# schedule by ~3 orders over dressing and ~4 over the gate.
-A_PK_UM_US2 = 10.0 * 7.0 / (np.sqrt(3.0) * 1000.0 ** 2)   # ≈ 4.04e-5 μm/μs²
-D_ZONE_UM = 100.0        # interaction → gate zone separation
+# split by the kick's sampled τ); transport is SPEED-limited at v_max = 4 m/s
+# (Cicali et al.'s Eq.-(6) min-jerk profile, whose peak speed is (15/8)·d/τ,
+# so a zone hop of d takes τ = (15/8)·d/v_max and needs peak acceleration
+# a_pk = 10d/(√3 τ²) = (128/45√3)·v_max²/d — the accel is derived, not a cap).
+# At 4 m/s a 100 μm hop would take only 47 μs; the 100–500 μs move budget
+# implies a zone separation of ~200–1000 μm, so the walkthrough uses 500 μm:
+# τ ≈ 235 μs per hop, a_pk ≈ 1.64·16/500e-6 ≈ 5.3e4 m/s².  Transport still
+# dominates the schedule: ~2 orders over dressing, ~3 over the gate.
+V_MAX_UM_US = 4.0        # peak tweezer speed, μm/μs (numerically = m/s)
+D_ZONE_UM = 500.0        # interaction → gate zone separation
 T_EVOLVE_US = 5.0        # evolution time (dressing-on window, split by kick)
 CZ_GATE_US = 0.2         # 200 ns two-qubit gate
 AOD_SETTLE_US = 1.0      # floor on any move (AOD settle)
@@ -73,7 +76,7 @@ def main():
     mapper = TweezerMapper(n_qubits=n, sol_gvars=sol_gvars, boxes=boxes,
                            ramp_time=AOD_SETTLE_US,
                            cz_gate_time=CZ_GATE_US,
-                           aod_accel=A_PK_UM_US2)
+                           aod_vmax=V_MAX_UM_US)
 
     np.random.seed(1)
     programs = observable_program_generator(
@@ -138,7 +141,7 @@ def main():
     fig = plt.figure(figsize=(12, 12))
     gs = fig.add_gridspec(n_ch + 2, 2, height_ratios=[1] * n_ch + [1.4, 1.6],
                           hspace=0.35, wspace=0.18)
-    t_ms = t_ns * 1e-6
+    t_us = t_ns * 1e-3
 
     # locate the CZ gate window (shortest GATE_AOM entry) for markers/zoom
     gate_entries = [(float(e._ScheduleEntry__t0), float(e._ScheduleEntry__t1))
@@ -153,20 +156,20 @@ def main():
     axes = [fig.add_subplot(gs[i, :]) for i in range(n_ch)]
     for ch_idx, ax in enumerate(axes):
         w = np.abs(waves[ch_idx])
-        ax.fill_between(t_ms, w, 0, color="C0", alpha=0.35, lw=0)
-        ax.plot(t_ms, w, lw=0.7, color="C0")
+        ax.fill_between(t_us, w, 0, color="C0", alpha=0.35, lw=0)
+        ax.plot(t_us, w, lw=0.7, color="C0")
         ax.set_ylabel(pc.CHANNEL_NAMES[ch_idx], fontsize=8, rotation=0,
                       ha="right", va="center")
         ax.tick_params(labelsize=7)
-        ax.set_xlim(t_ms[0], t_ms[-1])
+        ax.set_xlim(t_us[0], t_us[-1])
         if ch_idx < n_ch - 1:
             ax.tick_params(labelbottom=False)
     axes[0].set_title("|A| envelope (10 MS/s view; carriers unresolved)",
                       fontsize=8, loc="right")
-    # the 200 ns CZ is subpixel on the ms axis -- mark it
-    axes[pc.GATE_AOM].axvline(cz_t0 * 1e-6, color="C3", lw=1.0)
+    # the 200 ns CZ is subpixel on the us axis -- mark it
+    axes[pc.GATE_AOM].axvline(cz_t0 * 1e-3, color="C3", lw=1.0)
     axes[pc.GATE_AOM].annotate("CZ 200 ns (zoom below)",
-                               xy=(cz_t0 * 1e-6, 0.5),
+                               xy=(cz_t0 * 1e-3, 0.5),
                                xycoords=("data", "axes fraction"),
                                xytext=(8, 0), fontsize=7,
                                textcoords="offset points", color="C3")
@@ -174,17 +177,17 @@ def main():
     for e in rows[pc.DRESSING_AOM]:
         t0 = float(e._ScheduleEntry__t0)
         t1 = float(e._ScheduleEntry__t1)
-        axes[pc.DRESSING_AOM].axvline(t0 * 1e-6, color="C2", lw=1.0)
+        axes[pc.DRESSING_AOM].axvline(t0 * 1e-3, color="C2", lw=1.0)
         axes[pc.DRESSING_AOM].annotate(
             f"dressing {(t1 - t0) * 1e-3:.1f} us",
-            xy=(t0 * 1e-6, 0.6), xycoords=("data", "axes fraction"),
+            xy=(t0 * 1e-3, 0.6), xycoords=("data", "axes fraction"),
             xytext=(6, 0), fontsize=7, textcoords="offset points",
             color="C2")
 
     # -- transport frequency: min-jerk S-curves dominate the timeline --------
     ax_f = fig.add_subplot(gs[n_ch, :], sharex=axes[0])
     colors = {pc.TRANSPORT_AOD_X: "C0", pc.TRANSPORT_AOD_Y: "C1"}
-    move_ms = []
+    move_us = []
     for ch_idx, color in colors.items():
         for e in rows[ch_idx]:
             wf = e._ScheduleEntry__pulse.waveform
@@ -192,25 +195,29 @@ def main():
                 continue
             t0 = float(e._ScheduleEntry__t0)
             tt = np.linspace(0.0, wf.duration_ns, 400)
-            ax_f.plot((t0 + tt) * 1e-6, wf.instantaneous_freq_mhz(tt),
+            ax_f.plot((t0 + tt) * 1e-3, wf.instantaneous_freq_mhz(tt),
                       lw=1.4, color=color)
             lin = wf.f0_mhz + (wf.f1_mhz - wf.f0_mhz) * tt / wf.duration_ns
-            ax_f.plot((t0 + tt) * 1e-6, lin, lw=0.8, ls="--", color=color,
+            ax_f.plot((t0 + tt) * 1e-3, lin, lw=0.8, ls="--", color=color,
                       alpha=0.5)
             if ch_idx == pc.TRANSPORT_AOD_X:
-                move_ms.append(wf.duration_ns * 1e-6)
+                move_us.append(wf.duration_ns * 1e-3)
     ax_f.plot([], [], lw=1.4, color="C0", label="AOD X (min-jerk)")
     ax_f.plot([], [], lw=1.4, color="C1", label="AOD Y (min-jerk)")
     ax_f.plot([], [], lw=0.8, ls="--", color="gray", label="linear (old)")
     ax_f.legend(loc="center right", fontsize=7)
     ax_f.set_ylabel("transport\nf (MHz)", fontsize=8, rotation=0,
                     ha="right", va="center")
-    ax_f.set_xlabel("t (ms)", fontsize=9)
+    ax_f.set_xlabel("t (us)", fontsize=9)
     ax_f.tick_params(labelsize=7)
-    if move_ms:
+    if move_us:
+        d_big = max(move_us) * V_MAX_UM_US * 8.0 / 15.0        # um
+        a_pk_si = 1e6 * 128.0 * V_MAX_UM_US ** 2 / (
+            45.0 * np.sqrt(3.0) * d_big)                       # m/s^2
         ax_f.set_title(
-            f"100 um zone hop at a_pk ~ 40 m/s^2 -> {max(move_ms):.2f} ms "
-            "per move", fontsize=8, loc="right")
+            f"{d_big:.0f} um zone hop, v_pk = {V_MAX_UM_US:.0f} m/s -> "
+            f"{max(move_us):.0f} us per move (needs a_pk ~ "
+            f"{a_pk_si:.1e} m/s^2)", fontsize=8, loc="right")
 
     # -- zoom panels: the two faster scales ----------------------------------
     # (a) us scale: first dressing-on segment + co-played addressing combs
@@ -240,12 +247,12 @@ def main():
     ax_ns.tick_params(labelsize=7)
 
     fig.suptitle("End-to-end AWG waveforms -- one 2q PSR branch. "
-                 "Timescale hierarchy: move ~ ms >> dressing ~ us >> "
-                 "gate = 200 ns", fontsize=11)
+                 "Timescale hierarchy: move ~ 100s of us >> dressing ~ us "
+                 ">> gate = 200 ns", fontsize=11)
     out = os.path.join(os.path.dirname(__file__), "awg_waveforms_2q.png")
     fig.savefig(out, dpi=160, bbox_inches="tight")
     print(f"\nSaved waveform figure: {out}")
-    print("move durations (ms):", [f"{m:.3f}" for m in move_ms])
+    print("move durations (us):", [f"{m:.1f}" for m in move_us])
 
 
 if __name__ == "__main__":

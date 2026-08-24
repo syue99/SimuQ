@@ -277,7 +277,7 @@ class TweezerMapper:
 
     def __init__(self, n_qubits, sol_gvars, boxes, ramp_time=10.0,
                  cz_gate_time=0.25, R_cz=2.5, dressing_pairs=None,
-                 aod_accel=None):
+                 aod_accel=None, aod_vmax=None):
         self.n         = int(n_qubits)
         self.sol_gvars = list(sol_gvars)
         self.boxes     = boxes
@@ -288,12 +288,18 @@ class TweezerMapper:
             else sorted({(min(a, b), max(a, b)) for a, b in dressing_pairs})
         )
         self.ramp_time = float(ramp_time)   # μs
-        # Minimum-jerk transport timing (Cicali et al., PRApplied 24, 024070):
-        # peak acceleration in μm/μs² (e.g. 40 m/s² = 4.04e-5 μm/μs², their
-        # experimental operating point: 7 μm in 1 ms).  When set, each move's
-        # duration comes from its own distance via _move_time(); ramp_time
-        # then acts as the settle-time floor.  None = fixed ramp_time (legacy).
+        # Minimum-jerk transport timing (profile of Cicali et al., PRApplied
+        # 24, 024070, Eq. (6)).  Either hardware cap sizes each move's
+        # duration from its own distance via _move_time(); when both are set
+        # the binding (slower) one wins, and ramp_time acts as the settle-time
+        # floor.  Both None = fixed ramp_time (legacy).
+        #   aod_accel : peak acceleration in μm/μs² (1 μm/μs² = 1e6 m/s²);
+        #               τ_a = sqrt(10 d / (√3 a_pk)).
+        #   aod_vmax  : peak tweezer speed in μm/μs (numerically = m/s);
+        #               min-jerk peak speed is (15/8)·d/τ, so
+        #               τ_v = (15/8)·d / v_max.
         self.aod_accel = None if aod_accel is None else float(aod_accel)
+        self.aod_vmax = None if aod_vmax is None else float(aod_vmax)
         # Digital CZ used for ZZ *kick* segments (evolution ZZ stays analog):
         # physical gate duration and deep-blockade pair separation.
         self.cz_gate_time = float(cz_gate_time)   # μs
@@ -377,22 +383,30 @@ class TweezerMapper:
     def _move_time(self, target_positions):
         """AOD ramp duration in μs for a relocation from current_positions.
 
-        With aod_accel set, the minimum-jerk profile x(t) = d(10s³−15s⁴+6s⁵)
-        has peak acceleration a_pk = 10d/(√3 τ²), so the move duration at the
-        configured acceleration is τ = √(10 d / (√3 a_pk)), taken at the
+        The minimum-jerk profile x(t) = d(10s³−15s⁴+6s⁵) has peak speed
+        v_pk = (15/8)·d/τ and peak acceleration a_pk = 10d/(√3 τ²), so the
+        hardware caps translate to
+            τ_v = (15/8)·d / v_max        (speed-limited),
+            τ_a = √(10 d / (√3 a_max))    (acceleration-limited),
+        and the move takes the slower of the applicable constraints, at the
         largest single-atom displacement d (all tweezers ride one AOD ramp
-        window); ramp_time remains the floor (AOD settle time).  Without
-        aod_accel, the fixed ramp_time is used.
+        window); ramp_time remains the floor (AOD settle time).  With
+        neither cap set, the fixed ramp_time is used.
         """
-        if self.aod_accel is None:
+        if self.aod_accel is None and self.aod_vmax is None:
             return self.ramp_time
         d = max(np.hypot(tx - cx, ty - cy)
                 for (tx, ty), (cx, cy)
                 in zip(target_positions, self.current_positions))
         if d <= 0.0:
             return self.ramp_time
-        tau = float(np.sqrt(10.0 * d / (np.sqrt(3.0) * self.aod_accel)))
-        return max(tau, self.ramp_time)
+        tau = self.ramp_time
+        if self.aod_vmax is not None:
+            tau = max(tau, 15.0 * d / (8.0 * self.aod_vmax))
+        if self.aod_accel is not None:
+            tau = max(tau, float(
+                np.sqrt(10.0 * d / (np.sqrt(3.0) * self.aod_accel))))
+        return tau
 
     def _build_dressing_H(self, o_coef, sites_type, sites_name):
         """
