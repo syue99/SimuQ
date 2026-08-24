@@ -55,37 +55,64 @@ class ConstantTone:
 
 
 class ChirpTone:
-    """Phase-continuous linear frequency chirp f0 → f1 over duration_ns.
+    """Phase-continuous minimum-jerk frequency chirp f0 → f1 over duration_ns.
 
-    φ(t) = 2π·1e-3·(f0·t + (f1−f0)·t²/(2T)) + φ0, so the instantaneous
-    frequency f0 + (f1−f0)·t/T sweeps linearly — this is the tweezer-transport
-    waveform: the AOD deflection angle (∝ RF frequency) carries the atom from
-    the start position to the target.
+    The AOD deflection angle (∝ RF frequency) is the tweezer position, so the
+    chirp profile IS the transport trajectory. The minimum-jerk trajectory
+    [Cicali et al., Phys. Rev. Applied 24, 024070 (2025), Eq. (6)]
+
+        x(t) = d·(10 s³ − 15 s⁴ + 6 s⁵),   s = t/T,
+
+    has zero velocity AND zero acceleration at both endpoints (it minimizes
+    ∫|jerk|² over the path), avoiding the transport heating of a constant
+    sweep rate's velocity discontinuities. In frequency terms:
+
+        f(t)  = f0 + Δf·(10 s³ − 15 s⁴ + 6 s⁵),          Δf = f1 − f0,
+        φ(t)  = 2π·1e-3·(f0·t + Δf·T·(2.5 s⁴ − 3 s⁵ + s⁶)) + φ0,
+
+    the phase being the exact integral of f — analytic and phase-continuous,
+    with the same total accrued phase as the linear chirp (mean frequency is
+    still (f0+f1)/2 by the profile's time-reversal symmetry).
+
+    profile="linear" keeps the old constant-sweep-rate chirp (the paper's
+    Eq. (4)) for comparison.
     """
 
-    def __init__(self, amplitude, f0_mhz, f1_mhz, duration_ns, phase=0.0):
+    def __init__(self, amplitude, f0_mhz, f1_mhz, duration_ns, phase=0.0,
+                 profile="minjerk"):
         if duration_ns <= 0:
             raise ValueError("ChirpTone needs duration_ns > 0")
+        if profile not in ("minjerk", "linear"):
+            raise ValueError(f"unknown chirp profile: {profile!r}")
         self.amplitude = float(amplitude)
         self.f0_mhz = float(f0_mhz)
         self.f1_mhz = float(f1_mhz)
         self.duration_ns = float(duration_ns)
         self.phase = float(phase)
+        self.profile = profile
 
     def instantaneous_freq_mhz(self, t_ns):
-        t = np.asarray(t_ns, dtype=float)
-        return self.f0_mhz + (self.f1_mhz - self.f0_mhz) * t / self.duration_ns
+        s = np.asarray(t_ns, dtype=float) / self.duration_ns
+        df = self.f1_mhz - self.f0_mhz
+        if self.profile == "linear":
+            return self.f0_mhz + df * s
+        return self.f0_mhz + df * (10.0 * s**3 - 15.0 * s**4 + 6.0 * s**5)
 
     def __call__(self, t_ns):
         t = np.asarray(t_ns, dtype=float)
-        slope = (self.f1_mhz - self.f0_mhz) / self.duration_ns
-        phi = 2.0 * np.pi * MHZ_NS * (self.f0_mhz * t + 0.5 * slope * t * t)
+        s = t / self.duration_ns
+        df = self.f1_mhz - self.f0_mhz
+        if self.profile == "linear":
+            ramp_int = 0.5 * df * t * s
+        else:
+            ramp_int = df * self.duration_ns * (2.5 * s**4 - 3.0 * s**5 + s**6)
+        phi = 2.0 * np.pi * MHZ_NS * (self.f0_mhz * t + ramp_int)
         return self.amplitude * np.exp(1j * (phi + self.phase))
 
     def __repr__(self):
         return (f"ChirpTone(A={self.amplitude:.4g}, "
                 f"{self.f0_mhz:.4g}->{self.f1_mhz:.4g} MHz, "
-                f"T={self.duration_ns:.4g} ns)")
+                f"T={self.duration_ns:.4g} ns, {self.profile})")
 
 
 def tone_waveform(tone, duration_ns):

@@ -47,7 +47,9 @@ def test_constant_tone_matches_closed_form():
 def test_chirp_tone_endpoints_and_phase_continuity():
     T = 1000.0
     chirp = ChirpTone(amplitude=1.0, f0_mhz=90.0, f1_mhz=110.0, duration_ns=T)
-    # instantaneous frequency sweeps linearly f0 → f1
+    # minimum-jerk profile by default; endpoints + midpoint (time-reversal
+    # symmetry keeps f(T/2) at the mean frequency)
+    assert chirp.profile == "minjerk"
     assert np.isclose(chirp.instantaneous_freq_mhz(0.0), 90.0)
     assert np.isclose(chirp.instantaneous_freq_mhz(T / 2), 100.0)
     assert np.isclose(chirp.instantaneous_freq_mhz(T), 110.0)
@@ -60,6 +62,41 @@ def test_chirp_tone_endpoints_and_phase_continuity():
     # starts at the declared phase, |A| constant
     assert np.isclose(np.angle(chirp(0.0)), 0.0, atol=1e-12)
     assert np.allclose(np.abs(chirp(t)), 1.0)
+
+
+def test_chirp_tone_minjerk_boundary_conditions():
+    # Cicali et al. PRApplied 24, 024070 (2025) Eq. (6): position (here
+    # frequency) has zero velocity AND zero acceleration at both endpoints.
+    T = 1000.0
+    chirp = ChirpTone(1.0, 90.0, 110.0, duration_ns=T)
+    f = chirp.instantaneous_freq_mhz(np.linspace(0.0, T, 100001))
+    dt = T / 100000
+    v = np.gradient(f, dt)                 # MHz/ns
+    a = np.gradient(v, dt)
+    v_peak, a_peak = np.abs(v).max(), np.abs(a).max()
+    assert abs(v[0]) < 1e-3 * v_peak and abs(v[-1]) < 1e-3 * v_peak
+    assert abs(a[1]) < 1e-2 * a_peak and abs(a[-2]) < 1e-2 * a_peak
+    # peak sweep rate of the min-jerk profile is 15/8 x the linear rate
+    lin_rate = (110.0 - 90.0) / T
+    assert np.isclose(v_peak, 15.0 / 8.0 * lin_rate, rtol=1e-3)
+    # exact closed-form frequency at the quarter point: s=1/4 ->
+    # 10/64 - 15/256 + 6/1024 = 0.103515625
+    assert np.isclose(chirp.instantaneous_freq_mhz(T / 4),
+                      90.0 + 20.0 * 0.103515625)
+
+
+def test_chirp_tone_linear_profile_kept_for_comparison():
+    T = 500.0
+    lin = ChirpTone(1.0, 80.0, 95.0, duration_ns=T, profile="linear")
+    t = np.linspace(0.0, T, 2001)
+    assert np.allclose(lin.instantaneous_freq_mhz(t), 80.0 + 15.0 * t / T)
+    # old closed form for the linear phase
+    slope = 15.0 / T
+    expect = np.exp(1j * 2 * np.pi * 1e-3 * (80.0 * t + 0.5 * slope * t * t))
+    assert np.allclose(lin(t), expect)
+    # both profiles accrue the same total phase (same mean frequency)
+    mj = ChirpTone(1.0, 80.0, 95.0, duration_ns=T)
+    assert np.isclose(np.angle(mj(T) / lin(T)), 0.0, atol=1e-9)
 
 
 def test_tone_waveform_dispatch():

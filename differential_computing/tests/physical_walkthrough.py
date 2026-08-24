@@ -90,9 +90,11 @@ def main():
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    fig, axes = plt.subplots(pc.NUM_PHYSICAL_CHANNELS, 1, sharex=True,
-                             figsize=(11, 9))
-    for ch_idx, ax in enumerate(axes):
+    from awg_compile import ChirpTone
+
+    fig, axes = plt.subplots(pc.NUM_PHYSICAL_CHANNELS + 1, 1, sharex=True,
+                             figsize=(11, 10.5))
+    for ch_idx, ax in enumerate(axes[:-1]):
         w = waves[ch_idx]
         ax.plot(t_ns, w.real, lw=0.6, label="I")
         ax.plot(t_ns, w.imag, lw=0.6, alpha=0.7, label="Q")
@@ -101,9 +103,50 @@ def main():
                       ha="right", va="center")
         ax.tick_params(labelsize=7)
     axes[0].legend(loc="upper right", fontsize=7, ncol=3)
+
+    # transport chirp profiles: minimum-jerk f(t) (solid) vs the linear
+    # sweep between the same endpoints (dashed) [Cicali et al. Eq. (6)]
+    ax_f = axes[-1]
+    colors = {pc.TRANSPORT_AOD_X: "C0", pc.TRANSPORT_AOD_Y: "C1"}
+    rows = schedule._Sched__schedule
+    for ch_idx, color in colors.items():
+        for e in rows[ch_idx]:
+            wf = e._ScheduleEntry__pulse.waveform
+            if not isinstance(wf, ChirpTone):
+                continue
+            t0 = float(e._ScheduleEntry__t0)
+            tt = np.linspace(0.0, wf.duration_ns, 200)
+            ax_f.plot(t0 + tt, wf.instantaneous_freq_mhz(tt), lw=1.2,
+                      color=color)
+            lin = wf.f0_mhz + (wf.f1_mhz - wf.f0_mhz) * tt / wf.duration_ns
+            ax_f.plot(t0 + tt, lin, lw=0.8, ls="--", color=color, alpha=0.5)
+    ax_f.plot([], [], lw=1.2, color="C0", label="AOD X (min-jerk)")
+    ax_f.plot([], [], lw=1.2, color="C1", label="AOD Y (min-jerk)")
+    ax_f.plot([], [], lw=0.8, ls="--", color="gray", label="linear (old)")
+    ax_f.legend(loc="center right", fontsize=7, ncol=1)
+
+    # inset: zoom on the first move — the S-shaped min-jerk ramp (zero
+    # velocity/acceleration at both ends) vs the linear sweep
+    first = next(e for e in rows[pc.TRANSPORT_AOD_X]
+                 if isinstance(e._ScheduleEntry__pulse.waveform, ChirpTone))
+    wf = first._ScheduleEntry__pulse.waveform
+    t0 = float(first._ScheduleEntry__t0)
+    axin = ax_f.inset_axes([0.06, 0.15, 0.22, 0.75])
+    tt = np.linspace(0.0, wf.duration_ns, 400)
+    axin.plot(t0 + tt, wf.instantaneous_freq_mhz(tt), lw=1.4, color="C0")
+    axin.plot(t0 + tt,
+              wf.f0_mhz + (wf.f1_mhz - wf.f0_mhz) * tt / wf.duration_ns,
+              lw=1.0, ls="--", color="gray", alpha=0.8)
+    axin.set_title(f"first move, {wf.duration_ns:.0f} ns", fontsize=6, pad=2)
+    axin.tick_params(labelsize=5)
+    ax_f.indicate_inset_zoom(axin, edgecolor="gray", alpha=0.4)
+    ax_f.set_ylabel("transport\nf (MHz)", fontsize=8, rotation=0,
+                    ha="right", va="center")
+    ax_f.tick_params(labelsize=7)
     axes[-1].set_xlabel("t (ns)")
     fig.suptitle("End-to-end AWG waveforms — one 2q PSR branch, "
-                 "6 physical channels", fontsize=11)
+                 "6 physical channels; minimum-jerk transport chirps",
+                 fontsize=11)
     fig.tight_layout()
     out = os.path.join(os.path.dirname(__file__), "awg_waveforms_2q.png")
     fig.savefig(out, dpi=160)
