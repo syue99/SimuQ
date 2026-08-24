@@ -137,58 +137,21 @@ def main():
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    n_ch = pc.NUM_PHYSICAL_CHANNELS
-    fig = plt.figure(figsize=(12, 12))
-    gs = fig.add_gridspec(n_ch + 2, 2, height_ratios=[1] * n_ch + [1.4, 1.6],
-                          hspace=0.35, wspace=0.18)
     t_us = t_ns * 1e-3
 
-    # locate the CZ gate window (shortest GATE_AOM entry) for markers/zoom
+    # locate the CZ gate window (shortest GATE_AOM entry) for annotation
     gate_entries = [(float(e._ScheduleEntry__t0), float(e._ScheduleEntry__t1))
                     for e in rows[pc.GATE_AOM]]
     cz_t0, cz_t1 = min(gate_entries, key=lambda w: w[1] - w[0])
-    # first dressing-on window for the us-scale zoom
-    dr_t0, dr_t1 = min(((float(e._ScheduleEntry__t0),
-                         float(e._ScheduleEntry__t1))
-                        for e in rows[pc.DRESSING_AOM]), key=lambda w: w[0])
 
-    # -- overview: |A| envelope per channel, x in ms --------------------------
-    axes = [fig.add_subplot(gs[i, :]) for i in range(n_ch)]
-    for ch_idx, ax in enumerate(axes):
-        w = np.abs(waves[ch_idx])
-        ax.fill_between(t_us, w, 0, color="C0", alpha=0.35, lw=0)
-        ax.plot(t_us, w, lw=0.7, color="C0")
-        ax.set_ylabel(pc.CHANNEL_NAMES[ch_idx], fontsize=8, rotation=0,
-                      ha="right", va="center")
-        ax.tick_params(labelsize=7)
-        ax.set_xlim(t_us[0], t_us[-1])
-        if ch_idx < n_ch - 1:
-            ax.tick_params(labelbottom=False)
-    axes[0].set_title("|A| envelope (10 MS/s view; carriers unresolved)",
-                      fontsize=8, loc="right")
-    # the 200 ns CZ is subpixel on the us axis -- mark it
-    axes[pc.GATE_AOM].axvline(cz_t0 * 1e-3, color="C3", lw=1.0)
-    axes[pc.GATE_AOM].annotate("CZ 200 ns (zoom below)",
-                               xy=(cz_t0 * 1e-3, 0.5),
-                               xycoords=("data", "axes fraction"),
-                               xytext=(8, 0), fontsize=7,
-                               textcoords="offset points", color="C3")
-    # ... and so are the us-scale dressing segments
-    for e in rows[pc.DRESSING_AOM]:
-        t0 = float(e._ScheduleEntry__t0)
-        t1 = float(e._ScheduleEntry__t1)
-        axes[pc.DRESSING_AOM].axvline(t0 * 1e-3, color="C2", lw=1.0)
-        axes[pc.DRESSING_AOM].annotate(
-            f"dressing {(t1 - t0) * 1e-3:.1f} us",
-            xy=(t0 * 1e-3, 0.6), xycoords=("data", "axes fraction"),
-            xytext=(6, 0), fontsize=7, textcoords="offset points",
-            color="C2")
+    fig, (ax_f, ax_g) = plt.subplots(2, 1, sharex=True, figsize=(12, 7),
+                                     height_ratios=[1.2, 1.0])
 
-    # -- transport frequency: min-jerk S-curves dominate the timeline --------
-    ax_f = fig.add_subplot(gs[n_ch, :], sharex=axes[0])
-    colors = {pc.TRANSPORT_AOD_X: "C0", pc.TRANSPORT_AOD_Y: "C1"}
+    # ── panel 1: AOD transport frequency, X and Y combined ───────────────────
     move_us = []
-    for ch_idx, color in colors.items():
+    for ch_idx, color, lab in ((pc.TRANSPORT_AOD_X, "C0", "AOD X"),
+                               (pc.TRANSPORT_AOD_Y, "C1", "AOD Y")):
+        seen = False
         for e in rows[ch_idx]:
             wf = e._ScheduleEntry__pulse.waveform
             if not isinstance(wf, ChirpTone):
@@ -196,59 +159,69 @@ def main():
             t0 = float(e._ScheduleEntry__t0)
             tt = np.linspace(0.0, wf.duration_ns, 400)
             ax_f.plot((t0 + tt) * 1e-3, wf.instantaneous_freq_mhz(tt),
-                      lw=1.4, color=color)
+                      lw=1.6, color=color, label=None if seen else lab)
+            seen = True
             lin = wf.f0_mhz + (wf.f1_mhz - wf.f0_mhz) * tt / wf.duration_ns
             ax_f.plot((t0 + tt) * 1e-3, lin, lw=0.8, ls="--", color=color,
                       alpha=0.5)
             if ch_idx == pc.TRANSPORT_AOD_X:
                 move_us.append(wf.duration_ns * 1e-3)
-    ax_f.plot([], [], lw=1.4, color="C0", label="AOD X (min-jerk)")
-    ax_f.plot([], [], lw=1.4, color="C1", label="AOD Y (min-jerk)")
+        if not seen:   # only constant hold tones on this axis
+            for e in rows[ch_idx]:
+                wf = e._ScheduleEntry__pulse.waveform
+                f0 = getattr(wf, "freq_mhz", None)
+                if not f0:
+                    continue
+                t0 = float(e._ScheduleEntry__t0)
+                t1 = float(e._ScheduleEntry__t1)
+                ax_f.plot([t0 * 1e-3, t1 * 1e-3], [f0, f0], lw=1.6,
+                          color=color, label=None if seen else lab)
+                seen = True
     ax_f.plot([], [], lw=0.8, ls="--", color="gray", label="linear (old)")
-    ax_f.legend(loc="center right", fontsize=7)
-    ax_f.set_ylabel("transport\nf (MHz)", fontsize=8, rotation=0,
-                    ha="right", va="center")
-    ax_f.set_xlabel("t (us)", fontsize=9)
-    ax_f.tick_params(labelsize=7)
-    if move_us:
-        d_big = max(move_us) * V_MAX_UM_US * 8.0 / 15.0        # um
-        a_pk_si = 1e6 * 128.0 * V_MAX_UM_US ** 2 / (
-            45.0 * np.sqrt(3.0) * d_big)                       # m/s^2
-        ax_f.set_title(
-            f"{d_big:.0f} um zone hop, v_pk = {V_MAX_UM_US:.0f} m/s -> "
-            f"{max(move_us):.0f} us per move (needs a_pk ~ "
-            f"{a_pk_si:.1e} m/s^2)", fontsize=8, loc="right")
+    ax_f.legend(fontsize=8, loc="center right")
+    ax_f.set_ylabel("AOD frequency (MHz)", fontsize=9)
+    ax_f.tick_params(labelsize=8)
+    d_big = max(move_us) * V_MAX_UM_US * 8.0 / 15.0            # um
+    a_pk_si = 1e6 * 128.0 * V_MAX_UM_US ** 2 / (
+        45.0 * np.sqrt(3.0) * d_big)                           # m/s^2
+    ax_f.set_title(
+        f"transport: {d_big:.0f} um min-jerk hop, v_pk = "
+        f"{V_MAX_UM_US:.0f} m/s -> {max(move_us):.0f} us per move "
+        f"(needs a_pk ~ {a_pk_si:.1e} m/s^2)", fontsize=9)
 
-    # -- zoom panels: the two faster scales ----------------------------------
-    # (a) us scale: first dressing-on segment + co-played addressing combs
-    ax_us = fig.add_subplot(gs[n_ch + 1, 0])
-    pad = 500.0
-    for ch_idx, color, lab in ((pc.DRESSING_AOM, "C2", "DRESSING |A|"),
-                               (pc.ADDR_RABI, "C4", "ADDR_RABI |A|"),
-                               (pc.ADDR_DET, "C5", "ADDR_DET |A|")):
-        tz, wz = sample_window(ch_idx, dr_t0 - pad, dr_t1 + pad, dt=1.0)
-        ax_us.plot(tz * 1e-3, np.abs(wz), lw=0.9, color=color, label=lab)
-    ax_us.set_xlabel("t (us)", fontsize=8)
-    ax_us.set_title(f"dressing segment: {(dr_t1 - dr_t0) * 1e-3:.2f} us "
-                    "(1 GS/s)", fontsize=8)
-    ax_us.legend(fontsize=6)
-    ax_us.tick_params(labelsize=7)
+    # ── panel 2: all gate/drive channels, |A| envelope, one color each ───────
+    gate_chs = ((pc.DRESSING_AOM, "C2", "dressing (ZZ)"),
+                (pc.GATE_AOM, "C3", "gate zone (CZ)"),
+                (pc.ADDR_RABI, "C4", "addressing Rabi"),
+                (pc.ADDR_DET, "C5", "addressing detuning"))
+    for ch_idx, color, lab in gate_chs:
+        ax_g.plot(t_us, np.abs(waves[ch_idx]), lw=1.0, color=color,
+                  label=lab)
+    ax_g.legend(fontsize=8, loc="center right")
+    ax_g.set_ylabel("|A| envelope", fontsize=9)
+    ax_g.set_xlabel("t (us)", fontsize=9)
+    ax_g.tick_params(labelsize=8)
+    ax_g.set_title("drive channels (10 MS/s envelope view; us/ns pulses "
+                   "are subpixel -- see annotations)", fontsize=9)
 
-    # (b) ns scale: the CZ pulse itself, I/Q resolved
-    ax_ns = fig.add_subplot(gs[n_ch + 1, 1])
-    tz, wz = sample_window(pc.GATE_AOM, cz_t0 - 150.0, cz_t1 + 150.0, dt=1.0)
-    ax_ns.plot(tz - cz_t0, wz.real, lw=0.7, label="I")
-    ax_ns.plot(tz - cz_t0, wz.imag, lw=0.7, alpha=0.8, label="Q")
-    ax_ns.plot(tz - cz_t0, np.abs(wz), lw=1.1, color="k", alpha=0.6,
-               label="|A|")
-    ax_ns.set_xlabel("t - t_CZ (ns)", fontsize=8)
-    ax_ns.set_title(f"CZ gate: {(cz_t1 - cz_t0):.0f} ns (1 GS/s)", fontsize=8)
-    ax_ns.legend(fontsize=6, ncol=3)
-    ax_ns.tick_params(labelsize=7)
+    # subpixel events: annotate the 200 ns CZ and the us dressing segments
+    ax_g.annotate("CZ 200 ns", xy=(cz_t0 * 1e-3, 0.80),
+                  xycoords=("data", "axes fraction"), color="C3", fontsize=8,
+                  ha="left", xytext=(8, 0), textcoords="offset points",
+                  arrowprops=dict(arrowstyle="-", color="C3", lw=0.8))
+    for e in rows[pc.DRESSING_AOM]:
+        t0 = float(e._ScheduleEntry__t0)
+        t1 = float(e._ScheduleEntry__t1)
+        ax_g.annotate(f"dressing {(t1 - t0) * 1e-3:.1f} us",
+                      xy=(t0 * 1e-3, 0.75),
+                      xycoords=("data", "axes fraction"), color="C2",
+                      fontsize=8, ha="left", xytext=(4, 8),
+                      textcoords="offset points",
+                      arrowprops=dict(arrowstyle="-", color="C2", lw=0.8))
 
-    fig.suptitle("End-to-end AWG waveforms -- one 2q PSR branch. "
-                 "Timescale hierarchy: move ~ 100s of us >> dressing ~ us "
-                 ">> gate = 200 ns", fontsize=11)
+    fig.suptitle("One 2q PSR branch -- transport chirps vs drive channels. "
+                 "move ~ 100s of us >> dressing ~ us >> gate = 200 ns",
+                 fontsize=11)
     out = os.path.join(os.path.dirname(__file__), "awg_waveforms_2q.png")
     fig.savefig(out, dpi=160, bbox_inches="tight")
     print(f"\nSaved waveform figure: {out}")
