@@ -54,7 +54,13 @@ TRANSIT_DY_UM = 5.0      # y-offset lane: lift 5 um, travel, drop, so the
                          # moving pair never sweeps through parked atoms
 
 
-def main():
+def build_schedule(verbose=True):
+    """Compile the 2q running instance end-to-end under the module config.
+
+    Returns (schedule, mapper, meta): the PulseDSL Sched, the TweezerMapper
+    (its ledger holds per-segment provenance), and a dict of the compile
+    context (n, tau split, atom geometry) for figure builders.
+    """
     fifo = "/Users/syue99/research/RISC-Q/PulseDSL/src/DSL/tmp_pulse_mmio.txt"
     if os.path.exists(fifo):
         os.remove(fifo)
@@ -85,23 +91,46 @@ def main():
     programs = observable_program_generator(
         H, T, n_sample=1, n_repetition=1, diff_var="x", value=x_val)
     H_list = programs[0][0][0]
+    tau_us = float(H_list[0][1])         # sampled insertion time (first seg)
 
     logical, _, _ = mapper.map_hlist_tree(H_list, T=T)
     physical = pc.to_physical(logical, n)
 
-    print("\n=== PHYSICAL op-tree (6 AOM/AOD channels) ===")
-    print(pt.pretty(physical))
+    if verbose:
+        print("\n=== PHYSICAL op-tree (6 AOM/AOD channels) ===")
+        print(pt.pretty(physical))
 
     from PulseDSL_py import Channels, Schedule, PulseLib
     from PulseDSL_py.pulselib import set_platform
+    import PulseDSL_py.schedule as dsl_schedule
 
+    dsl_schedule.sched = None            # fresh session (global singleton)
     ch, reg = Channels(pc.NUM_PHYSICAL_CHANNELS)
     schedule = Schedule()
     set_platform(PulseLib.Rydberg)
     aod_ch = ch[pc.TRANSPORT_AOD]
 
-    print("\n=== Translating to PulseDSL (COMB/Play) and RUN ===")
+    if verbose:
+        print("\n=== Translating to PulseDSL (COMB/Play) and RUN ===")
     to_pulsedsl_tree(physical, ch, aod_ch, run=True)
+
+    meta = {
+        "n": n,
+        "T_us": T,
+        "tau_us": tau_us,
+        "x_val": x_val,
+        "interaction_positions": mapper.interaction_positions(),
+        "gate_zone": (D_ZONE_UM, 0.0),
+        "R_cz": mapper.R_cz,
+        "transit_dy": TRANSIT_DY_UM,
+        "v_max": V_MAX_UM_US,
+        "cz_gate_us": CZ_GATE_US,
+    }
+    return schedule, mapper, meta
+
+
+def main():
+    schedule, mapper, meta = build_schedule(verbose=True)
 
     print("\n=== schedule.view() — channels:", pc.CHANNEL_NAMES, "===")
     schedule.view()
