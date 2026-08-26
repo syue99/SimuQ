@@ -294,10 +294,13 @@ def render(data):
     bounds = data["bounds_ns"]
     cz = data["cz"]
 
-    fig = plt.figure(figsize=(7.08, 3.9))
-    gs = fig.add_gridspec(1, 3, width_ratios=[1.05, 1.22, 0.78],
-                          wspace=0.03, left=0.008, right=0.995,
-                          top=0.905, bottom=0.02)
+    # compact layout, same canvas as the original working anatomy:
+    # top row = Space | Time lanes; bottom strip = Ledger lines | coverage
+    fig = plt.figure(figsize=(4.3, 3.9))
+    gs = fig.add_gridspec(2, 2, width_ratios=[1.42, 1.08],
+                          height_ratios=[0.735, 0.265],
+                          wspace=0.02, hspace=0.10,
+                          left=0.008, right=0.995, top=0.905, bottom=0.015)
     gsA = gs[0, 0].subgridspec(3, 1, height_ratios=[1.0, 0.40, 1.0],
                                hspace=0.20)
 
@@ -417,27 +420,27 @@ def render(data):
     # salient content (envelope for drives, tone f(t) for transport).
     axT = fig.add_subplot(gs[0, 1])
     axT.set_xlim(0, 1); axT.set_ylim(0, 1); axT.axis("off")
-    fig.text(0.375, 0.945, "Time", fontsize=9, color=C_ANALOG,
+    fig.text(0.615, 0.945, "Time", fontsize=9, color=C_ANALOG,
              fontweight="bold")
 
     b_us = [b * 1e-3 for b in bounds]
-    band_h = [0.145, 0.105, 0.130, 0.105, 0.145]
-    GAP = 0.016
+    band_h = [0.165, 0.125, 0.150, 0.125, 0.165]
+    GAP = 0.018
     stage_meta = [("1", C_ANALOG, "ev(0,τ)"), ("2", C_AOD, "move →"),
                   ("3", C_DIGITAL, "CZ+$R_z$"), ("2", C_AOD, "move ←"),
                   ("4", C_ANALOG, "ev(τ,T)")]
-    AXX = 0.185                      # vertical axis x
+    AXX = 0.235                      # vertical axis x
 
     # lanes: name -> (center x, half width)
-    LN0, LN1 = 0.30, 0.985
+    LN0, LN1 = 0.33, 0.99
     lane_names = ["drive I/Q", "dressing", "gate", "move x/y"]
     n_lanes = len(lane_names)
     lane_w = (LN1 - LN0) / n_lanes
     lanes = {nm: (LN0 + (k + 0.5) * lane_w, 0.44 * lane_w)
              for k, nm in enumerate(lane_names)}
-    y_top = 0.930
+    y_top = 0.925
     for nm, (cx, _hw) in lanes.items():
-        axT.text(cx, y_top + 0.022, nm, fontsize=4.3, ha="center",
+        axT.text(cx, y_top + 0.020, nm, fontsize=3.9, ha="center",
                  va="bottom", color=C_ATOM)
 
     def brk(y):                      # axis-break marks
@@ -549,35 +552,18 @@ def render(data):
             y -= GAP
 
     # meas box (under the drive lane)
-    y0m = y - 0.048
+    y0m = y - 0.052
     cx, hw = lanes["drive I/Q"]
-    axT.add_patch(Rectangle((cx - hw, y0m), 2 * hw, 0.038, fc="none",
+    axT.add_patch(Rectangle((cx - hw, y0m), 2 * hw, 0.042, fc="none",
                             ec=C_SOFT, ls="--", lw=0.6))
-    axT.text(cx - hw - 0.014, y0m + 0.019, "meas", fontsize=4.4,
+    axT.text(cx - hw - 0.014, y0m + 0.021, "meas", fontsize=4.4,
              ha="right", va="center", color=C_SOFT)
 
-    # coverage table: 8 channels × stages ①②③④
-    ty = y0m - 0.030
-    cols_x = [0.55, 0.67, 0.79, 0.91]
-    stage_cols = [C_ANALOG, C_AOD, C_DIGITAL, C_ANALOG]
-    for k, num in enumerate("1234"):
-        axT.text(cols_x[k], ty, num, fontsize=4.2, ha="center",
-                 color=stage_cols[k], fontweight="bold")
-    rh = (ty - 0.012) / 8.4
-    for ri, (nm, acts) in enumerate(data["coverage"]):
-        ry = ty - (ri + 1) * rh
-        axT.text(0.42, ry, nm, fontsize=3.8, ha="right", va="center",
-                 color=C_ATOM)
-        for k, a in enumerate(acts):
-            if a:
-                axT.text(cols_x[k], ry, "✓", fontsize=3.9, ha="center",
-                         va="center", color=stage_cols[k])
-
-    # ═══ column 3 — Ledger excerpt (real PulseLedger rows) ══════════════════
-    axL = fig.add_subplot(gs[0, 2])
+    # ═══ footer left — Ledger excerpt (real PulseLedger rows) ═══════════════
+    axL = fig.add_subplot(gs[1, 0])
     axL.set_xlim(0, 1); axL.set_ylim(0, 1); axL.axis("off")
-    fig.text(0.760, 0.945, "Ledger", fontsize=9, color=C_ANALOG,
-             fontweight="bold")
+    axL.text(0.015, 0.985, "Ledger", fontsize=7, color=C_ANALOG,
+             fontweight="bold", va="top")
 
     # concise: one line per segment — seg · wall clock · what happened
     stage_color = {"1": C_ANALOG, "2": C_AOD, "3": C_DIGITAL, "4": C_ANALOG}
@@ -591,29 +577,48 @@ def render(data):
             return f"move {r['transport']}"
         return f"ev{r['sem']}: {r['terms']}"
 
-    y = 0.955
+    y = 0.83
     axL.text(0.075, y, "seg  wall clock (µs)  content", family="monospace",
-             fontsize=4.4, va="center", color="#777777")
-    y -= 0.062
+             fontsize=4.2, va="center", color="#777777")
+    y -= 0.115
     for r in data["ledger_rows"]:
         col = stage_color[r["stage"]]
         if r["ins"] == "INS":
-            axL.add_patch(plt.Rectangle((0.008, y - 0.026), 0.987, 0.052,
+            axL.add_patch(plt.Rectangle((0.008, y - 0.048), 0.987, 0.096,
                                         fc=C_DIGITAL, alpha=0.07,
                                         ec="none"))
-        badge(axL, 0.033, y, r["stage"], col, fs=4.6)
+        badge(axL, 0.033, y, r["stage"], col, fs=4.4)
         axL.text(0.075, y,
                  f"{r['seg'][-1]}  [{r['wall'][0]:6.1f},{r['wall'][1]:6.1f}]"
                  f"  {content(r)}",
                  color=(C_DIGITAL if r["ins"] == "INS" else C_ATOM), **mono)
-        y -= 0.062
-    y -= 0.012
+        y -= 0.115
+    y -= 0.010
     axL.text(0.075, y,
              f"total {b_us[-1]:.1f} µs = "
              f"{b_us[1] - b_us[0] + b_us[5] - b_us[4]:.1f} ev + "
              f"{b_us[2] - b_us[1] + b_us[4] - b_us[3]:.1f} move + "
              f"{b_us[3] - b_us[2]:.2f} gate",
-             family="monospace", fontsize=4.4, color="#777777")
+             family="monospace", fontsize=4.2, color="#777777")
+
+    # ═══ footer right — channel coverage table ══════════════════════════════
+    axC = fig.add_subplot(gs[1, 1])
+    axC.set_xlim(0, 1); axC.set_ylim(0, 1); axC.axis("off")
+    cols_x = [0.52, 0.65, 0.78, 0.91]
+    stage_cols = [C_ANALOG, C_AOD, C_DIGITAL, C_ANALOG]
+    ty = 0.88
+    for k, num in enumerate("1234"):
+        axC.text(cols_x[k], ty, num, fontsize=4.4, ha="center",
+                 color=stage_cols[k], fontweight="bold")
+    rh = (ty - 0.05) / 8.4
+    for ri, (nm, acts) in enumerate(data["coverage"]):
+        ry = ty - (ri + 1) * rh
+        axC.text(0.44, ry, nm, fontsize=4.0, ha="right", va="center",
+                 color=C_ATOM)
+        for k, a in enumerate(acts):
+            if a:
+                axC.text(cols_x[k], ry, "✓", fontsize=4.1, ha="center",
+                         va="center", color=stage_cols[k])
 
     out = os.path.join(FIG_DIR, "branch_anatomy")
     fig.savefig(out + ".png", dpi=200, bbox_inches="tight")
