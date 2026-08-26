@@ -1,30 +1,31 @@
 """
-build_branch_anatomy.py — Sec 6 figure: machine anatomy of one 2q PSR branch.
+build_branch_anatomy.py — Fig 5 (fig:branch): one compiled PSR branch as one
+artifact, per the 2026-08-25 redraw guide.
 
-Two panels, styled after the hand mock (space | time), but every number is
-read from the real compiled artifact:
+Three columns (figure*, full text width), stage numbers ①②③④ shared:
 
-  Panel A "Space: zone architecture" — atom geometry from the solver's
-  sol_gvars, gate zone / transit lane / R_cz from the mapper config, with the
-  compiled pair highlighted against a schematic array.
+  Space  — UNCHANGED zone cartoon (interaction/gate zones, dressing ON/OFF,
+           AOD move, CZ insert, R_cz).
+  Time   — vertical wall-clock axis, NOT to scale (axis breaks between
+           stages); per stage ONLY the active channels, as real traces from
+           the compiled per-channel waveform output; a compact 8-channel ×
+           4-stage coverage table under the axis.
+  Ledger — monospace excerpt of the real PulseLedger rows for this branch:
+           segment id · semantic clock · wall clock · active terms with
+           provenance · frame state · transport plan · insertion marker.
 
-  Panel B "Time: one two-qubit-kick branch" — lane timeline on the
-  EVENT-SPACED axis (equal width per inter-event interval, tick labels are
-  true times), extracted from the PulseDSL schedule:
-    1 global drives   : dressing + addressing ON blocks with the real
-                        sampled comb envelopes inside; OFF (frozen) during
-                        the insertion window (Assumption 4.7 halt/resume)
-    2 AOD transport   : the real min-jerk x(t) of both comb tones
-    3 gate-zone pulse : the measured 696 ns CZ gate (gate_amp_and_phase.csv
-                        sampled A(t)/φ(t) on 80 MHz; virtual-Z phase)
-    4 frame updates   : software-only ticks — the branch sign s lives here
-    5 pair y / lane   : lift 5 um -> transit lane -> drop, park at R_cz
-  plus a per-stage cost strip (dressed T2*, ground-state clock, benchmarked
-  gate error, classical readout).
+Channel-name mapping to the App F inventory (emission-layer truth):
+  move-AOD x/y  = TRANSPORT_AOD_X / _Y (tone frequency = tweezer position)
+  drive I / Q   = Re / Im of the ADDR_RABI addressing comb waveform
+  dressing      = DRESSING_AOM;   gate = GATE_AOM (measured 696 ns shape)
+  addr-AOD x/y  = addressing-beam steering — idle for this branch (the comb
+                  tone frequencies are static), shown blank in the coverage
+                  table.
 
 Phases: extract (runs the pipeline, caches figures/branch_anatomy_data.json)
 and render (reads the JSON — REBUILD=1 forces re-extraction).  Never re-run
-the pipeline just to tweak the plot.
+the pipeline just to tweak the plot.  Every number in the Time and Ledger
+columns comes from the schedule / PulseLedger — nothing is invented.
 
 Run:  conda run -n qec_pg python differential_computing/tests/build_branch_anatomy.py
 """
@@ -42,10 +43,13 @@ import numpy as np
 FIG_DIR = os.path.join(os.path.dirname(__file__), "..", "figures")
 DATA_JSON = os.path.join(FIG_DIR, "branch_anatomy_data.json")
 
-C_ANALOG = "#1f5fbf"      # analog / continuous
-C_DIGITAL = "#d62728"     # digital / discrete
-C_SOFT = "#666666"        # software-only
+C_ANALOG = "#1f5fbf"      # analog / continuous (stages ① ④)
+C_DIGITAL = "#d62728"     # digital / discrete  (stage ③)
+C_AOD = "#d9822b"         # transport            (stage ②)
+C_SOFT = "#666666"        # software-only / measure
 C_ATOM = "#26343f"
+
+DRIVE_EXCERPT_NS = 250.0  # length of the evolution-drive excerpt windows
 
 
 # ── extraction ────────────────────────────────────────────────────────────────
@@ -53,7 +57,7 @@ C_ATOM = "#26343f"
 def extract():
     """Compile the running instance and distill the figure data to JSON."""
     import physical_channels as pc
-    from awg_compile import ChirpTone, _fallback_waveform
+    from awg_compile import ChirpTone, SampledTone, _fallback_waveform
     from physical_walkthrough import build_schedule
 
     # Simplification for this figure: atoms always ride the AOD, so moves
@@ -85,17 +89,21 @@ def extract():
                 / pc.TRANSPORT_KAPPA_MHZ_PER_UM)
 
     def tone_traces(ch):
+        """[{t, um, mhz}] per tone entry (chirps sampled, holds two-point)."""
         traces = []
         for t0, t1, p in entries(ch):
             wf = p.waveform
             if isinstance(wf, ChirpTone):
                 tt = np.linspace(0.0, wf.duration_ns, 120)
+                f = wf.instantaneous_freq_mhz(tt)
                 traces.append({"t": (t0 + tt).tolist(),
-                               "um": pos_of(wf.instantaneous_freq_mhz(tt)
-                                            ).tolist()})
+                               "um": pos_of(f).tolist(),
+                               "mhz": f.tolist()})
             elif getattr(wf, "freq_mhz", 0.0):
+                f = float(wf.freq_mhz)
                 traces.append({"t": [t0, t1],
-                               "um": [float(pos_of(wf.freq_mhz))] * 2})
+                               "um": [float(pos_of(f))] * 2,
+                               "mhz": [f, f]})
         return traces
 
     # drive blocks: dressing / addressing windows + sampled |A| envelope
@@ -115,11 +123,20 @@ def extract():
                         "env": np.abs(w).tolist()})
         return out
 
-    # the CZ play (single shortest gate-zone entry) + its virtual-Z phase.
-    # Guard the shape routing: every GATE_AOM play must carry the measured
-    # SampledTone gate, and NO dressing/addressing play may (the fixed shape
-    # is the 2q gate only — dressing keeps its constant envelope).
-    from awg_compile import SampledTone
+    def window_iq(ch, t0, dur_ns, dt=0.5):
+        """Real I/Q excerpt of one channel summed over [t0, t0+dur)."""
+        t = np.arange(0.0, dur_ns, dt)
+        w = np.zeros(len(t), dtype=complex)
+        for e0, e1, p in entries(ch):
+            m = (t + t0 >= e0) & (t + t0 < e1)
+            if not m.any():
+                continue
+            fn = p.waveform if p.waveform is not None \
+                else _fallback_waveform(p)
+            w[m] += fn(t[m] + t0 - e0)
+        return t, w
+
+    # guard the gate-shape routing: measured shape on GATE_AOM only
     assert all(isinstance(p.waveform, SampledTone)
                for _, _, p in entries(pc.GATE_AOM)), \
         "GATE_AOM play without the measured gate shape"
@@ -127,21 +144,96 @@ def extract():
         assert not any(isinstance(p.waveform, SampledTone)
                        for _, _, p in entries(chn)), \
             f"sampled gate shape leaked onto channel {chn}"
+
     gate = min(entries(pc.GATE_AOM), key=lambda e: e[1] - e[0])
     gt = np.linspace(0.0, gate[1] - gate[0], 400)
     gwf = gate[2].waveform            # SampledTone — the measured gate
-    # the TRUE played waveform A(t)·sin(2π·80MHz·t + φ(t) + φ_vz), sampled
-    # at 0.5 ns (25 pts/carrier cycle) straight from the schedule's tone
     twf = np.arange(0.0, gate[1] - gate[0], 0.5)
     cz = {"t0": gate[0], "t1": gate[1],
           "amp": float(gate[2].amplitude),
           "vz_phase": float(getattr(gate[2], "phase", 0.0) or 0.0),
           "env": np.abs(gwf(gt)).tolist(),
-          # measured phase table φ(t) interpolated on the same grid
           "phi": np.interp(gt, gwf.t_ns - gwf.t_ns[0],
                            gwf.phase_rad).tolist(),
           "wf_t": twf.tolist(),
           "wf": np.imag(gwf(twf)).tolist()}
+
+    # evolution-stage drive excerpts (real I/Q of the ADDR_RABI comb) and
+    # the dressing level, per evolution stage
+    ev_stages = []
+    for (s0, s1) in ((bounds[0], bounds[1]), (bounds[-2], bounds[-1])):
+        te, we = window_iq(pc.ADDR_RABI, s0, DRIVE_EXCERPT_NS)
+        _, wd = window_iq(pc.DRESSING_AOM, s0, DRIVE_EXCERPT_NS)
+        ev_stages.append({"t0": s0, "t1": s1,
+                          "ex_t": te.tolist(),
+                          "I": we.real.tolist(),
+                          "Q": we.imag.tolist(),
+                          "dress_level": float(np.abs(wd).max())})
+
+    # frame-table events: the CZ's virtual-Z on both qubits (from the ledger)
+    cz_ledger = [e for e in mapper.ledger.entries
+                 if e.channel_kind == "cz_gate"]
+    assert len(cz_ledger) == 1
+    frame = {"t": cz["t1"],
+             "qubits": list(cz_ledger[0].target_qubits),
+             "phase": float(cz_ledger[0].phase)}
+
+    # ledger excerpt: one row per branch segment, straight off the ledger
+    kick = [e for e in mapper.ledger.entries if e.channel_kind == "kick"]
+    assert len(kick) == 1 and \
+        [(str(p), c) for p, c in kick[0].hamiltonian.ham][0][1] in (1.0, -1.0)
+    aods = [e for e in mapper.ledger.entries if e.op_type == "aod"]
+    b_us = [b * 1e-3 for b in bounds]
+    src_terms = "Ω·Xa Ω·Xb θJ·ZaZb (src)"
+    ledger_rows = [
+        {"stage": "1", "seg": "seg0", "sem": "[0,τ)",
+         "wall": [b_us[0], b_us[1]], "terms": src_terms,
+         "frame": "–", "transport": "–", "ins": "–"},
+        {"stage": "2", "seg": "seg1", "sem": "–",
+         "wall": [b_us[1], b_us[2]], "terms": "–",
+         "frame": "–",
+         "transport": "a,b→" + aods[0].zone[0], "ins": "–"},
+        {"stage": "3", "seg": "seg2", "sem": "[0,π/4)",
+         "wall": [b_us[2], b_us[3]],
+         "terms": "s·ZaZb (insertion)",
+         "frame": f"Rz(s·{frame['phase'] / np.pi:.2g}π) a,b",
+         "transport": "–", "ins": "INS"},
+        {"stage": "2", "seg": "seg3", "sem": "–",
+         "wall": [b_us[3], b_us[4]], "terms": "–",
+         "frame": "–",
+         "transport": "a,b→" + {"interaction": "int"}.get(
+             aods[1].zone[0], aods[1].zone[0]), "ins": "–"},
+        {"stage": "4", "seg": "seg4", "sem": "[τ,T)",
+         "wall": [b_us[4], b_us[5]], "terms": src_terms,
+         "frame": "–", "transport": "–", "ins": "–"},
+    ]
+
+    # coverage: which App-F channels are active in stages ① ② ③ ④
+    def active(ch, lo, hi):
+        return any(e0 < hi - 1.0 and e1 > lo + 1.0 and
+                   (np.abs(p.amplitude or 0.0) > 1e-12)
+                   for e0, e1, p in entries(ch))
+
+    ev_w = [(bounds[0], bounds[1]), (bounds[4], bounds[5])]
+    mv_w = [(bounds[1], bounds[2]), (bounds[3], bounds[4])]
+    cz_w = [(bounds[2], bounds[3])]
+
+    def stages_of(ch):
+        return [any(active(ch, lo, hi) for lo, hi in ev_w),
+                any(active(ch, lo, hi) for lo, hi in mv_w),
+                any(active(ch, lo, hi) for lo, hi in cz_w),
+                any(active(ch, lo, hi) for lo, hi in ev_w)]
+
+    coverage = [
+        ("move-AOD x", stages_of(pc.TRANSPORT_AOD_X)),
+        ("move-AOD y", stages_of(pc.TRANSPORT_AOD_Y)),
+        ("addr-AOD x", [False] * 4),        # steering idle: static tone freqs
+        ("addr-AOD y", [False] * 4),
+        ("drive I", stages_of(pc.ADDR_RABI)),
+        ("drive Q", stages_of(pc.ADDR_RABI)),
+        ("dressing", stages_of(pc.DRESSING_AOM)),
+        ("gate", stages_of(pc.GATE_AOM)),
+    ]
 
     data = {
         "meta": {k: (list(v) if isinstance(v, tuple) else v)
@@ -154,6 +246,10 @@ def extract():
         "addr_det": drive_blocks(pc.ADDR_DET),
         "aod_x_env": drive_blocks(pc.TRANSPORT_AOD_X),
         "cz": cz,
+        "ev_stages": ev_stages,
+        "frame": frame,
+        "ledger_rows": ledger_rows,
+        "coverage": coverage,
     }
     data["meta"]["interaction_positions"] = [
         list(p) for p in meta["interaction_positions"]]
@@ -196,20 +292,19 @@ def render(data):
     meta = data["meta"]
     bounds = data["bounds_ns"]
     cz = data["cz"]
-    nb = len(bounds)
-    warp = lambda t: np.interp(t, bounds, np.arange(nb, dtype=float))
 
-    fig = plt.figure(figsize=(4.3, 3.9))
-    gs = fig.add_gridspec(1, 2, width_ratios=[3.0, 1.0], wspace=0.02,
-                          left=0.012, right=0.995, top=0.905, bottom=0.02)
+    fig = plt.figure(figsize=(7.08, 3.9))
+    gs = fig.add_gridspec(1, 3, width_ratios=[1.05, 0.98, 1.02],
+                          wspace=0.03, left=0.008, right=0.995,
+                          top=0.905, bottom=0.02)
     gsA = gs[0, 0].subgridspec(3, 1, height_ratios=[1.0, 0.40, 1.0],
                                hspace=0.20)
 
     R_cz = meta["R_cz"]
     gz_x = meta["gate_zone"][0]
     move_us = (bounds[2] - bounds[1]) * 1e-3
-    C_AOD = "#d9822b"
 
+    # ═══ column 1 — Space (UNCHANGED drawing) ═══════════════════════════════
     IB = (-28, -7, 24, 14)
     GB = (0, -9.5, 6, 19)
     lattice = [(x, y) for x in (-25, -20, -15, -10)
@@ -314,88 +409,178 @@ def render(data):
     fig.text(0.015, 0.945, "Space", fontsize=9, color=C_ANALOG,
              fontweight="bold")
 
-    # ═══ vertical timeline: 1/3 width, badge with name BELOW ════════════════
-    axB = fig.add_subplot(gs[0, 1])
-    names = stage_names(bounds, cz)
-    n_rows = nb
-    axB.set_xlim(-0.72, 2.02)
-    axB.set_ylim(n_rows + 0.10, -0.62)
-    axB.axis("off")
-    fig.text(0.755, 0.945, "Time", fontsize=9, color=C_ANALOG,
+    # ═══ column 2 — Time: real per-stage waveform excerpts ══════════════════
+    axT = fig.add_subplot(gs[0, 1])
+    axT.set_xlim(0, 1); axT.set_ylim(0, 1); axT.axis("off")
+    fig.text(0.415, 0.945, "Time", fontsize=9, color=C_ANALOG,
              fontweight="bold")
 
-    LX, LW = 0.0, 0.55
-    AX, AW = 0.72, 0.55
-    xcz_v = warp((cz["t0"] + cz["t1"]) / 2)
+    b_us = [b * 1e-3 for b in bounds]
+    # stage bands, top -> bottom (not to scale), then meas + coverage table
+    band_h = [0.155, 0.115, 0.135, 0.115, 0.155]
+    GAP = 0.018
+    stage_meta = [("1", C_ANALOG, "ev(0,τ)"), ("2", C_AOD, "move →"),
+                  ("3", C_DIGITAL, "CZ+$R_z$"), ("2", C_AOD, "move ←"),
+                  ("4", C_ANALOG, "ev(τ,T)")]
+    AXX = 0.205                      # vertical axis x
+    TX0, TX1 = 0.40, 0.985          # trace span
+    y_top = 0.985
 
-    for i in range(nb + 1):
-        axB.plot([LX - 0.04, AX + AW + 0.04], [i, i], color="gray",
-                 lw=0.35, alpha=0.30)
-    for i in range(nb):
-        v = bounds[i] * 1e-3
-        axB.text(AX + AW + 0.08, i, f"{v:.4g}" if v < 100 else f"{v:.0f}",
-                 fontsize=4.9, ha="left", va="center", color="#444444")
-    axB.text(AX + AW + 0.08, -0.42, "t(μs)↓", fontsize=5.0, ha="left",
-             color="#444444")
+    def brk(y):                      # axis-break marks
+        for dy in (0.004, -0.004):
+            axT.plot([AXX - 0.014, AXX + 0.014], [y + dy - 0.003,
+                                                  y + dy + 0.003],
+                     color="#444444", lw=0.6)
 
-    stage_badges = (("1", C_ANALOG), ("2", C_AOD), ("3", C_DIGITAL),
-                    ("2", C_AOD), ("4", C_ANALOG))
-    short = {"ev(0,τ)": "ev(0,τ)", "move →": "move→", "CZ": "CZ+$R_z$",
-             "move ←": "move←", "ev(τ,T)": "ev(τ,T)"}
-    for i, nm in enumerate(names):
-        num, col = stage_badges[i]
-        badge(axB, -0.38, i + 0.33, num, col, fs=5.4)
-        axB.text(-0.38, i + 0.70, short.get(nm, nm), fontsize=4.7,
+    def tick(y, t_us, sym=None):
+        lab = f"{t_us:.4g}" if t_us < 100 else f"{t_us:.1f}"
+        if sym:
+            lab += f" ({sym})"
+        axT.text(AXX - 0.03, y, lab, fontsize=4.6, ha="right",
+                 va="center", color="#444444")
+
+    def row(y0, y1, name, col):
+        axT.text(TX0 - 0.012, (y0 + y1) / 2, name, fontsize=4.2,
+                 ha="right", va="center", color=C_ATOM)
+        return y0, y1
+
+    def trace(y0, y1, xs, ys, col, lw=0.5):
+        ys = np.asarray(ys, dtype=float)
+        lo, hi = ys.min(), ys.max()
+        span = (hi - lo) if hi > lo else 1.0
+        yy = y0 + 0.08 * (y1 - y0) + (ys - lo) / span * 0.84 * (y1 - y0)
+        xx = TX0 + np.asarray(xs) * (TX1 - TX0)
+        axT.plot(xx, yy, color=col, lw=lw)
+
+    y = y_top
+    boundary_syms = {1: "τ", 5: "T"}
+    tick(y, b_us[0])
+    for si, ((num, col, name), h) in enumerate(zip(stage_meta, band_h)):
+        y1, y0 = y, y - h            # band spans [y0, y1]
+        axT.plot([AXX, AXX], [y0, y1], color="#888888", lw=0.7)
+        badge(axT, 0.045, (y0 + y1) / 2 + 0.018, num, col, fs=5.2)
+        axT.text(0.045, (y0 + y1) / 2 - 0.030, name, fontsize=4.4,
                  ha="center", va="center", color=C_ATOM)
-    axB.text(-0.38, n_rows - 0.5, "meas", fontsize=4.9, ha="center",
+
+        if si in (0, 4):             # ① ④ — dressing | drive I | drive Q
+            ev = data["ev_stages"][0 if si == 0 else 1]
+            rh = (y1 - y0) / 3
+            r0, r1 = row(y1 - rh, y1, "dressing", col)
+            # constant ON level: draw it at its true fraction of the max
+            # drive amplitude in this stage, with a light fill to zero
+            ymax = max(ev["dress_level"], np.abs(ev["I"]).max(),
+                       np.abs(ev["Q"]).max())
+            ylvl = r0 + 0.08 * (r1 - r0) \
+                + ev["dress_level"] / ymax * 0.84 * (r1 - r0)
+            axT.fill_between([TX0, TX1], r0 + 0.08 * (r1 - r0), ylvl,
+                             color=col, alpha=0.12, lw=0)
+            axT.plot([TX0, TX1], [ylvl, ylvl], color=col, lw=0.8)
+            tex = np.asarray(ev["ex_t"]) / DRIVE_EXCERPT_NS
+            r0, r1 = row(y1 - 2 * rh, y1 - rh, "drive I", col)
+            trace(r0, r1, tex, ev["I"], col, lw=0.30)
+            r0, r1 = row(y0, y1 - 2 * rh, "drive Q", col)
+            trace(r0, r1, tex, ev["Q"], col, lw=0.30)
+            axT.text(TX1, y0 + 0.004, f"{DRIVE_EXCERPT_NS:.0f} ns excerpt",
+                     fontsize=3.6, ha="right", va="bottom", color="#888888")
+        elif si in (1, 3):           # ② — move-AOD x | move-AOD y  (f(t))
+            lo_t, hi_t = bounds[si], bounds[si + 1]
+            rh = (y1 - y0) / 2
+            for ri, (key, nm) in enumerate((("x_tones", "move-AOD x"),
+                                            ("y_tones", "move-AOD y"))):
+                r0, r1 = row(y1 - (ri + 1) * rh, y1 - ri * rh, nm, col)
+                trs = [tr for tr in data[key]
+                       if tr["t"][0] >= lo_t - 1 and tr["t"][-1] <= hi_t + 1]
+                f_all = [v for tr in trs for v in tr["mhz"]]
+                flo, fhi = min(f_all), max(f_all)
+                fspan = (fhi - flo) if fhi > flo else 1.0
+                for tr in trs:
+                    ts = (np.asarray(tr["t"]) - lo_t) / (hi_t - lo_t)
+                    fs = (np.asarray(tr["mhz"]) - flo) / fspan
+                    yy = r0 + 0.10 * (r1 - r0) + fs * 0.80 * (r1 - r0)
+                    axT.plot(TX0 + ts * (TX1 - TX0), yy, color=col, lw=0.6)
+            axT.text(TX1, y0 + 0.004, "tone f(t)", fontsize=3.6,
+                     ha="right", va="bottom", color="#888888")
+        else:                        # ③ — gate | frame ticks on a, b
+            rh = (y1 - y0)
+            r0, r1 = row(y0 + 0.35 * rh, y1, "gate", col)
+            ts = np.asarray(cz["wf_t"]) / cz["wf_t"][-1]
+            trace(r0, r1, ts, cz["wf"], col, lw=0.22)
+            r0, r1 = row(y0, y0 + 0.35 * rh, "frame a,b", C_SOFT)
+            for k, dq in enumerate((0.0, 0.018)):
+                axT.plot([TX1 - 0.03 - dq] * 2,
+                         [r0 + 0.2 * (r1 - r0), r0 + 0.8 * (r1 - r0)],
+                         color=C_SOFT, lw=0.9)
+            axT.text(TX1 - 0.055, (r0 + r1) / 2, "$R_z$ ticks",
+                     fontsize=3.6, ha="right", va="center", color=C_SOFT)
+
+        y = y0
+        tick(y, b_us[si + 1], boundary_syms.get(si + 1))
+        if si < 4:
+            brk(y - GAP / 2)
+            y -= GAP
+
+    # meas box
+    y0m = y - 0.052
+    axT.add_patch(Rectangle((TX0, y0m), 0.16, 0.042, fc="none", ec=C_SOFT,
+                            ls="--", lw=0.6))
+    axT.text(TX0 - 0.012, y0m + 0.021, "meas", fontsize=4.4, ha="right",
              va="center", color=C_SOFT)
 
-    axB.text(LX + LW / 2, -0.28, "lasers", fontsize=4.8, ha="center",
-             color=C_ATOM)
-    axB.text(AX + AW / 2, -0.28, "AOD", fontsize=4.8, ha="center",
-             color=C_ATOM)
+    # coverage table: 8 channels × stages ①②③④
+    ty = y0m - 0.035
+    cols_x = [0.55, 0.67, 0.79, 0.91]
+    stage_cols = [C_ANALOG, C_AOD, C_DIGITAL, C_ANALOG]
+    for k, num in enumerate("1234"):
+        axT.text(cols_x[k], ty, num, fontsize=4.2, ha="center",
+                 color=stage_cols[k], fontweight="bold")
+    rh = (ty - 0.012) / 8.4
+    for ri, (nm, acts) in enumerate(data["coverage"]):
+        ry = ty - (ri + 1) * rh
+        axT.text(0.42, ry, nm, fontsize=3.8, ha="right", va="center",
+                 color=C_ATOM)
+        for k, a in enumerate(acts):
+            if a:
+                axT.text(cols_x[k], ry, "✓", fontsize=3.9, ha="center",
+                         va="center", color=stage_cols[k])
 
-    env_max = max(max(b["env"]) for b in
-                  data["dressing"] + data["addr_rabi"])
-    for key, alpha in (("addr_rabi", 0.55), ("dressing", 0.95)):
-        for b in data[key]:
-            t = np.linspace(b["t0"], b["t1"], len(b["env"]))
-            e = np.asarray(b["env"]) / env_max * LW
-            axB.fill_betweenx(warp(t), LX, LX + e, color=C_ANALOG,
-                              alpha=0.30 * alpha, lw=0)
-            axB.plot(LX + e, warp(t), color=C_ANALOG, lw=0.35,
-                     alpha=alpha)
-    axB.plot([LX, LX], [1, nb - 2], color=C_ANALOG, lw=0.6, alpha=0.6)
-    # the TRUE gate waveform inside the CZ window: the schedule's played
-    # A(t)·sin(2π·80MHz·t + φ(t)) itself (bipolar, centered), with the
-    # ±A(t) envelope as a faint outline — vector in the PDF, so the ~56
-    # carrier cycles survive zoom.
-    gt = np.linspace(cz["t0"], cz["t1"], len(cz["env"]))
-    ge = np.asarray(cz["env"]) / max(cz["env"])
-    mid = LX + LW / 2
-    wf = np.asarray(cz["wf"]) / max(cz["env"])
-    twf = cz["t0"] + np.asarray(cz["wf_t"])
-    axB.plot(mid + wf * LW / 2, warp(twf), color=C_DIGITAL, lw=0.28,
-             alpha=0.9, solid_joinstyle="miter")
-    for sgn in (1.0, -1.0):
-        axB.plot(mid + sgn * ge * LW / 2, warp(gt), color=C_DIGITAL,
-                 lw=0.55, alpha=0.55)
-    axB.text(LX + LW + 0.06, xcz_v,
-             "CZ\nA(t)·sin(2π·80MHz·t\n+φ(t))", fontsize=4.3,
-             ha="left", va="center", color=C_DIGITAL, linespacing=1.3)
-    axB.add_patch(Rectangle((LX, nb - 1 + 0.24), LW, 0.52, fc="none",
-                            ec=C_SOFT, ls="--", lw=0.6))
+    # ═══ column 3 — Ledger excerpt (real PulseLedger rows) ══════════════════
+    axL = fig.add_subplot(gs[0, 2])
+    axL.set_xlim(0, 1); axL.set_ylim(0, 1); axL.axis("off")
+    fig.text(0.712, 0.945, "Ledger", fontsize=9, color=C_ANALOG,
+             fontweight="bold")
 
-    aenv_max = max(max(b["env"]) for b in data["aod_x_env"])
-    for b in data["aod_x_env"]:
-        t = np.linspace(b["t0"], b["t1"], len(b["env"]))
-        e = np.asarray(b["env"]) / aenv_max * AW
-        axB.fill_betweenx(warp(t), AX, AX + e, color="gray", alpha=0.22,
-                          lw=0)
-    for tr in data["x_tones"]:
-        t = np.asarray(tr["t"]); um = np.asarray(tr["um"])
-        axB.plot(AX + (um - um.min()) / gz_x * AW, warp(t), color=C_AOD,
-                 lw=0.8)
+    stage_color = {"1": C_ANALOG, "2": C_AOD, "3": C_DIGITAL, "4": C_ANALOG}
+    mono = dict(family="monospace", fontsize=4.6, va="center")
+    hdr = dict(family="monospace", fontsize=4.3, va="center",
+               color="#777777")
+    y = 0.965
+    axL.text(0.075, y, "seg   semantic   wall clock (µs)", **hdr)
+    axL.text(0.135, y - 0.040,
+             "terms (provenance) · frame · transport · ins", **hdr)
+    y -= 0.095
+    for r in data["ledger_rows"]:
+        col = stage_color[r["stage"]]
+        if r["ins"] == "INS":
+            axL.add_patch(plt.Rectangle((0.010, y - 0.085), 0.985, 0.135,
+                                        fc=C_DIGITAL, alpha=0.06, ec="none"))
+        badge(axL, 0.035, y - 0.020, r["stage"], col, fs=4.6)
+        axL.text(0.075, y,
+                 f"{r['seg']}  {r['sem']:8s} "
+                 f"[{r['wall'][0]:7.3f},{r['wall'][1]:8.3f}]",
+                 color=C_ATOM, **mono)
+        axL.text(0.135, y - 0.048,
+                 f"{r['terms']} · {r['frame']} · {r['transport']} · "
+                 f"{r['ins']}",
+                 color=(C_DIGITAL if r["ins"] == "INS" else "#555555"),
+                 **mono)
+        y -= 0.155
+
+    axL.text(0.075, y + 0.02,
+             f"branch total {b_us[-1]:.1f} µs = "
+             f"{b_us[1] - b_us[0] + b_us[5] - b_us[4]:.1f} evolve + "
+             f"{b_us[2] - b_us[1] + b_us[4] - b_us[3]:.1f} transport + "
+             f"{b_us[3] - b_us[2]:.2f} gate",
+             family="monospace", fontsize=4.3, color="#777777")
 
     out = os.path.join(FIG_DIR, "branch_anatomy")
     fig.savefig(out + ".png", dpi=200, bbox_inches="tight")

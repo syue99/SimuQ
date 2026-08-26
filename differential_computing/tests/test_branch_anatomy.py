@@ -39,6 +39,32 @@ def test_bounds_monotone_and_cz_duration():
     assert min(d["cz"]["env"]) >= 0.5 - 1e-9
 
 
+def test_ledger_rows_agree_with_schedule():
+    d = _data()
+    rows = d["ledger_rows"]
+    assert [r["seg"] for r in rows] == [f"seg{i}" for i in range(5)]
+    assert [r["stage"] for r in rows] == ["1", "2", "3", "2", "4"]
+    # wall clocks tile the schedule boundaries exactly (µs)
+    b_us = [b * 1e-3 for b in d["bounds_ns"]]
+    for i, r in enumerate(rows):
+        assert abs(r["wall"][0] - b_us[i]) < 1e-9
+        assert abs(r["wall"][1] - b_us[i + 1]) < 1e-9
+    # s appears ONLY in the insertion row's terms/frame columns
+    ins = rows[2]
+    assert ins["ins"] == "INS" and "insertion" in ins["terms"]
+    assert ins["frame"].startswith("Rz(s·")
+    for r in rows:
+        if r is not ins:
+            assert "s·" not in r["terms"] and "s·" not in r["frame"]
+    # coverage: 8 App-F channels, addressing AOD idle, gate only in stage 3
+    cov = dict((nm, acts) for nm, acts in d["coverage"])
+    assert len(cov) == 8
+    assert cov["addr-AOD x"] == [False] * 4
+    assert cov["gate"] == [False, False, True, False]
+    assert cov["dressing"] == [True, False, False, True]
+    assert cov["move-AOD x"] == [False, True, False, False]
+
+
 def test_transport_traces_reach_gate_zone():
     d = _data()
     gz_x = d["meta"]["gate_zone"][0]
