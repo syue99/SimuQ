@@ -36,7 +36,8 @@ import physical_channels as pc
 
 
 # ── Realistic device timing (user config, 2026-08-24) ────────────────────────
-# CZ gate ~200 ns; dressing segments on the order of 1–10 μs (T = 5 μs here,
+# CZ gate = the measured 696 ns fixed shape (see GATE_SHAPE below); dressing
+# segments on the order of 1–10 μs (T = 5 μs here,
 # split by the kick's sampled τ); transport is SPEED-limited at v_max = 4 m/s
 # (Cicali et al.'s Eq.-(6) min-jerk profile, whose peak speed is (15/8)·d/τ,
 # so a zone hop of d takes τ = (15/8)·d/v_max and needs peak acceleration
@@ -48,10 +49,20 @@ import physical_channels as pc
 V_MAX_UM_US = 4.0        # peak tweezer speed, μm/μs (numerically = m/s)
 D_ZONE_UM = 100.0        # interaction → gate zone separation
 T_EVOLVE_US = 5.0        # evolution time (dressing-on window, split by kick)
-CZ_GATE_US = 0.2         # 200 ns two-qubit gate
 AOD_SETTLE_US = 1.0      # floor on any move (AOD settle)
 TRANSIT_DY_UM = 5.0      # y-offset lane: lift 5 um, travel, drop, so the
                          # moving pair never sweeps through parked atoms
+
+# The 2q gate is the MEASURED fixed pulse (A(t), φ(t) tables @ 1 ns on an
+# 80 MHz carrier — gate_amp_and_phase.csv), identical for every two-qubit
+# gate.  The fixed shape owns the gate duration, so cz_gate_time is derived
+# from the table, and to_pulsedsl_tree(gate_shape=...) attaches the sampled
+# waveform to zz plays ONLY (dressing/addressing keep constant envelopes).
+from awg_compile import GateShape
+GATE_CSV = os.path.join(os.path.dirname(__file__), "..",
+                        "gate_amp_and_phase.csv")
+GATE_SHAPE = GateShape.from_csv(GATE_CSV, carrier_mhz=80.0)
+CZ_GATE_US = GATE_SHAPE.duration_ns / 1000.0   # 0.696 μs measured gate
 
 
 def build_schedule(verbose=True, transit_dy=TRANSIT_DY_UM):
@@ -115,7 +126,7 @@ def build_schedule(verbose=True, transit_dy=TRANSIT_DY_UM):
 
     if verbose:
         print("\n=== Translating to PulseDSL (COMB/Play) and RUN ===")
-    to_pulsedsl_tree(physical, ch, aod_ch, run=True)
+    to_pulsedsl_tree(physical, ch, aod_ch, run=True, gate_shape=GATE_SHAPE)
 
     meta = {
         "n": n,

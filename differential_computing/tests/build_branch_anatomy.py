@@ -15,7 +15,8 @@ read from the real compiled artifact:
                         sampled comb envelopes inside; OFF (frozen) during
                         the insertion window (Assumption 4.7 halt/resume)
     2 AOD transport   : the real min-jerk x(t) of both comb tones
-    3 gate-zone pulse : the 200 ns CZ play (amplitude pi, virtual-Z phase)
+    3 gate-zone pulse : the measured 696 ns CZ gate (gate_amp_and_phase.csv
+                        sampled A(t)/φ(t) on 80 MHz; virtual-Z phase)
     4 frame updates   : software-only ticks — the branch sign s lives here
     5 pair y / lane   : lift 5 um -> transit lane -> drop, park at R_cz
   plus a per-stage cost strip (dressed T2*, ground-state clock, benchmarked
@@ -114,11 +115,28 @@ def extract():
                         "env": np.abs(w).tolist()})
         return out
 
-    # the CZ play (single shortest gate-zone entry) + its virtual-Z phase
+    # the CZ play (single shortest gate-zone entry) + its virtual-Z phase.
+    # Guard the shape routing: every GATE_AOM play must carry the measured
+    # SampledTone gate, and NO dressing/addressing play may (the fixed shape
+    # is the 2q gate only — dressing keeps its constant envelope).
+    from awg_compile import SampledTone
+    assert all(isinstance(p.waveform, SampledTone)
+               for _, _, p in entries(pc.GATE_AOM)), \
+        "GATE_AOM play without the measured gate shape"
+    for chn in (pc.DRESSING_AOM, pc.ADDR_RABI, pc.ADDR_DET):
+        assert not any(isinstance(p.waveform, SampledTone)
+                       for _, _, p in entries(chn)), \
+            f"sampled gate shape leaked onto channel {chn}"
     gate = min(entries(pc.GATE_AOM), key=lambda e: e[1] - e[0])
+    gt = np.linspace(0.0, gate[1] - gate[0], 400)
+    gwf = gate[2].waveform            # SampledTone — the measured gate
     cz = {"t0": gate[0], "t1": gate[1],
           "amp": float(gate[2].amplitude),
-          "vz_phase": float(getattr(gate[2], "phase", 0.0) or 0.0)}
+          "vz_phase": float(getattr(gate[2], "phase", 0.0) or 0.0),
+          "env": np.abs(gwf(gt)).tolist(),
+          # measured phase table φ(t) interpolated on the same grid
+          "phi": np.interp(gt, gwf.t_ns - gwf.t_ns[0],
+                           gwf.phase_rad).tolist()}
 
     data = {
         "meta": {k: (list(v) if isinstance(v, tuple) else v)
@@ -280,7 +298,8 @@ def render(data):
     dots(ax3, vacated=True)
     pair(ax3, [(gb_cx - 1.5, 0.0), (gb_cx + 1.5, 0.0)], ms=4.4)
     badge(ax3, -28.8, 14.0, "3", C_DIGITAL)
-    ax3.text(-26.6, 14.0, "insert CZ (200 ns)", fontsize=6.4,
+    cz_ns = cz["t1"] - cz["t0"]
+    ax3.text(-26.6, 14.0, f"insert CZ ({cz_ns:.0f} ns)", fontsize=6.4,
              color=C_ATOM, ha="left", va="center")
     ax3.annotate(f"$R_{{cz}}$ = {R_cz:g} μm",
                  xy=(gb_cx - 1.5, -0.8), xytext=(-8.5, -11.8),
@@ -342,11 +361,18 @@ def render(data):
             axB.plot(LX + e, warp(t), color=C_ANALOG, lw=0.35,
                      alpha=alpha)
     axB.plot([LX, LX], [1, nb - 2], color=C_ANALOG, lw=0.6, alpha=0.6)
-    axB.add_patch(Rectangle((LX, warp(cz["t0"])), LW,
-                            warp(cz["t1"]) - warp(cz["t0"]),
-                            fc=C_DIGITAL, alpha=0.85, ec="none"))
-    axB.text(LX + LW / 2, xcz_v, "CZ", fontsize=5.6, ha="center",
-             va="center", color="white", fontweight="bold")
+    # the measured gate pulse inside the CZ window (no abstract box):
+    # red fill = amplitude envelope A(t)/Ω0, dark line = phase φ(t)
+    gt = np.linspace(cz["t0"], cz["t1"], len(cz["env"]))
+    ge = np.asarray(cz["env"]) / max(cz["env"]) * LW
+    axB.fill_betweenx(warp(gt), LX, LX + ge, color=C_DIGITAL,
+                      alpha=0.45, lw=0)
+    axB.plot(LX + ge, warp(gt), color=C_DIGITAL, lw=0.7)
+    gp = np.asarray(cz["phi"])
+    gpn = (gp - gp.min()) / (gp.max() - gp.min()) * 0.9 * LW + 0.05 * LW
+    axB.plot(LX + gpn, warp(gt), color="#7a1416", lw=0.75)
+    axB.text(LX + LW + 0.06, xcz_v, "CZ\nA(t), φ(t)", fontsize=4.6,
+             ha="left", va="center", color=C_DIGITAL, linespacing=1.25)
     axB.add_patch(Rectangle((LX, nb - 1 + 0.24), LW, 0.52, fc="none",
                             ec=C_SOFT, ls="--", lw=0.6))
 

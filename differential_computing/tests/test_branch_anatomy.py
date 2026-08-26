@@ -31,8 +31,12 @@ def test_bounds_monotone_and_cz_duration():
     d = _data()
     b = d["bounds_ns"]
     assert all(b[i] < b[i + 1] for i in range(len(b) - 1))
-    assert abs((d["cz"]["t1"] - d["cz"]["t0"]) - 200.0) < 1.0
+    # the CZ window IS the measured fixed gate (gate_amp_and_phase.csv,
+    # 697 pts @ 1 ns -> 696 ns); its normalized envelope is stored alongside
+    assert abs((d["cz"]["t1"] - d["cz"]["t0"]) - 696.0) < 1.0
     assert abs(d["cz"]["amp"] - 3.14159265) < 1e-6
+    assert abs(max(d["cz"]["env"]) - 1.0) < 1e-9
+    assert min(d["cz"]["env"]) >= 0.5 - 1e-9
 
 
 def test_transport_traces_reach_gate_zone():
