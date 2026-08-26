@@ -553,7 +553,7 @@ def render(data):
                 "drive I": C_ANALOG, "drive Q": C_ANALOG,
                 "dressing": C_DRESS, "gate": C_DIGITAL}
     ty = y0m - 0.035
-    cols_x = [0.40, 0.58, 0.76, 0.94]
+    cols_x = [0.38, 0.52, 0.66, 0.80]
     stage_cols = [C_ANALOG, C_AOD, C_DIGITAL, C_ANALOG]
     for k, num in enumerate("1234"):
         axT.text(cols_x[k], ty, num, fontsize=4.2, ha="center",
