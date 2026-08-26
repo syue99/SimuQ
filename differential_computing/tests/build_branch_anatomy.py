@@ -245,6 +245,7 @@ def extract():
         "addr_rabi": drive_blocks(pc.ADDR_RABI),
         "addr_det": drive_blocks(pc.ADDR_DET),
         "aod_x_env": drive_blocks(pc.TRANSPORT_AOD_X),
+        "aod_y_env": drive_blocks(pc.TRANSPORT_AOD_Y),
         "cz": cz,
         "ev_stages": ev_stages,
         "frame": frame,
@@ -294,7 +295,7 @@ def render(data):
     cz = data["cz"]
 
     fig = plt.figure(figsize=(7.08, 3.9))
-    gs = fig.add_gridspec(1, 3, width_ratios=[1.05, 0.98, 1.02],
+    gs = fig.add_gridspec(1, 3, width_ratios=[1.05, 1.22, 0.78],
                           wspace=0.03, left=0.008, right=0.995,
                           top=0.905, bottom=0.02)
     gsA = gs[0, 0].subgridspec(3, 1, height_ratios=[1.0, 0.40, 1.0],
@@ -409,22 +410,35 @@ def render(data):
     fig.text(0.015, 0.945, "Space", fontsize=9, color=C_ANALOG,
              fontweight="bold")
 
-    # ═══ column 2 — Time: real per-stage waveform excerpts ══════════════════
+    # ═══ column 2 — Time: vertical channel lanes, real waveforms ════════════
+    # Time runs DOWN the column; each channel group is a vertical LANE whose
+    # waveform deflects horizontally.  Lane names sit on top.  Translucent
+    # trace = the real (carrier-dense) waveform; opaque curve on top = the
+    # salient content (envelope for drives, tone f(t) for transport).
     axT = fig.add_subplot(gs[0, 1])
     axT.set_xlim(0, 1); axT.set_ylim(0, 1); axT.axis("off")
-    fig.text(0.415, 0.945, "Time", fontsize=9, color=C_ANALOG,
+    fig.text(0.375, 0.945, "Time", fontsize=9, color=C_ANALOG,
              fontweight="bold")
 
     b_us = [b * 1e-3 for b in bounds]
-    # stage bands, top -> bottom (not to scale), then meas + coverage table
-    band_h = [0.155, 0.115, 0.135, 0.115, 0.155]
-    GAP = 0.018
+    band_h = [0.145, 0.105, 0.130, 0.105, 0.145]
+    GAP = 0.016
     stage_meta = [("1", C_ANALOG, "ev(0,τ)"), ("2", C_AOD, "move →"),
                   ("3", C_DIGITAL, "CZ+$R_z$"), ("2", C_AOD, "move ←"),
                   ("4", C_ANALOG, "ev(τ,T)")]
-    AXX = 0.205                      # vertical axis x
-    TX0, TX1 = 0.40, 0.985          # trace span
-    y_top = 0.985
+    AXX = 0.185                      # vertical axis x
+
+    # lanes: name -> (center x, half width)
+    LN0, LN1 = 0.30, 0.985
+    lane_names = ["drive I/Q", "dressing", "gate", "move x/y"]
+    n_lanes = len(lane_names)
+    lane_w = (LN1 - LN0) / n_lanes
+    lanes = {nm: (LN0 + (k + 0.5) * lane_w, 0.44 * lane_w)
+             for k, nm in enumerate(lane_names)}
+    y_top = 0.930
+    for nm, (cx, _hw) in lanes.items():
+        axT.text(cx, y_top + 0.022, nm, fontsize=4.3, ha="center",
+                 va="bottom", color=C_ATOM)
 
     def brk(y):                      # axis-break marks
         for dy in (0.004, -0.004):
@@ -439,18 +453,13 @@ def render(data):
         axT.text(AXX - 0.03, y, lab, fontsize=4.6, ha="right",
                  va="center", color="#444444")
 
-    def row(y0, y1, name, col):
-        axT.text(TX0 - 0.012, (y0 + y1) / 2, name, fontsize=4.2,
-                 ha="right", va="center", color=C_ATOM)
-        return y0, y1
-
-    def trace(y0, y1, xs, ys, col, lw=0.5):
-        ys = np.asarray(ys, dtype=float)
-        lo, hi = ys.min(), ys.max()
-        span = (hi - lo) if hi > lo else 1.0
-        yy = y0 + 0.08 * (y1 - y0) + (ys - lo) / span * 0.84 * (y1 - y0)
-        xx = TX0 + np.asarray(xs) * (TX1 - TX0)
-        axT.plot(xx, yy, color=col, lw=lw)
+    def vwave(lane, y0, y1, vals, col, lw=0.25, alpha=0.9, norm=None):
+        """Vertical waveform in `lane`: values deflect horizontally."""
+        cx, hw = lanes[lane]
+        v = np.asarray(vals, dtype=float)
+        n = norm if norm else max(np.abs(v).max(), 1e-12)
+        yy = np.linspace(y1, y0, len(v))
+        axT.plot(cx + v / n * hw, yy, color=col, lw=lw, alpha=alpha)
 
     y = y_top
     boundary_syms = {1: "τ", 5: "T"}
@@ -462,56 +471,76 @@ def render(data):
         axT.text(0.045, (y0 + y1) / 2 - 0.030, name, fontsize=4.4,
                  ha="center", va="center", color=C_ATOM)
 
-        if si in (0, 4):             # ① ④ — dressing | drive I | drive Q
+        if si in (0, 4):             # ① ④ — drive I/Q lane + dressing lane
             ev = data["ev_stages"][0 if si == 0 else 1]
-            rh = (y1 - y0) / 3
-            r0, r1 = row(y1 - rh, y1, "dressing", col)
-            # constant ON level: draw it at its true fraction of the max
-            # drive amplitude in this stage, with a light fill to zero
-            ymax = max(ev["dress_level"], np.abs(ev["I"]).max(),
-                       np.abs(ev["Q"]).max())
-            ylvl = r0 + 0.08 * (r1 - r0) \
-                + ev["dress_level"] / ymax * 0.84 * (r1 - r0)
-            axT.fill_between([TX0, TX1], r0 + 0.08 * (r1 - r0), ylvl,
-                             color=col, alpha=0.12, lw=0)
-            axT.plot([TX0, TX1], [ylvl, ylvl], color=col, lw=0.8)
-            tex = np.asarray(ev["ex_t"]) / DRIVE_EXCERPT_NS
-            r0, r1 = row(y1 - 2 * rh, y1 - rh, "drive I", col)
-            trace(r0, r1, tex, ev["I"], col, lw=0.30)
-            r0, r1 = row(y0, y1 - 2 * rh, "drive Q", col)
-            trace(r0, r1, tex, ev["Q"], col, lw=0.30)
-            axT.text(TX1, y0 + 0.004, f"{DRIVE_EXCERPT_NS:.0f} ns excerpt",
-                     fontsize=3.6, ha="right", va="bottom", color="#888888")
-        elif si in (1, 3):           # ② — move-AOD x | move-AOD y  (f(t))
+            I, Q = np.asarray(ev["I"]), np.asarray(ev["Q"])
+            env = np.abs(I + 1j * Q)
+            nrm = env.max()
+            # transparent real waveforms, I and Q in the SAME lane
+            vwave("drive I/Q", y0, y1, I, col, lw=0.22, alpha=0.30,
+                  norm=nrm)
+            vwave("drive I/Q", y0, y1, Q, col, lw=0.22, alpha=0.30,
+                  norm=nrm)
+            # important information on top: the ±|A| beat envelope
+            vwave("drive I/Q", y0, y1, env, col, lw=0.6, norm=nrm)
+            vwave("drive I/Q", y0, y1, -env, col, lw=0.6, norm=nrm)
+            cx, hw = lanes["drive I/Q"]
+            axT.text(cx + hw, y0 + 0.003, f"{DRIVE_EXCERPT_NS:.0f} ns",
+                     fontsize=3.5, ha="right", va="bottom",
+                     color="#888888")
+            # dressing: constant ON level, light fill to zero
+            cx, hw = lanes["dressing"]
+            frac = ev["dress_level"] / nrm
+            axT.fill_betweenx([y0, y1], cx - frac * hw, cx + frac * hw,
+                              color=col, alpha=0.14, lw=0)
+            for sgn in (1, -1):
+                axT.plot([cx + sgn * frac * hw] * 2, [y0, y1], color=col,
+                         lw=0.7)
+        elif si in (1, 3):           # ② — move x/y lane
             lo_t, hi_t = bounds[si], bounds[si + 1]
-            rh = (y1 - y0) / 2
-            for ri, (key, nm) in enumerate((("x_tones", "move-AOD x"),
-                                            ("y_tones", "move-AOD y"))):
-                r0, r1 = row(y1 - (ri + 1) * rh, y1 - ri * rh, nm, col)
-                trs = [tr for tr in data[key]
-                       if tr["t"][0] >= lo_t - 1 and tr["t"][-1] <= hi_t + 1]
-                f_all = [v for tr in trs for v in tr["mhz"]]
-                flo, fhi = min(f_all), max(f_all)
-                fspan = (fhi - flo) if fhi > flo else 1.0
+            cx, hw = lanes["move x/y"]
+            # transparent real waveform: the channel's |Σ tones| beat
+            # envelope band (carrier unresolvable at this scale)
+            for key in ("aod_x_env", "aod_y_env"):
+                for blk in data[key]:
+                    if blk["t0"] < lo_t - 1 or blk["t1"] > hi_t + 1:
+                        continue
+                    e = np.asarray(blk["env"])
+                    e = e / max(e.max(), 1e-12)
+                    yy = np.linspace(y1, y0, len(e))
+                    axT.fill_betweenx(yy, cx - e * hw, cx + e * hw,
+                                      color=col, alpha=0.07, lw=0)
+            # on top: the tone f(t) trajectories (x solid, y thin)
+            trs_x = [tr for tr in data["x_tones"]
+                     if tr["t"][0] >= lo_t - 1 and tr["t"][-1] <= hi_t + 1]
+            trs_y = [tr for tr in data["y_tones"]
+                     if tr["t"][0] >= lo_t - 1 and tr["t"][-1] <= hi_t + 1]
+            f_all = [v for tr in trs_x + trs_y for v in tr["mhz"]]
+            flo, fhi = min(f_all), max(f_all)
+            fspan = (fhi - flo) if fhi > flo else 1.0
+            for trs, lw_, al in ((trs_x, 0.75, 1.0), (trs_y, 0.45, 0.75)):
                 for tr in trs:
                     ts = (np.asarray(tr["t"]) - lo_t) / (hi_t - lo_t)
                     fs = (np.asarray(tr["mhz"]) - flo) / fspan
-                    yy = r0 + 0.10 * (r1 - r0) + fs * 0.80 * (r1 - r0)
-                    axT.plot(TX0 + ts * (TX1 - TX0), yy, color=col, lw=0.6)
-            axT.text(TX1, y0 + 0.004, "tone f(t)", fontsize=3.6,
+                    axT.plot(cx + (fs * 2 - 1) * 0.88 * hw,
+                             y1 - ts * (y1 - y0), color=col, lw=lw_,
+                             alpha=al)
+            axT.text(cx + hw, y0 + 0.003, "f(t)", fontsize=3.5,
                      ha="right", va="bottom", color="#888888")
-        else:                        # ③ — gate | frame ticks on a, b
-            rh = (y1 - y0)
-            r0, r1 = row(y0 + 0.35 * rh, y1, "gate", col)
-            ts = np.asarray(cz["wf_t"]) / cz["wf_t"][-1]
-            trace(r0, r1, ts, cz["wf"], col, lw=0.22)
-            r0, r1 = row(y0, y0 + 0.35 * rh, "frame a,b", C_SOFT)
-            for k, dq in enumerate((0.0, 0.018)):
-                axT.plot([TX1 - 0.03 - dq] * 2,
-                         [r0 + 0.2 * (r1 - r0), r0 + 0.8 * (r1 - r0)],
-                         color=C_SOFT, lw=0.9)
-            axT.text(TX1 - 0.055, (r0 + r1) / 2, "$R_z$ ticks",
-                     fontsize=3.6, ha="right", va="center", color=C_SOFT)
+        else:                        # ③ — gate lane + frame ticks
+            env = np.asarray(cz["env"])
+            nrm = env.max()
+            vwave("gate", y0, y1, np.asarray(cz["wf"]), col, lw=0.20,
+                  alpha=0.55, norm=nrm)
+            vwave("gate", y0, y1, env, col, lw=0.6, norm=nrm)
+            vwave("gate", y0, y1, -env, col, lw=0.6, norm=nrm)
+            cx, hw = lanes["gate"]
+            for dq in (0.0, 0.014):
+                axT.plot([cx + hw + 0.030 + dq] * 2,
+                         [y0 + 0.15 * h, y0 + 0.45 * h], color=C_SOFT,
+                         lw=0.9)
+            axT.text(cx + hw + 0.024, y0 + 0.62 * h, "$R_z$",
+                     fontsize=3.8, ha="left", va="center", color=C_SOFT)
 
         y = y0
         tick(y, b_us[si + 1], boundary_syms.get(si + 1))
@@ -519,15 +548,16 @@ def render(data):
             brk(y - GAP / 2)
             y -= GAP
 
-    # meas box
-    y0m = y - 0.052
-    axT.add_patch(Rectangle((TX0, y0m), 0.16, 0.042, fc="none", ec=C_SOFT,
-                            ls="--", lw=0.6))
-    axT.text(TX0 - 0.012, y0m + 0.021, "meas", fontsize=4.4, ha="right",
-             va="center", color=C_SOFT)
+    # meas box (under the drive lane)
+    y0m = y - 0.048
+    cx, hw = lanes["drive I/Q"]
+    axT.add_patch(Rectangle((cx - hw, y0m), 2 * hw, 0.038, fc="none",
+                            ec=C_SOFT, ls="--", lw=0.6))
+    axT.text(cx - hw - 0.014, y0m + 0.019, "meas", fontsize=4.4,
+             ha="right", va="center", color=C_SOFT)
 
     # coverage table: 8 channels × stages ①②③④
-    ty = y0m - 0.035
+    ty = y0m - 0.030
     cols_x = [0.55, 0.67, 0.79, 0.91]
     stage_cols = [C_ANALOG, C_AOD, C_DIGITAL, C_ANALOG]
     for k, num in enumerate("1234"):
@@ -546,41 +576,44 @@ def render(data):
     # ═══ column 3 — Ledger excerpt (real PulseLedger rows) ══════════════════
     axL = fig.add_subplot(gs[0, 2])
     axL.set_xlim(0, 1); axL.set_ylim(0, 1); axL.axis("off")
-    fig.text(0.712, 0.945, "Ledger", fontsize=9, color=C_ANALOG,
+    fig.text(0.760, 0.945, "Ledger", fontsize=9, color=C_ANALOG,
              fontweight="bold")
 
+    # concise: one line per segment — seg · wall clock · what happened
     stage_color = {"1": C_ANALOG, "2": C_AOD, "3": C_DIGITAL, "4": C_ANALOG}
-    mono = dict(family="monospace", fontsize=4.6, va="center")
-    hdr = dict(family="monospace", fontsize=4.3, va="center",
-               color="#777777")
-    y = 0.965
-    axL.text(0.075, y, "seg   semantic   wall clock (µs)", **hdr)
-    axL.text(0.135, y - 0.040,
-             "terms (provenance) · frame · transport · ins", **hdr)
-    y -= 0.095
+    mono = dict(family="monospace", fontsize=4.8, va="center")
+
+    def content(r):
+        if r["ins"] == "INS":
+            return f"ins{r['sem']}: {r['terms'].replace(' (insertion)', '')}" \
+                   f" · {r['frame']}"
+        if r["transport"] != "–":
+            return f"move {r['transport']}"
+        return f"ev{r['sem']}: {r['terms']}"
+
+    y = 0.955
+    axL.text(0.075, y, "seg  wall clock (µs)  content", family="monospace",
+             fontsize=4.4, va="center", color="#777777")
+    y -= 0.062
     for r in data["ledger_rows"]:
         col = stage_color[r["stage"]]
         if r["ins"] == "INS":
-            axL.add_patch(plt.Rectangle((0.010, y - 0.085), 0.985, 0.135,
-                                        fc=C_DIGITAL, alpha=0.06, ec="none"))
-        badge(axL, 0.035, y - 0.020, r["stage"], col, fs=4.6)
+            axL.add_patch(plt.Rectangle((0.008, y - 0.026), 0.987, 0.052,
+                                        fc=C_DIGITAL, alpha=0.07,
+                                        ec="none"))
+        badge(axL, 0.033, y, r["stage"], col, fs=4.6)
         axL.text(0.075, y,
-                 f"{r['seg']}  {r['sem']:8s} "
-                 f"[{r['wall'][0]:7.3f},{r['wall'][1]:8.3f}]",
-                 color=C_ATOM, **mono)
-        axL.text(0.135, y - 0.048,
-                 f"{r['terms']} · {r['frame']} · {r['transport']} · "
-                 f"{r['ins']}",
-                 color=(C_DIGITAL if r["ins"] == "INS" else "#555555"),
-                 **mono)
-        y -= 0.155
-
-    axL.text(0.075, y + 0.02,
-             f"branch total {b_us[-1]:.1f} µs = "
-             f"{b_us[1] - b_us[0] + b_us[5] - b_us[4]:.1f} evolve + "
-             f"{b_us[2] - b_us[1] + b_us[4] - b_us[3]:.1f} transport + "
+                 f"{r['seg'][-1]}  [{r['wall'][0]:6.1f},{r['wall'][1]:6.1f}]"
+                 f"  {content(r)}",
+                 color=(C_DIGITAL if r["ins"] == "INS" else C_ATOM), **mono)
+        y -= 0.062
+    y -= 0.012
+    axL.text(0.075, y,
+             f"total {b_us[-1]:.1f} µs = "
+             f"{b_us[1] - b_us[0] + b_us[5] - b_us[4]:.1f} ev + "
+             f"{b_us[2] - b_us[1] + b_us[4] - b_us[3]:.1f} move + "
              f"{b_us[3] - b_us[2]:.2f} gate",
-             family="monospace", fontsize=4.3, color="#777777")
+             family="monospace", fontsize=4.4, color="#777777")
 
     out = os.path.join(FIG_DIR, "branch_anatomy")
     fig.savefig(out + ".png", dpi=200, bbox_inches="tight")
