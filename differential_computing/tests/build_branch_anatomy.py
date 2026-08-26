@@ -301,8 +301,8 @@ def render(data):
     # right column sized to END at the content's right edge (no white):
     # axT gets xlim (0, 0.81) with width scaled by the same 0.81, so every
     # element keeps its physical size while the axis stops at the content.
-    fig = plt.figure(figsize=(4.0, 3.9))
-    gs = fig.add_gridspec(2, 2, width_ratios=[1.58, 0.745],
+    fig = plt.figure(figsize=(3.98, 3.9))
+    gs = fig.add_gridspec(2, 2, width_ratios=[1.58, 0.731],
                           height_ratios=[0.72, 0.28],
                           wspace=0.02, hspace=0.08,
                           left=0.008, right=0.998, top=0.905, bottom=0.015)
@@ -425,7 +425,7 @@ def render(data):
     # salient content (envelope for drives, tone f(t) for transport).
     # The coverage table sits directly below, channel names in their colors.
     axT = fig.add_subplot(gs[:, 1])
-    axT.set_xlim(0, 0.81); axT.set_ylim(0, 1); axT.axis("off")
+    axT.set_xlim(0, 0.795); axT.set_ylim(0, 1); axT.axis("off")
     fig.text(0.70, 0.945, "Time", fontsize=9, color=C_ANALOG,
              fontweight="bold")
 
@@ -556,7 +556,7 @@ def render(data):
                 "drive I": C_ANALOG, "drive Q": C_ANALOG,
                 "dressing": C_DRESS, "gate": C_DIGITAL}
     ty = y0m - 0.035
-    cols_x = [0.38, 0.52, 0.66, 0.80]
+    cols_x = [0.36, 0.46, 0.56, 0.66]
     stage_cols = [C_ANALOG, C_AOD, C_DIGITAL, C_ANALOG]
     for k, num in enumerate("1234"):
         axT.text(cols_x[k], ty, num, fontsize=4.2, ha="center",
