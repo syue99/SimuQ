@@ -299,7 +299,7 @@ def render(data):
     # left = Space (top) + Ledger (bottom); right = ONE combined waveform
     # column (channels by color) with the coverage table below it
     fig = plt.figure(figsize=(4.3, 3.9))
-    gs = fig.add_gridspec(2, 2, width_ratios=[1.42, 1.08],
+    gs = fig.add_gridspec(2, 2, width_ratios=[1.58, 0.92],
                           height_ratios=[0.72, 0.28],
                           wspace=0.02, hspace=0.08,
                           left=0.008, right=0.995, top=0.905, bottom=0.015)
@@ -423,7 +423,7 @@ def render(data):
     # The coverage table sits directly below, channel names in their colors.
     axT = fig.add_subplot(gs[:, 1])
     axT.set_xlim(0, 1); axT.set_ylim(0, 1); axT.axis("off")
-    fig.text(0.615, 0.945, "Time", fontsize=9, color=C_ANALOG,
+    fig.text(0.655, 0.945, "Time", fontsize=9, color=C_ANALOG,
              fontweight="bold")
 
     CH_COLORS = {"drive I/Q": C_ANALOG, "dressing": C_DRESS,
@@ -435,16 +435,15 @@ def render(data):
     stage_meta = [("1", C_ANALOG, "ev(0,τ)"), ("2", C_AOD, "move →"),
                   ("3", C_DIGITAL, "CZ+$R_z$"), ("2", C_AOD, "move ←"),
                   ("4", C_ANALOG, "ev(τ,T)")]
-    AXX = 0.245                      # vertical axis x
-    CX, HW = 0.67, 0.29             # the single waveform column
+    AXX = 0.33                       # vertical axis x
+    CX, HW = 0.62, 0.13             # single THIN waveform strip
 
-    # color legend on top of the column
-    y_top = 0.928
-    leg_x = 0.34
-    for nm in ("drive I/Q", "dressing", "gate", "move x/y"):
-        txt = axT.text(leg_x, y_top + 0.022, nm, fontsize=3.9,
-                       ha="left", va="bottom", color=CH_COLORS[nm])
-        leg_x += 0.045 + 0.0126 * len(nm)
+    # color legend (2×2) on top of the strip
+    y_top = 0.912
+    for k, nm in enumerate(("drive I/Q", "dressing", "gate", "move x/y")):
+        axT.text(0.40 + 0.32 * (k % 2), 0.986 - 0.026 * (k // 2),
+                 nm, fontsize=3.9, ha="left", va="top",
+                 color=CH_COLORS[nm])
 
     def brk(y):                      # axis-break marks
         for dy in (0.004, -0.004):
