@@ -298,11 +298,14 @@ def render(data):
     # compact layout, same canvas as the original working anatomy:
     # left = Space (top) + Ledger (bottom); right = ONE combined waveform
     # column (channels by color) with the coverage table below it
-    fig = plt.figure(figsize=(4.3, 3.9))
-    gs = fig.add_gridspec(2, 2, width_ratios=[1.58, 0.92],
+    # right column sized to END at the content's right edge (no white):
+    # axT gets xlim (0, 0.81) with width scaled by the same 0.81, so every
+    # element keeps its physical size while the axis stops at the content.
+    fig = plt.figure(figsize=(4.0, 3.9))
+    gs = fig.add_gridspec(2, 2, width_ratios=[1.58, 0.745],
                           height_ratios=[0.72, 0.28],
                           wspace=0.02, hspace=0.08,
-                          left=0.008, right=0.995, top=0.905, bottom=0.015)
+                          left=0.008, right=0.998, top=0.905, bottom=0.015)
     gsA = gs[0, 0].subgridspec(3, 1, height_ratios=[1.0, 0.40, 1.0],
                                hspace=0.20)
 
@@ -422,8 +425,8 @@ def render(data):
     # salient content (envelope for drives, tone f(t) for transport).
     # The coverage table sits directly below, channel names in their colors.
     axT = fig.add_subplot(gs[:, 1])
-    axT.set_xlim(0, 1); axT.set_ylim(0, 1); axT.axis("off")
-    fig.text(0.655, 0.945, "Time", fontsize=9, color=C_ANALOG,
+    axT.set_xlim(0, 0.81); axT.set_ylim(0, 1); axT.axis("off")
+    fig.text(0.70, 0.945, "Time", fontsize=9, color=C_ANALOG,
              fontweight="bold")
 
     CH_COLORS = {"drive I/Q": C_ANALOG, "dressing": C_DRESS,
