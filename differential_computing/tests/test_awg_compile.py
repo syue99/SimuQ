@@ -280,6 +280,95 @@ def test_end_to_end_2q_waveforms():
     assert not np.isclose(wf.f0_mhz, wf.f1_mhz)
 
 
+# ── 7. fixed sampled gate shape (measured A(t), φ(t) on 80 MHz carrier) ──────
+
+GATE_CSV = os.path.join(os.path.dirname(__file__), "..",
+                        "gate_amp_and_phase.csv")
+
+
+def test_sampled_tone_matches_table_closed_form():
+    from awg_compile import SampledTone
+    t = np.arange(0.0, 5.0)
+    amp = np.array([0.5, 1.0, 0.8, 1.0, 0.5])
+    ph = np.array([0.0, 0.1, -0.2, 0.3, 0.1])
+    tone = SampledTone(t, amp, ph, carrier_mhz=80.0, scale=2.0,
+                       phase_offset=0.4)
+    # exact at the table's own sample points
+    expect = 2.0 * amp * np.exp(
+        1j * (2 * np.pi * 80.0 * 1e-3 * t + ph + 0.4))
+    assert np.allclose(tone(t), expect)
+    # real part is the physical drive A(t)·cos(2π f t + φ(t) + φ0)
+    assert np.allclose(tone(t).real,
+                       2.0 * amp * np.cos(2 * np.pi * 0.08 * t + ph + 0.4))
+    # amplitude linearly interpolated between points; zero outside support
+    assert np.isclose(np.abs(tone(0.5)), 2.0 * 0.75)
+    assert tone(-1.0) == 0.0 and tone(10.0) == 0.0
+    assert tone.duration_ns == 4.0
+
+
+def test_gate_shape_from_csv():
+    from awg_compile import GateShape
+    shape = GateShape.from_csv(GATE_CSV, carrier_mhz=80.0)
+    assert len(shape.t_ns) == 697
+    assert np.isclose(shape.duration_ns, 696.0)
+    tone = shape.tone(phase_offset=0.0)
+    # normalized amplitude table: |waveform| == Omega/Omega0 at sample points
+    assert np.allclose(np.abs(tone(shape.t_ns)), shape.amp)
+    # the carrier is really there: demodulating by 80 MHz recovers φ(t)
+    demod = tone(shape.t_ns) * np.exp(
+        -1j * 2 * np.pi * 80.0 * 1e-3 * shape.t_ns)
+    assert np.allclose(np.angle(demod), shape.phase_rad, atol=1e-9)
+    # per-gate phase offset rotates the whole tone rigidly
+    rot = shape.tone(phase_offset=0.7)
+    assert np.allclose(rot(shape.t_ns),
+                       tone(shape.t_ns) * np.exp(0.7j))
+
+
+def test_end_to_end_zz_plays_carry_gate_shape():
+    from awg_compile import GateShape, SampledTone
+    shape = GateShape.from_csv(GATE_CSV, carrier_mhz=80.0)
+
+    mapper, H_list, n, T = _compile_2q()
+    # fixed shape fixes the gate duration — mapper must agree (0.696 μs)
+    mapper.cz_gate_time = shape.duration_ns / 1000.0
+    logical, _, _ = mapper.map_hlist_tree(H_list, T=T)
+    physical = pc.to_physical(logical, n)
+
+    import PulseDSL_py.schedule as dsl_schedule
+    from PulseDSL_py import Channels, Schedule, PulseLib
+    from PulseDSL_py.pulselib import set_platform
+    from simuq.braket.diffQC_provider import to_pulsedsl_tree
+
+    dsl_schedule.sched = None
+    ch, _reg = Channels(pc.NUM_PHYSICAL_CHANNELS)
+    sched = Schedule()
+    set_platform(PulseLib.Rydberg)
+    to_pulsedsl_tree(physical, ch, ch[pc.TRANSPORT_AOD_X], run=True,
+                     gate_shape=shape)
+
+    gate_row = sched._Sched__schedule[pc.GATE_AOM]
+    sampled = [e for e in gate_row
+               if isinstance(e._ScheduleEntry__pulse.waveform, SampledTone)]
+    assert sampled, "every 2q gate play must carry the sampled shape"
+    assert len(sampled) == len(gate_row), \
+        "ALL GATE_AOM plays are 2q gates — all must use the fixed shape"
+    for e in sampled:
+        assert (float(e._ScheduleEntry__t1) - float(e._ScheduleEntry__t0)
+                == int(round(shape.duration_ns)))
+        # per-gate virtual-Z angle landed as the tone's phase offset
+        assert (e._ScheduleEntry__pulse.waveform.phase_offset
+                == e._ScheduleEntry__pulse.phase)
+
+    # sampling the schedule reproduces the shape inside the gate window
+    t, waves = compile_waveforms(sched, n_channels=pc.NUM_PHYSICAL_CHANNELS)
+    e0 = sampled[0]
+    t0, t1 = int(e0._ScheduleEntry__t0), int(e0._ScheduleEntry__t1)
+    seg = waves[pc.GATE_AOM][t0:t1]
+    ref = e0._ScheduleEntry__pulse.waveform(np.arange(t1 - t0, dtype=float))
+    assert np.allclose(seg, ref)
+    assert np.isclose(np.abs(seg).max(), 1.0)   # normalized Omega0=1
+
+
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for fn in fns:

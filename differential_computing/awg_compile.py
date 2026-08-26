@@ -115,6 +115,84 @@ class ChirpTone:
                 f"T={self.duration_ns:.4g} ns, {self.profile})")
 
 
+class SampledTone:
+    """Measured pulse shape on a carrier: A(t) · exp(i(2π f_c t + φ(t) + φ₀)).
+
+    A(t) and φ(t) are given as sample tables (linearly interpolated between
+    points); the real hardware drive is the real part, A(t)·cos(2πf_c t + φ(t)).
+    Outside the table's time support the tone is 0 — the shape defines its own
+    duration.  `scale` multiplies the (typically normalized Ω/Ω₀) amplitude
+    table by the calibration amplitude Ω₀.
+    """
+
+    def __init__(self, t_ns, amp, phase_rad, carrier_mhz=0.0, scale=1.0,
+                 phase_offset=0.0, label="sampled"):
+        self.t_ns = np.asarray(t_ns, dtype=float)
+        self.amp = np.asarray(amp, dtype=float)
+        self.phase_rad = np.asarray(phase_rad, dtype=float)
+        if not (len(self.t_ns) == len(self.amp) == len(self.phase_rad)):
+            raise ValueError("SampledTone: t/amp/phase lengths differ")
+        if len(self.t_ns) < 2:
+            raise ValueError("SampledTone needs at least 2 samples")
+        self.carrier_mhz = float(carrier_mhz)
+        self.scale = float(scale)
+        self.phase_offset = float(phase_offset)
+        self.label = label
+
+    @property
+    def duration_ns(self):
+        return float(self.t_ns[-1] - self.t_ns[0])
+
+    def __call__(self, t_ns):
+        t = np.asarray(t_ns, dtype=float) + self.t_ns[0]
+        a = np.interp(t, self.t_ns, self.amp, left=0.0, right=0.0)
+        p = np.interp(t, self.t_ns, self.phase_rad)
+        return self.scale * a * np.exp(
+            1j * (2.0 * np.pi * self.carrier_mhz * MHZ_NS * t
+                  + p + self.phase_offset))
+
+    def __repr__(self):
+        return (f"SampledTone({self.label}, {len(self.t_ns)} pts, "
+                f"T={self.duration_ns:.4g} ns, "
+                f"fc={self.carrier_mhz:.4g} MHz, scale={self.scale:.4g})")
+
+
+class GateShape:
+    """A fixed, calibrated gate pulse shape shared by every gate of one kind.
+
+    Wraps the measured (t, Ω/Ω₀, φ) table + carrier so the emission layer can
+    stamp out one SampledTone per gate instance, differing only in the
+    per-gate phase offset (e.g. the CZ kick's virtual-Z angle) — the shape,
+    duration, and carrier are identical for all instances by construction.
+    """
+
+    def __init__(self, t_ns, amp, phase_rad, carrier_mhz, omega0=1.0,
+                 label="gate"):
+        self.t_ns = np.asarray(t_ns, dtype=float)
+        self.amp = np.asarray(amp, dtype=float)
+        self.phase_rad = np.asarray(phase_rad, dtype=float)
+        self.carrier_mhz = float(carrier_mhz)
+        self.omega0 = float(omega0)
+        self.label = label
+
+    @classmethod
+    def from_csv(cls, path, carrier_mhz, omega0=1.0, label=None):
+        """Load a (t_ns, Omega_over_Omega0, phi_rad) CSV with header row."""
+        data = np.loadtxt(path, delimiter=",", skiprows=1)
+        return cls(data[:, 0], data[:, 1], data[:, 2], carrier_mhz,
+                   omega0=omega0,
+                   label=label or path.rsplit("/", 1)[-1])
+
+    @property
+    def duration_ns(self):
+        return float(self.t_ns[-1] - self.t_ns[0])
+
+    def tone(self, phase_offset=0.0):
+        return SampledTone(self.t_ns, self.amp, self.phase_rad,
+                           carrier_mhz=self.carrier_mhz, scale=self.omega0,
+                           phase_offset=phase_offset, label=self.label)
+
+
 def tone_waveform(tone, duration_ns):
     """Build the waveform callable for one pulse_tree.Tone.
 

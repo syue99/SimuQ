@@ -19,6 +19,7 @@ Backend "hardware"
 
 import os
 import sys
+import warnings
 
 import numpy as np
 
@@ -130,7 +131,7 @@ def to_pulsedsl_simple(ops, channels, aod_ch):
             DSLDelay(dur_ns, aod_ch)
 
 
-def to_pulsedsl_tree(tree, channels, aod_ch, run=True):
+def to_pulsedsl_tree(tree, channels, aod_ch, run=True, gate_shape=None):
     """
     Translate a pulse_tree IR (from TweezerMapper.map_hlist_tree) into a live
     PulseDSL op-tree and, by default, RUN it.
@@ -162,6 +163,15 @@ def to_pulsedsl_tree(tree, channels, aod_ch, run=True):
     aod_ch   : PulseDSL Channel         — the AOD transport channel
     run      : bool — if True (default), call RUN on the translated tree so it
                lands on the global Schedule timeline.
+    gate_shape : awg_compile.GateShape or None — the fixed, calibrated 2q gate
+               pulse (measured A(t), φ(t) on a carrier; identical for every
+               two-qubit gate).  When given, every kind=="zz" PlayNode is
+               emitted with this SAMPLED waveform instead of a constant
+               envelope, the play's phase becoming the tone's phase offset
+               (the CZ kick's virtual-Z angle).  A fixed shape fixes the gate
+               DURATION: the schedule slot becomes gate_shape.duration_ns, so
+               set the mapper's cz_gate_time to match (a mismatch warns —
+               the ledger would disagree with the schedule timeline).
 
     Returns
     -------
@@ -190,6 +200,30 @@ def to_pulsedsl_tree(tree, channels, aod_ch, run=True):
         if isinstance(node, Para):
             return PARA(*[translate(c) for c in node.children])
         if isinstance(node, PlayNode):
+            if gate_shape is not None and node.kind == "zz":
+                # The fixed calibrated 2q gate: measured A(t)/φ(t) on its
+                # carrier, phase-offset by the play's angle (virtual Z).
+                # The shape owns the duration — the abstract amplitude
+                # (J or θ_CP) is realized by the fixed gate, not by
+                # amplitude modulation (digital-CZ semantics).
+                dur_ns = int(round(gate_shape.duration_ns))
+                if abs(_us_to_ns(node.duration) - dur_ns) > 1:
+                    warnings.warn(
+                        f"to_pulsedsl_tree: zz play scheduled for "
+                        f"{_us_to_ns(node.duration)} ns but the fixed gate "
+                        f"shape lasts {dur_ns} ns — emitting the shape's "
+                        f"duration; set cz_gate_time="
+                        f"{gate_shape.duration_ns / 1000:g} (μs) so the "
+                        f"ledger agrees with the schedule.")
+                pulse = Pulse(
+                    shape=Shape.Constant,
+                    amplitude=float(node.amplitude),
+                    phase=float(node.phase),
+                    frequency=gate_shape.carrier_mhz,
+                    duration=dur_ns,
+                    waveform=gate_shape.tone(phase_offset=float(node.phase)),
+                )
+                return Play(pulse, channels[int(node.channel)])
             # Constant envelope — the faithful sampled form of the solver's
             # piecewise-constant pulse (per-kind shaping deferred).
             pulse = Pulse(
