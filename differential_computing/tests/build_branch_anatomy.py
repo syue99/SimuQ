@@ -130,13 +130,18 @@ def extract():
     gate = min(entries(pc.GATE_AOM), key=lambda e: e[1] - e[0])
     gt = np.linspace(0.0, gate[1] - gate[0], 400)
     gwf = gate[2].waveform            # SampledTone — the measured gate
+    # the TRUE played waveform A(t)·sin(2π·80MHz·t + φ(t) + φ_vz), sampled
+    # at 0.5 ns (25 pts/carrier cycle) straight from the schedule's tone
+    twf = np.arange(0.0, gate[1] - gate[0], 0.5)
     cz = {"t0": gate[0], "t1": gate[1],
           "amp": float(gate[2].amplitude),
           "vz_phase": float(getattr(gate[2], "phase", 0.0) or 0.0),
           "env": np.abs(gwf(gt)).tolist(),
           # measured phase table φ(t) interpolated on the same grid
           "phi": np.interp(gt, gwf.t_ns - gwf.t_ns[0],
-                           gwf.phase_rad).tolist()}
+                           gwf.phase_rad).tolist(),
+          "wf_t": twf.tolist(),
+          "wf": np.imag(gwf(twf)).tolist()}
 
     data = {
         "meta": {k: (list(v) if isinstance(v, tuple) else v)
@@ -361,18 +366,23 @@ def render(data):
             axB.plot(LX + e, warp(t), color=C_ANALOG, lw=0.35,
                      alpha=alpha)
     axB.plot([LX, LX], [1, nb - 2], color=C_ANALOG, lw=0.6, alpha=0.6)
-    # the measured gate pulse inside the CZ window (no abstract box):
-    # red fill = amplitude envelope A(t)/Ω0, dark line = phase φ(t)
+    # the TRUE gate waveform inside the CZ window: the schedule's played
+    # A(t)·sin(2π·80MHz·t + φ(t)) itself (bipolar, centered), with the
+    # ±A(t) envelope as a faint outline — vector in the PDF, so the ~56
+    # carrier cycles survive zoom.
     gt = np.linspace(cz["t0"], cz["t1"], len(cz["env"]))
-    ge = np.asarray(cz["env"]) / max(cz["env"]) * LW
-    axB.fill_betweenx(warp(gt), LX, LX + ge, color=C_DIGITAL,
-                      alpha=0.45, lw=0)
-    axB.plot(LX + ge, warp(gt), color=C_DIGITAL, lw=0.7)
-    gp = np.asarray(cz["phi"])
-    gpn = (gp - gp.min()) / (gp.max() - gp.min()) * 0.9 * LW + 0.05 * LW
-    axB.plot(LX + gpn, warp(gt), color="#7a1416", lw=0.75)
-    axB.text(LX + LW + 0.06, xcz_v, "CZ\nA(t), φ(t)", fontsize=4.6,
-             ha="left", va="center", color=C_DIGITAL, linespacing=1.25)
+    ge = np.asarray(cz["env"]) / max(cz["env"])
+    mid = LX + LW / 2
+    wf = np.asarray(cz["wf"]) / max(cz["env"])
+    twf = cz["t0"] + np.asarray(cz["wf_t"])
+    axB.plot(mid + wf * LW / 2, warp(twf), color=C_DIGITAL, lw=0.28,
+             alpha=0.9, solid_joinstyle="miter")
+    for sgn in (1.0, -1.0):
+        axB.plot(mid + sgn * ge * LW / 2, warp(gt), color=C_DIGITAL,
+                 lw=0.55, alpha=0.55)
+    axB.text(LX + LW + 0.06, xcz_v,
+             "CZ\nA(t)·sin(2π·80MHz·t\n+φ(t))", fontsize=4.3,
+             ha="left", va="center", color=C_DIGITAL, linespacing=1.3)
     axB.add_patch(Rectangle((LX, nb - 1 + 0.24), LW, 0.52, fc="none",
                             ec=C_SOFT, ls="--", lw=0.6))
 
