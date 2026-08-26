@@ -438,12 +438,8 @@ def render(data):
     AXX = 0.33                       # vertical axis x
     CX, HW = 0.62, 0.13             # single THIN waveform strip
 
-    # color legend (2×2) on top of the strip
-    y_top = 0.912
-    for k, nm in enumerate(("drive I/Q", "dressing", "gate", "move x/y")):
-        axT.text(0.40 + 0.32 * (k % 2), 0.986 - 0.026 * (k // 2),
-                 nm, fontsize=3.9, ha="left", va="top",
-                 color=CH_COLORS[nm])
+    # channel colors are identified by the coverage-table names below
+    y_top = 0.945
 
     def brk(y):                      # axis-break marks
         for dy in (0.004, -0.004):
@@ -557,7 +553,7 @@ def render(data):
                 "drive I": C_ANALOG, "drive Q": C_ANALOG,
                 "dressing": C_DRESS, "gate": C_DIGITAL}
     ty = y0m - 0.035
-    cols_x = [0.55, 0.68, 0.81, 0.94]
+    cols_x = [0.40, 0.58, 0.76, 0.94]
     stage_cols = [C_ANALOG, C_AOD, C_DIGITAL, C_ANALOG]
     for k, num in enumerate("1234"):
         axT.text(cols_x[k], ty, num, fontsize=4.2, ha="center",
@@ -565,7 +561,7 @@ def render(data):
     rh = (ty - 0.018) / 8.4
     for ri, (nm, acts) in enumerate(data["coverage"]):
         ry = ty - (ri + 1) * rh
-        axT.text(0.46, ry, nm, fontsize=3.9, ha="right", va="center",
+        axT.text(0.28, ry, nm, fontsize=3.9, ha="right", va="center",
                  color=name_col.get(nm, C_ATOM))
         for k, a in enumerate(acts):
             if a:
