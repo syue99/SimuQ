@@ -484,6 +484,8 @@ def main():
                     ha=ha, weight="bold", path_effects=halo, zorder=7)
     ax.set_xlim(0, NS)
     ax.set_ylim(2.1e-3, 1.05)
+    ax.text(0.02, 0.985, r"$T/T_2^*=0.15$", transform=ax.transAxes, fontsize=6.5,
+            color="#52514e", va="top")
     ax.set_xlabel("optimization step", fontsize=7.5)
     ax.set_ylabel(r"$\|\theta_t-\theta^*\|$  (median $\pm$ IQR)", fontsize=7.5)
     ax.tick_params(labelsize=6.5)

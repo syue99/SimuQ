@@ -1,0 +1,36 @@
+% T1_main — compact one-line-per-cell grid, PSR/NSR/FD.
+% Three dashed-separated blocks = Requirements / Cost / Guarantees (top to bottom);
+% block names + symbol glossary live in the figure caption, keeping the table thin.
+% Needs amssymb (\checkmark) and arydshln (\hdashline); $\times$ is plain math.
+% Terms checked vs nyquist_shift.py and F6: PSR bias notes the real-gate floor;
+% FD keeps its own step eps (the /eps_g^2 factor is sound-cols only); s_0=pi/2Omega.
+\setlength{\tabcolsep}{5pt}\renewcommand{\arraystretch}{1.18}
+\fontsize{6.6}{7.4}\selectfont
+\begin{tabular}{@{}llll@{}}
+\hline\noalign{\vskip1.2pt}
+\textbf{Axis} & \textbf{PSR} & \textbf{NSR} & \textbf{FD (baseline)}\\
+\noalign{\vskip1.2pt}\hline
+generator & $A_j^2{=}I$ (Pauli) & $\mathrm{diam}(A_j){<}\infty$ & none\\
+hardware & op $+$ gate zone/branch & headroom $s_0{=}\pi/2\Omega$ & none\\
+fine params ($\Delta t{\to}0$) & \checkmark & $\times$ ($s_0{\propto}1/\Delta t$) & \checkmark\\
+\hdashline
+executions / grad. & $O(m)$ pairs & $O(M)$ / $O(1)^{s}$ & $O(1)$\\
+shots ($/\varepsilon_g^{2}e^{2\Gamma T}$) & $O(D_1^{2})$ & $O(\chi^{2}D_1^{2})$ & $O(1/\varepsilon^{2})$, $m$-indep.\\
+compilation & waveforms $+$ gates & waveform only & waveform only\\
+\hdashline
+bias & $0$; gate $\le C_{\mathrm{PSR}}\varepsilon_{\mathrm{ins}}$ & $O(\Omega/M)$ / $0^{s}$ & $O(\varepsilon^{2}){+}O(\delta/\varepsilon)$\\
+unbiased, noisy $\nabla C$ & \checkmark & \checkmark\dag & $\times$\\
+coherent-error suppr. & \checkmark\dag\ $O(\eta^{2})$ & \dag & $\times$\ $O(\eta)$\\
+\noalign{\vskip1.2pt}\hline
+\end{tabular}
+
+\vspace{2.5pt}
+{\fontsize{5.7}{6.7}\selectfont
+$\dot H{=}\!\sum_j(\partial u_j/\partial\theta)A_j$;\ \
+$D_1{=}\!\int_0^{T}\!\!\sum_j|\partial u_j/\partial\theta|\mathrm{diam}(A_j)dt$;\ \
+$\Omega{=}\!\int_0^{T}\!\!\mathrm{diam}(\dot H)dt$;\ \
+$\chi{=}\Omega/D_1{\in}(0,1]$;\ \
+$T$ time;\ $\Gamma{=}1/T_2$;\ $m$ ext.-$\theta$ terms;\ $M$ trunc.\ order;\
+$\varepsilon_g$ target RMSE;\ $\varepsilon$ FD step;\ $\delta$ control-amp.\ error;\
+$\eta$ coherent-error;\ $\varepsilon_{\mathrm{ins}}$ gate infidelity;\ $s_{\max}$ headroom;\
+$\dag$ numeric (proof open);\ ${}^{s}$ stochastic sampler.\par}

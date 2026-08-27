@@ -1,0 +1,11 @@
+% Combined table+strip graphic for the fig:scale float (space-saving single PDF).
+% Regenerate:  cd paper_fig_2 && tectonic F_scale_combined.tex
+% Sources: T1_main.tex (comparison table) + F_scale_strip.pdf (compile-time strip).
+% Tight crop (border 1pt), strip a touch smaller, top-aligned side-by-side.
+\documentclass[border=1pt]{standalone}
+\usepackage{amssymb,amsmath,graphicx}
+\usepackage{arydshln}   % dashed \hdashline separating the three table blocks
+\begin{document}
+\begin{minipage}[t]{4.28in}\vspace{0pt}\input{T1_main.tex}\end{minipage}\hspace{0.1in}%
+\begin{minipage}[t]{1.95in}\vspace{0pt}\centering\includegraphics[width=\linewidth]{F_scale_strip.pdf}\end{minipage}
+\end{document}

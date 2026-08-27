@@ -1,0 +1,185 @@
+% ============================================================================
+% SEC 6 v7 (2026-08-22). Fred's v6 edits, compressed. Two reverts flagged in
+% chat: NSR headroom is rejection/p_fail, not bias (5.3; D.5 only if
+% truncated). 2.3x removed.
+% ============================================================================
+\newcommand{\owed}[1]{{\color{red}\textbf{[owed: #1]}}}
+
+\section{Evaluation}
+\label{sec:eval}
+
+The emulator closes Sec.~5: what it runs is the compiler's output, so every
+number here is a measurement of the estimator the compiler ships, executed
+under a device-level error model (Appendix~C.3) and measured against the
+gradient of the objective the device realizes, $\nabla C_{\mathrm{device}}$
+(Appendix~C). The emulator's cost is exponential in qubits, so execution
+results are at few qubits; the compiler's is not, and the device-ready
+schedules it emits for every evaluated program, at sizes beyond a hundred
+qubits, are shown in Appendix~F. The workload is the running instance of
+Sec.~5.2, grown: two qubits where one gradient is examined in detail,
+seven where program structure is varied, a thousand where the compiler is
+timed. The section follows the order in which the earlier sections made
+their promises: the theorems hold on the machine, the fallback does not,
+the two sound lowerings are a real choice, and the choice is still there
+at device scale.
+
+\subsection{The Estimator on the Machine}
+\label{sec:eval-machine}
+
+Theorem~4.3 and its noisy forms (Theorems~C.7 and~C.8) say nothing about a
+device; the first check is that they survive one. Figure~\ref{fig:F6} is
+that check. Compiled NSR and PSR, each branch executed under the full error
+model, converge to $\nabla C_{\mathrm{device}}$ at the $N^{-1/2}$ of
+Corollary~5.2 over four decades of budget. Nothing in the lowering ---
+normal form, solver, schedule, ledger --- has introduced bias, which is at
+once the soundness theorems measured and the correctness evidence for
+Sec.~5. The one bias the paper does not remove is on the same axes: PSR
+with a real gate floors where Lemma~C.9 puts it, first order in the gate's
+infidelity, with nothing dividing by a small step.
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\linewidth]{figs/F6.pdf}
+  \caption{Compiled PSR and NSR converge to $\nabla C_{\mathrm{device}}$ at
+  the $N^{-1/2}$ rate over four decades of budget; finite differences floor
+  at their deterministic control-precision bias, both at a
+  oracle-tuned $\varepsilon^{\ast}$ and at a fixed deployable $\varepsilon$.
+  Inset: RMSE against step size
+  $\varepsilon$ at fixed budget---the finite-difference ``V'' floors above
+  both flat sound-strategy references, and $\times$ mark the $\varepsilon$ at
+  which FD's gradient takes the wrong sign (points uphill). TFIM coupling
+  gradient, device model of Appendix~C.3, $T/T_2^{\ast}{=}0.15$.}
+  \label{fig:F6}
+\end{figure}
+
+With the sound estimators established, the same figure settles the
+question Sec.~2 opened. Figure~1 showed the finite-difference trap at one
+point of one parameter at the Hamiltonian level; the objection is that a
+tuned step on the real artifact might escape it. Figure~\ref{fig:F6} gives
+FD the step no experimenter has --- chosen by retrospective global sweep
+--- and it floors anyway, above both sound strategies, because the
+control-precision bias is deterministic at an operating point and
+averaging cannot see it (inset: the floor is the minimum over every step
+the machine can dial. The instance is chosen
+for this: its landscape has features narrower than the dialable steps, as
+landscapes do near convergence, where optimization spends its time. On a
+smooth landscape FD is fine and competitive at low budget; what it cannot
+do is stay fine as the optimizer approaches a minimum.
+
+A gradient-error floor earns its place only if the optimizer notices.
+Figure~\ref{fig:loop} runs the two-qubit instance in closed loop, every
+method on one optimizer and one budget. NSR and PSR reach the optimum and
+hold it; oracle-tuned FD settles a systematic distance short, and a step
+one notch larger wanders off. The stall distance is gradient bias over
+local curvature --- not the control resolution itself --- which is why
+different steps stall in different places and why no step fixed before the
+run prevents it. This is
+the failure Sec.~2 predicted, now on the shipped artifact, and it is why
+the compiler emits Sec.~4's strategies and keeps Sec.~4.4 as a baseline.
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\linewidth]{figs/F_loop.pdf}
+  \caption{The two-qubit instance in closed loop: median\,$\pm$\,IQR of
+  $\lVert\theta_t-\theta^{\ast}\rVert$ over 20 seeds, one optimizer and one
+  shot budget for every method, on a deliberately ill-conditioned (sloppy)
+  self-consistent recovery valley whose interior minimum $\theta^{\ast}$ is
+  fixed by construction. The $\varepsilon$-free strategies PSR and NSR reach
+  $\theta^{\ast}$ and hold it within tolerance; the finite-difference steps
+  fail in three ways---too large diverges (truncation), too small is
+  unreliable (wide IQR), and the retrospectively best $\varepsilon$ floors
+  just above tolerance. Filled markers: the first step from which the median
+  stays inside tolerance for five consecutive steps. Inset: the valley, with
+  each method's median path (star $=\theta^{\ast}$, open circle $=$ start;
+  the too-large-$\varepsilon$ path runs off the frame).}
+  \label{fig:loop}
+\end{figure}
+
+\subsection{Pricing the Pair}
+\label{sec:eval-select}
+
+Two sound lowerings remain, and Sec.~5.3 priced them without choosing:
+NSR pays statistics and headroom, PSR pays motion and a gate, with the
+constants of Corollary~5.2. If one always won, the strategy interface of
+Sec.~4 would be an abstraction without a use. Figure~\ref{fig:select}, on
+the seven-qubit instance, shows it is not: on the plane the compiler sees
+--- how many coefficients a program differentiates against how many terms
+each touches, both read off program text --- PSR's branch reuse wins where
+many parameters share one schedule, NSR's single combined shift wins where
+one parameter touches many non-commuting terms, and the boundary moves
+with the term alphabet as the constants predict. Both costs are known
+before anything runs: PSR's constant is read off the program, NSR's is
+bounded by the static analysis of Sec.~5.3. Each strategy has a
+physical imperfection of its own --- PSR the gate's infidelity, NSR the
+machine's finite amplitude range --- but neither is a step-size bias: the
+gate's enters first order and at the benchmarked fidelity sits well below
+FD's floor (Figure~\ref{fig:F6}); the range's appears as rejected draws,
+never as bias, unless the series is truncated, where Lemma~D.5 bounds it.
+Appendix~G works the regimes case by case.
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\linewidth]{figs/F_select.pdf}
+  \caption{Which sound lowering needs fewer executions, on the design plane
+  the compiler reads off program text: $P$ differentiated coefficients
+  against $k$, the number of device-alphabet terms each touches. Shading
+  marks the winner (blue: PSR; green: NSR); the solid line is the measured
+  crossing. Computed at compile time from static certificates alone the
+  boundary does not cross this plane---for non-commuting mixed tangents the
+  spectral-diameter certificate is loose, so the certificate-guided compiler
+  picks PSR everywhere here (the safe direction: looseness costs shots, never
+  bias), forfeiting at most $1.9\times$ shots at any sampled point. Star: the
+  TFIM instance of Figure~\ref{fig:loop} (per-bond couplings, $k{=}1$); open
+  circle: its global-coefficient rewrite. Seven-qubit instance; NSR wins on
+  $15\%$ of the sampled plane.}
+  \label{fig:select}
+\end{figure}
+
+\subsection{At Device Scale}
+\label{sec:eval-scale}
+
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=\linewidth]{figs/F_scale_combined.pdf}
+  \caption{The compiled strategies side by side, and differentiation's price at
+  device scale. Left (table): PSR, NSR, and the finite-difference baseline
+  compared across three dashed-separated blocks---\emph{Requirements} (top),
+  per-gradient \emph{Cost} (middle), and \emph{Guarantees} (bottom). Right (strip): the
+  incremental cost of differentiation over the source compilation, log--log, out
+  to $10^{3}$ qubits on the target-aware specialized path--- per-branch differentiation is a
+  fraction of a percent of the source compile. Differentiation is not the bottleneck.}
+  \label{fig:scale}
+\end{figure*}
+
+A choice the compiler can only afford at seven qubits is not a choice, so
+the last check grows the instance to $10^{3}$ qubits and asks where
+compilation spends its time. The answer (Figure~\ref{fig:scale}) is the
+source program, and specifically SimuQ's Hamiltonian solver: for arbitrary
+Hamiltonians it tops out near a dozen qubits, and for the 
+Hamiltonians real machines implement, reaching a thousand took a simple
+specialization of the solver. Differentiation itself barely registers on
+the same axes, for reasons visible in Sec.~5.3. An NSR branch is the
+source schedule with its coefficient arrays shifted: the solver is not
+consulted, and the branch is a table written onto an unchanged schedule. A
+PSR branch has rigid structure --- the source schedule cut at one time,
+with one $\theta$-independent, fixed operation inserted at the
+cut --- so the solve is reused on both sides and only the scheduler and
+ledger work around the insertion, a fraction of a percent of the source
+compile at every size. Since the runtime compiles one branch per execution
+(Definition~D.2) and never re-runs the source solve, the bottleneck of a
+differentiated program is the bottleneck of the program it differentiates,
+and it lies in the part of the stack this paper borrowed rather than
+built. Execution cost points the same way --- one inserted operation or
+none per branch, where a digital emulation matching the analog route's own
+attenuation would pay thousands of gates --- and Sec.~7 takes that up.
+
+The running instance has now been differentiated, compiled, executed under
+noise, optimized, re-lowered, and grown by three orders of magnitude, and
+at no point did its derivative stop being a program of Sec.~3. That is the
+section's claim: the derivative of an analog experiment is a program, and
+the stack that compiles the experiment compiles it.
+
+% NOTES: Appendix C.3 = T4 + setpoint model + \nabla C_device. Appendix F =
+% device-ready pulse figure(s) at 100+ qubits. Appendix G = F-select
+% constants + rho-plane F3. Appendix H = solver breakdown, generic n<=12.
+% T2 -> Sec. 7.

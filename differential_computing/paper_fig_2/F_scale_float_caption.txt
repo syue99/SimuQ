@@ -1,0 +1,43 @@
+F-SCALE + COMPANION — mixed float (REVISIONS §2). One figure*, two bottom-aligned minipages:
+the companion table (left, ~0.63\textwidth, \input{companion_table.tex}) and the compile-time
+strip (right, ~0.34\textwidth, \includegraphics{F_scale_strip}).
+
+LaTeX layout:
+\begin{figure*}[t]
+\begin{minipage}[b]{0.63\textwidth}\centering \input{companion_table}\end{minipage}\hfill
+\begin{minipage}[b]{0.34\textwidth}\centering \includegraphics[width=\linewidth]{F_scale_strip}\end{minipage}
+\caption{...}\label{fig:regime-scale}
+\end{figure*}
+
+CAPTION (draft):
+The strategy selector and its compiler price. LEFT (table): structure — not size — chooses PSR
+vs NSR. Aligned tangents (χ→1) favour PSR by a landscape factor (co-located ± branches are
+common-mode-free); compressible tangents (χ<1) favour NSR by χ⁻² (one folded shift where PSR
+pays per term); a non-involutive generator admits no clean ±π/2 shift, so only NSR applies.
+COMPRESSION IS A FAILURE OF JOINT EXTREMIZABILITY of the weighted tangent Σ_j v_j H_j — its joint
+value cannot reach Σ_j|v_j|·diam(H_j) — reachable by EITHER shared-support cancellation in a
+COMMUTING family (telescoping, χ=O(1/m)) OR non-commuting contraction (Heisenberg, χ≈0.5); it does
+NOT require non-commutativity. Compile overhead is per-strategy (footer): NSR adds only
+coefficient arrays (+0 segments; the lowering is the identity on segments), PSR adds +k inserted
+segments (motion and one gate). RIGHT (strip): the INCREMENTAL cost of differentiation over the
+source compilation path, log-log, three series (source | +PSR/branch | +NSR/branch). The
+differentiation increment is a per-branch MAPPING pass over the machine-native segments; the
+evolution SOLVE is shared across branches, so "per branch" is the MARGINAL cost (S4-i): at n=1000
+it is 0.3% of source (the earlier 0.4% quoted a full recompile — the strip and this caption use
+the marginal number). Total derivative-compile cost = per-branch × 2m × P; at F6/F-loop's m it is
+reported in the note. NSR's increment is ~10³× smaller still (coefficient-only). TIMING stops at
+the machine-native SEGMENTS (S4-ii); the pulse/scheduler layer is out of scope for these numbers.
+SCOPE (S3): the generic all-pairs solver caps at n=12; every point beyond runs on the
+target-aware SPECIALIZED 1D-chain path (frozen geometry, bond-pruned lines, analytic warm start,
+sparse Jacobian) — the n=1000 reach is on that path, stated wherever the number appears; the
+generic ceiling is a solver story, kept in the appendix. Dispersion: IQR bands over the repeated
+timings (median where compile < 5 s); machine/warm-up/cache policy and the two-regime PSR slope
+(≈1 below n≈200, ≈2 above; the strip's marginal per-branch is ≈1.5) are in the appendix F-scale
+figure. Compiled Hamiltonian matches the target to machine precision (max |dH| ≤ 5e-13); the 1D
+truncated-dressing tail is ~1.5% relative, declared. Honesty rail: source compilation dominates at
+large n — differentiation is not the bottleneck.
+
+MEASURED ANCHORS (table): aligned row from the real TFIM ZZ emulation (F-phase, clean insertion,
+T/T2*=0.15): N_PSR≈5.1×10³ < N_NSR≈7.9×10³; physical time = executions × T (T=1.5 μs).
+Compressible/non-involutive rows carry the cost-model relationship (χ from sec6_rho_chi), not
+separate emulations.

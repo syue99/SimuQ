@@ -47,6 +47,11 @@ GRAD_MIN = 0.35                     # θ0 must have a steep gradient; among thos
 # F6's shot-floor + δ/ε story. F6 noise = dressed T2* dephasing + control δ.
 GATE_2Q = None
 N_TARGET = 10000                   # fixed N for panel R + FD-ε tuning
+FD_FIXED_EPS = 0.05                # M2: a DEPLOYABLE fixed-ε FD baseline — a naive small step
+                                   # (≈2.5δ, in the δ/ε-amplification zone), NOT retrospectively
+                                   # tuned. Floors ABOVE the oracle-tuned ε* at every N (oracle is
+                                   # the best-case FD; this is a plausible-but-trapped deployment
+                                   # choice). Both FD series finite-shot (M2, no shot-free oracle).
 # extend to 1e6 so shot noise drops below PSR's gate-channel bias → the B2 floor is visible
 NGRID = [100, 316, 1000, 3162, 10000, 31623, 100000, 316228, 1000000]
 R_SEED = 100                       # repetitions per point (RMSE stable on heavy-tailed δ error)
@@ -161,7 +166,8 @@ def main():
     psr_gate_bias = abs((T / NSAMP) * float(ug) * np.sum(pm_g - pp_g) - grad_true)
 
     # NSR stochastic sampler: shifts n∝|w_n|, weight 2πK(-1)^nσ, 1 shot each
-    MAXN = 24; ns = np.arange(MAXN); pw = 1.0 / (ns + 0.5) ** 2; pw /= pw.sum(); L1 = 2 * np.pi * K
+    MAXN = 24; ns = np.arange(MAXN); u_w = 1.0 / (ns + 0.5) ** 2
+    pw = u_w / u_w.sum(); L1 = 2 * np.pi * K
 
     def nsr_est(Ntot, rng):
         n = rng.choice(ns, size=int(Ntot), p=pw); sig = rng.choice([-1.0, 1.0], size=int(Ntot))
@@ -169,6 +175,59 @@ def main():
         val = Cint(np.clip(th0 + sft, grid[0], grid[-1]))
         sh = 2 * rng.binomial(1, 0.5 * (1 + np.clip(val, -1, 1))) - 1
         return float(np.mean(L1 * ((-1.0) ** n) * sig * sh))
+
+    # ── NSR at the device headroom cap (SEC6 handover A, \owed{NSR@cap}) ──
+    # s_max = θ0 (2× coupling headroom: √2 Rabi with J∝Ω²/Δ — PROVISIONAL, no App E
+    # number yet); M = ⌊2K·s_max − 1/2⌋. Both variants target the M-truncated series
+    # (a hard cap makes the tail physically unreachable); Lemma D.5 bounds the bias.
+    S_MAX = th0
+    M_CAP = int(np.floor(2 * K * S_MAX - 0.5))
+    R_OBS = 1.0                                     # ‖O_P‖ for O = Z0Z1 (A3)
+    OBAR = L1                                       # Ω̄ = 2πK, the compiler certificate
+    d5_bound = 4 * OBAR * R_OBS / (np.pi ** 2 * (2 * M_CAP + 1))
+    # (a) trunc: compile-time truncation — sampler renormalised over n ≤ M AND the L1
+    # mass scaled by the kept fraction, so every kept mode keeps its EXACT full-series
+    # weight. Floors at the tail bias (≤ d5_bound).
+    keep = u_w[:M_CAP + 1].sum() / u_w.sum()
+    pw_t = u_w[:M_CAP + 1] / u_w[:M_CAP + 1].sum()
+    ns_t = ns[:M_CAP + 1]
+    L1_t = L1 * keep
+
+    def nsr_trunc_est(Ntot, rng):
+        n = rng.choice(ns_t, size=int(Ntot), p=pw_t)
+        sig = rng.choice([-1.0, 1.0], size=int(Ntot))
+        val = Cint(np.clip(th0 + sig * (n + 0.5) / (2 * K), grid[0], grid[-1]))
+        sh = 2 * rng.binomial(1, 0.5 * (1 + np.clip(val, -1, 1))) - 1
+        return float(np.mean(L1_t * ((-1.0) ** n) * sig * sh))
+
+    # (b) rej: runtime rejection — draw from the FULL sampler; out-of-range draws are
+    # rejected and NEVER resampled (E4): they consume budget and contribute 0, the L1
+    # weight is unchanged, so the kept-mode weights are undistorted (resampling would
+    # silently renormalise and bias them). Same truncated target; shot inflation
+    # 1/(1−p_fail).
+    def nsr_rej_est(Ntot, rng):
+        n = rng.choice(ns, size=int(Ntot), p=pw)
+        sig = rng.choice([-1.0, 1.0], size=int(Ntot))
+        acc = n <= M_CAP
+        val = Cint(np.clip(th0 + sig * (n + 0.5) / (2 * K), grid[0], grid[-1]))
+        sh = 2 * rng.binomial(1, 0.5 * (1 + np.clip(val, -1, 1))) - 1
+        contrib = L1 * ((-1.0) ** n) * sig * sh
+        return float(np.mean(np.where(acc, contrib, 0.0)))
+
+    # exact (N→∞) value of the truncated estimator → measured truncation floor
+    s_n = (ns + 0.5) / (2 * K)
+    mode_val = np.array([0.5 * (Cint(np.clip(th0 + s, grid[0], grid[-1]))
+                                - Cint(np.clip(th0 - s, grid[0], grid[-1])))
+                         for s in s_n])
+    trunc_exact = float(L1 * np.sum(pw[:M_CAP + 1] * ((-1.0) ** ns[:M_CAP + 1])
+                                    * mode_val[:M_CAP + 1]))
+    trunc_floor = abs(trunc_exact - grad_true)
+    p_fail = float(pw[M_CAP + 1:].sum())            # under the 24-mode sampler
+    p_fail_bound = (1.0 / (M_CAP + 0.5)) / (np.pi ** 2 / 2)   # D.3/D.4-style tail bound
+    print(f"NSR@cap: s_max={S_MAX:.3f} (=θ0, PROVISIONAL)  Ω̄={OBAR:.2f}  M={M_CAP}  "
+          f"max shift used={(M_CAP+0.5)/(2*K):.3f} ≤ s_max  R={R_OBS}\n"
+          f"  D.5 bound={d5_bound:.3f}  measured trunc floor={trunc_floor:.4f}  "
+          f"p_fail={p_fail:.4f} (bound {p_fail_bound:.4f})  inflation={1/(1-p_fail):.3f}")
 
     def fd_est(eps, Ntot, rng):
         nper = Ntot // 2
@@ -212,7 +271,11 @@ def main():
     psrL = sweepN(lambda N, r: psr_est(N, r))
     nsrL = sweepN(lambda N, r: nsr_est(N, r))
     psrGL = sweepN(lambda N, r: psr_gate_est(N, r))              # B2: PSR + gate channel
-    fdL = sweepN(lambda N, r: fd_est(eps_star, N, r))
+    fdL = sweepN(lambda N, r: fd_est(eps_star, N, r))            # FD @ oracle-tuned ε*
+    fdFixL = sweepN(lambda N, r: fd_est(FD_FIXED_EPS, N, r))     # M2: FD @ fixed (deployable) ε
+    fd_fixed_floor = fd_floor_pred(FD_FIXED_EPS)                 # its (higher) predicted δ/ε floor
+    nsrTL = sweepN(lambda N, r: nsr_trunc_est(N, r))             # NSR@cap (a) truncated — PLOTTED
+    nsrRL = sweepN(lambda N, r: nsr_rej_est(N, r))               # NSR@cap (b) rejection — reported
 
     # B4/F5: fit N^{-1/2} over the CLEAN tail (N≥1000; small N is discretization-curved),
     # report slope + R². The dressing-only sound series have no floor → clean −0.5 on the tail.
@@ -254,17 +317,21 @@ def main():
     fig, (axL, axR) = plt.subplots(1, 2, figsize=(9.6, 3.8))
     N = np.array(NGRID)
     for (m, lo, hi), c, lab in [(psrL, C_PSR, rf"PSR (tail fit $N^{{{exp_psr:.2f}}}$)"),
-                                (nsrL, C_NSR, rf"NSR, stochastic (tail fit $N^{{{exp_nsr:.2f}}}$)"),
-                                (fdL, C_FD, rf"FD (fixed $\varepsilon^*$={eps_star:.2f})")]:
+                                (nsrL, C_NSR, rf"NSR $M{{=}}\infty$ (tail fit $N^{{{exp_nsr:.2f}}}$)"),
+                                (fdL, C_FD, rf"FD @ oracle-tuned $\varepsilon^*$={eps_star:.2f}")]:
         axL.loglog(N, m, "o-", color=c, ms=5, label=lab)
         axL.fill_between(N, lo, hi, color=c, alpha=0.15)
-    # B2 disclosure: PSR WITH the gate channel — floors at its own gate-channel bias (faint)
+    # M2: FD @ fixed deployable ε — floors HIGHER than the oracle series (its δ/ε floor is larger
+    # at ε below the optimum); same colour/strategy, dotted-triangle variant
+    axL.loglog(N, fdFixL[0], "^:", color=C_FD, ms=4.5, lw=1.2, alpha=0.75,
+               label=rf"FD @ fixed $\varepsilon$={FD_FIXED_EPS:g} (deployable)")
+    # B2 disclosure: PSR WITH the gate channel — floors at its certifiable insertion bias (faint)
     axL.loglog(N, psrGL[0], "s--", color=C_PSR, ms=3, lw=1.0, alpha=0.5,
-               label="PSR + gate channel")
+               label=r"PSR + gate channel ($\leq C_{\rm PSR}\varepsilon_{\rm ins}$)")
     axL.loglog(N, psrL[0][0] * (N / N[0]) ** -0.5, ":", color="#999", lw=1, label=r"$N^{-1/2}$")
-    axL.axhline(floor_star, color=C_FD, lw=0.9, ls="-.")        # B5 predicted δ/ε floor
-    axL.text(N[-1] * 0.9, floor_star * 1.15, r"predicted FD $\delta/\varepsilon$ floor",
-             fontsize=6.5, color="#a0451a", ha="right")
+    axL.axhline(floor_star, color=C_FD, lw=0.9, ls="-.")        # B5 predicted δ/ε floor (oracle ε*)
+    axL.text(N[-1] * 0.9, floor_star * 1.15, r"predicted FD $\delta/\varepsilon$ floor ($\varepsilon^*$)",
+             fontsize=6.3, color="#a0451a", ha="right")
     axL.set_xlabel(r"total executions $N$ (one gradient estimate)")
     axL.set_ylabel(r"RMSE vs $\nabla C_{\rm noisy}$ (noisy gradient)")
     axL.set_title(r"(L) shot floor: PSR/NSR $\to\nabla C_{\rm noisy}$, FD floors  ($T/T_2^*$=0.15)", fontsize=8.5)
@@ -293,14 +360,79 @@ def main():
                   f"($N$={N_TARGET}, $T/T_2^*$=0.15)", fontsize=8.5)
     axR.legend(fontsize=6.3); axR.grid(True, which="both", alpha=0.15)
     fig.suptitle("F6 — TFIM coupling gradient: shot floor (L) + control-error amplification (R); "
-                 "Hamiltonian-level under the T4 noise model (δ=%.2f, provisional)" % R_CTRL, fontsize=9)
+                 "compiled to machine-native segments, emulated under the T4 noise model "
+                 "(δ=%.2f, provisional)" % R_CTRL, fontsize=9)
     fig.tight_layout(rect=[0, 0, 1, 0.94])
     for e in ("pdf", "png"):
         fig.savefig(os.path.join(FIGDIR, f"F6_floor_amplification.{e}"), bbox_inches="tight", pad_inches=0.02)
     plt.close(fig)
+
+    # ── SEC6 handover A: single-column F6 — main RMSE-vs-N + FD-V inset ──
+    OUT3 = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "paper_fig_3", "figs"))
+    os.makedirs(OUT3, exist_ok=True)
+    plt.rcParams.update({"font.size": 7})
+    figS, axS = plt.subplots(figsize=(3.4, 3.6), dpi=300)
+    for (mm, lo, hi), c, st, mk, al, lab in [
+            (psrL, C_PSR, "-", "o", 1.0, rf"PSR ($N^{{{exp_psr:.2f}}}$)"),
+            (nsrL, C_NSR, "-", "s", 1.0, rf"NSR $M{{=}}\infty$ ($N^{{{exp_nsr:.2f}}}$)"),
+            (nsrTL, C_NSR, "-.", "v", 0.85, rf"NSR $M{{=}}{M_CAP}$ (headroom cap)"),
+            (psrGL, C_PSR, "--", "s", 0.5, r"PSR + gate ($\varepsilon_{\rm ins}$)"),
+            (fdL, C_FD, "-", "o", 1.0, rf"FD $\varepsilon^*$={eps_star:.2f}"),
+            (fdFixL, C_FD, ":", "^", 0.75, rf"FD $\varepsilon$={FD_FIXED_EPS:g} fixed")]:
+        axS.loglog(N, mm, st, marker=mk, color=c, ms=3.2, lw=1.2, alpha=al, label=lab,
+                   mec="white", mew=0.25)
+        axS.fill_between(N, lo, hi, color=c, alpha=0.10)
+    axS.loglog(N, psrL[0][0] * (N / N[0]) ** -0.5, ":", color="#999", lw=1.0,
+               label=r"$N^{-1/2}$")
+    axS.set_xlabel(r"total executions $N$ (one gradient)", fontsize=7.5)
+    axS.set_ylabel(r"RMSE vs $\nabla C_{\rm noisy}$", fontsize=7.5)
+    axS.tick_params(labelsize=7)
+    axS.grid(True, which="both", alpha=0.12)
+    axS.legend(fontsize=7, loc="upper right", framealpha=0.85, handlelength=1.5,
+               borderpad=0.3, labelspacing=0.3, handletextpad=0.5)
+    axS.text(0.02, 0.98, r"$T/T_2^*=0.15$", transform=axS.transAxes, fontsize=7,
+             color="#52514e", va="top")
+    # inset: the FD V at fixed N — every dialable ε; PSR/NSR flat; × = wrong sign
+    axV = axS.inset_axes([0.10, 0.10, 0.38, 0.29])
+    axV.loglog(epsR, fd_r, "-", color=C_FD, lw=1.2)
+    axV.loglog(epsR[~wr], fd_r[~wr], "o", color=C_FD, ms=2.2)
+    axV.loglog(epsR[wr], fd_r[wr], "X", color="#1a1a1a", ms=4.5)
+    axV.axhline(psr_flat, color=C_PSR, lw=1.2)
+    axV.axhline(nsr_flat, color=C_NSR, lw=1.2, ls="--")
+    axV.set_xlabel(r"FD step $\varepsilon$  ($N$=$10^4$)", fontsize=7, labelpad=1,
+                   bbox=dict(facecolor="white", edgecolor="none", pad=0.6))
+    axV.tick_params(labelsize=7, pad=1)
+    axV.tick_params(which="minor", left=False, bottom=False)
+    for sp in axV.spines.values():
+        sp.set_linewidth(0.7)
+    figS.tight_layout(pad=0.4)
+    figS.savefig(os.path.join(OUT3, "F6.pdf"), bbox_inches="tight", pad_inches=0.02)
+    figS.savefig(os.path.join(OUT3, "F6.png"), bbox_inches="tight", pad_inches=0.02)
+    plt.close(figS)
+
+    # A4 floors + the text's ordering claim
+    floors = dict(psr_gate=dict(exact_bias=float(psr_gate_bias), rmse_tail=float(psrGL[0][-1])),
+                  nsr_trunc=dict(measured=float(trunc_floor), d5_bound=float(d5_bound),
+                                 rmse_tail=float(nsrTL[0][-1])),
+                  fd_oracle=dict(predicted=float(floor_star), rmse_tail=float(fdL[0][-1])),
+                  fd_fixed=dict(predicted=float(fd_fixed_floor), rmse_tail=float(fdFixL[0][-1])))
+    print(f"A4 floors: PSR+gate {psr_gate_bias:.4f} | NSR^M_trunc {trunc_floor:.4f} "
+          f"(bound {d5_bound:.3f}) | FD ε* {floor_star:.4f} | FD fixed {fd_fixed_floor:.4f}")
+    print(f"A4 claim PSR+gate floor < FD ε* floor: "
+          f"{'CONFIRMED' if psr_gate_bias < floor_star else 'CONTRADICTED'}")
+
     json.dump(dict(th0=th0, grad_true=grad_true, K=K, eps_star=eps_star, T_over_T2=0.15, delta=R_CTRL,
+                   s_max=float(S_MAX), M_cap=int(M_CAP), Obar=float(OBAR), R_obs=float(R_OBS),
+                   d5_bound=float(d5_bound), nsr_trunc_floor=float(trunc_floor),
+                   p_fail=float(p_fail), p_fail_bound=float(p_fail_bound),
+                   shot_inflation=float(1 / (1 - p_fail)),
+                   nsr_trunc=nsrTL[0].tolist(), nsr_rej=nsrRL[0].tolist(),
+                   nsr_trunc_band=[nsrTL[1].tolist(), nsrTL[2].tolist()],
+                   floors=floors,
                    N=NGRID, psr=psrL[0].tolist(), nsr=nsrL[0].tolist(), psr_gate=psrGL[0].tolist(),
-                   fd=fdL[0].tolist(), exp_psr=exp_psr, exp_nsr=exp_nsr, floor_star=floor_star,
+                   fd=fdL[0].tolist(), fd_fixed=fdFixL[0].tolist(), fd_fixed_eps=FD_FIXED_EPS,
+                   fd_fixed_floor=fd_fixed_floor,
+                   exp_psr=exp_psr, exp_nsr=exp_nsr, floor_star=floor_star,
                    psr_gate_bias=float(psr_gate_bias), win_lo=win_lo, win_hi=win_hi,
                    epsR=epsR.tolist(), fd_r=fd_r.tolist(), fd_wrong=fd_wrong.tolist(),
                    floor_curve=floor_curve.tolist(), n_seeds=R_SEED, m_nsample=NSAMP,
@@ -315,13 +447,13 @@ def main():
     # clause forwarding to 6.3. No "kick"/"rescale"/"oracle"/"raw"/"iterations"; rate details and
     # numbers live in the data note / T4; the only section ref is here (never in-image, D5).
     caption = (
-        "Figure 6. The finite-difference floor, and that the sound strategies lack it. TFIM "
-        "coupling gradient H(θ)=θZ0Z1+g·ΣX, Hamiltonian-level under the T4 model at T/T2*=0.15; "
-        "error is RMSE vs the noisy gradient ∇C_noisy. (L) At equal execution budget, PSR/NSR ride "
-        "N^(−1/2) to ∇C_noisy while FD at a fixed step saturates at the δ/ε floor. (R) No step size "
-        "escapes: small ε amplifies the δ/ε floor, large ε truncates; PSR/NSR have no ε. The "
-        "excluded gate channel appears as a faint flooring series (PSR's gate-channel bias; NSR "
-        "immune), isolated in Sec. 6.3.")
+        "Figure 6. Three floors, and that only FD's is uncertifiable. TFIM coupling gradient "
+        "H(θ)=θZ0Z1+g·ΣX, compiled to machine-native segments and emulated under the T4 model at "
+        "T/T2*=0.15; error is RMSE vs the noisy gradient ∇C_noisy. (L) At equal execution budget "
+        "PSR and NSR (M=∞) ride N^(−1/2) to ∇C_noisy; FD saturates at its δ/ε floor at both an "
+        "oracle-tuned ε* and a fixed deployable ε. The faint PSR+gate series floors at its "
+        "certifiable insertion bias ≤C_PSR·ε_ins; NSR shows no floor at M=∞. (R) No step size "
+        "escapes: small ε amplifies δ/ε, large ε truncates; PSR/NSR have no ε.")
     descending = bool(psrL[0][-1] < psrL[0][-2] and nsrL[0][-1] < nsrL[0][-2])
     fit_txt = (f"tail fits (N≥{FIT_LO}, {int(Nmask.sum())} pts): PSR N^{exp_psr:.2f} "
                f"(R²={r2_psr:.3f}), NSR N^{exp_nsr:.2f} (R²={r2_nsr:.3f}) (B4/F5). Both consistent "
@@ -340,7 +472,7 @@ def main():
         f"0.028 at the C3 point; F6 discloses its own {psr_gate_bias:.3f}. NSR immune (no inserted op)")
     data_note = (
         f"DATA NOTE (F6): TFIM 2q H=θ·Z0Z1+{G_FIELD}·ΣX, θ0={th0:.3f}, T={T:.0f} (T2={T2:.1f}), "
-        f"Hamiltonian-level under the T4 noise model (D4). BOTH panels at T/T2*=0.15 (A3; right "
+        f"compiled to machine-native segments, emulated under the T4 noise model (D4). BOTH panels at T/T2*=0.15 (A3; right "
         f"panel IS the 0.15 rebuild, not the 0.5 stressor). "
         f"ESTIMAND (A1): error is RMSE vs ∇C_noisy={grad_true:+.4f} — the NOISY gradient, built as a "
         f"fine central FD (step h=1e-3) of the deterministic mesolve landscape: δ-FREE and "
@@ -359,7 +491,7 @@ def main():
         f"from observable_program_generator branches through NoisyQuTiPRunner, NSR from its "
         f"stochastic (n,σ) sampler — no Gaussian surrogates. {R_SEED} reps/point; RMSE with a "
         f"bootstrap 25–75 band (D3; narrow at this rep count — see JSON for lo/hi). "
-        f"LEFT: {fit_txt}. FD at a FIXED ε*={eps_star:.2f} (F6): ε* is tuned at N={N_TARGET} and is "
+        f"LEFT: {fit_txt}. FD at the ORACLE-TUNED ε*={eps_star:.2f} (F6): ε* is tuned at N={N_TARGET} and is "
         f"the ASYMPTOTIC optimum (the δ/ε-vs-truncation trade-off is N-independent once shot noise "
         f"is sub-dominant), so freezing is harmless for the floor claim; it saturates at the "
         f"predicted δ/ε floor {floor_star:.3f} (B5, = shot-free FD RMSE from 600 Monte-Carlo δ "
@@ -367,6 +499,16 @@ def main():
         f"{floor_star:.3f}) — same quantity, a sampling gap between 600 MC draws and the "
         f"{R_SEED}-rep series, expected not a mismatch. Floor is 42% of |∇C_noisy|; PSR reaches "
         f"~2.5% at N=1e6. "
+        f"FD @ FIXED ε={FD_FIXED_EPS:g} (M2, deployable): a plausible untuned step BELOW ε*, on the "
+        f"amplification side → floors HIGHER, at {fdFixL[0][-1]:.3f} (RMSE; predicted δ/ε floor "
+        f"{fd_fixed_floor:.3f}) vs the oracle-tuned series' {floor_star:.3f}. BOTH FD series are "
+        f"finite-shot — no shot-free oracle anywhere (M2). "
+        f"THREE FLOORS (the point of panel L, [BLOCKER]): (i) FD → δ/ε, UNCERTIFIABLE, no knob "
+        f"removes it — present at BOTH the oracle-tuned and the fixed ε; (ii) PSR → ≤ C_PSR·ε_ins "
+        f"(Lemma C.9), CERTIFIABLE, set by gate infidelity — the faint PSR+gate series, "
+        f"≈{psr_gate_bias:.3f} here; (iii) NSR → NONE at M=∞ (a capped device would floor at "
+        f"≤ 4Ω̄R/(π²(2M+1)), Lemma D.5, CERTIFIABLE, set by amplitude headroom). This three-floor "
+        f"structure is what makes F6 MOTIVATE F-phase, not just beat FD. "
         f"{gate_txt}. "
         f"RIGHT: FD V, both arms, over the predicted δ/ε floor curve; PSR/NSR flat = 'no step size'. "
         f"The two horizontals ARE the left panel's PSR/NSR RMSE at N={N_TARGET} — same run, same "

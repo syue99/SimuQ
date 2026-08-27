@@ -1,0 +1,31 @@
+% Companion table for the F-scale mixed float (REVISIONS §2 assembly).
+% Left minipage (~0.63\textwidth); \input this. Numbers: aligned row measured (F-phase,
+% clean insertion, T/T2*=0.15); compressible/non-involutive rows carry the cost-model
+% relationship (chi from sec6_rho_chi). Physical time = executions x T (T=1.5 us).
+\setlength{\tabcolsep}{4pt}\renewcommand{\arraystretch}{1.15}
+\footnotesize
+\begin{tabular}{@{}p{1.7cm} c p{2.3cm} p{2.2cm} p{2.0cm}@{}}
+\toprule
+structural case & winner & mechanism & executions-to-target & physical time / gradient \\
+\midrule
+aligned ($\chi\!\to\!1$; ZZ / TFIM)
+  & PSR
+  & landscape factor (co-located $\pm$ branches, common-mode-free)
+  & PSR $5.1\!\times\!10^{3} <$ NSR $7.9\!\times\!10^{3}$
+  & PSR $7.6$\,ms $<$ NSR $11.9$\,ms \\[2pt]
+compressible ($\chi\!<\!1$; telescoping $\chi{=}1/m$, or Heisenberg $\chi{\approx}0.5$)
+  & NSR
+  & $\chi^{-2}$ (one folded shift; PSR pays per term)
+  & NSR $\sim\chi^{-2}$ fewer than per-term PSR
+  & NSR $<$ PSR by $\sim\chi^{-2}$ \\[2pt]
+non-involutive (generator not an involution)
+  & NSR only
+  & no clean $\pm\pi/2$ shift for a non-involution
+  & PSR n/a; NSR finite
+  & NSR only \\
+\midrule
+\multicolumn{5}{@{}l}{\emph{compile overhead (per strategy):}\quad
+  NSR --- coefficient arrays only, $+0$ segments (identity on segments);\quad
+  PSR --- $+k$ inserted segments (motion and one gate).}\\
+\bottomrule
+\end{tabular}
