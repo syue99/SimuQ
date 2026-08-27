@@ -42,7 +42,7 @@ def main():
     ]
 
     plt.rcParams.update({"font.size": 7})
-    figS, axS = plt.subplots(figsize=(3.4, 3.6), dpi=300)
+    figS, axS = plt.subplots(figsize=(3.0, 3.1), dpi=300)
     for mm, band, c, st, mk, al, lab in series:
         axS.loglog(N, mm, st, marker=mk, color=c, ms=3.2, lw=1.2, alpha=al,
                    label=lab, mec="white", mew=0.25)
@@ -54,8 +54,8 @@ def main():
     axS.set_ylabel(r"RMSE vs $\nabla C_{\rm noisy}$", fontsize=7.5)
     axS.tick_params(labelsize=7)
     axS.grid(True, which="both", alpha=0.12)
-    axS.legend(fontsize=5.8, loc="upper right", framealpha=0.85, handlelength=1.4,
-               borderpad=0.28, labelspacing=0.26, handletextpad=0.45)
+    axS.legend(fontsize=5.2, loc="upper right", framealpha=0.85, handlelength=1.3,
+               borderpad=0.25, labelspacing=0.22, handletextpad=0.4)
     axS.text(0.02, 0.98, r"$T/T_2^*=0.15$", transform=axS.transAxes, fontsize=7,
              color="#52514e", va="top")
 
@@ -63,7 +63,7 @@ def main():
     fd_r = np.array(d["fd_r"])
     wr = np.array(d["fd_wrong"]) >= 0.2
     itgt = d["N"].index(10000)
-    axV = axS.inset_axes([0.10, 0.10, 0.38, 0.29])
+    axV = axS.inset_axes([0.07, 0.085, 0.48, 0.30])
     axV.loglog(epsR, fd_r, "-", color=C_FD, lw=1.2)
     axV.loglog(epsR[~wr], fd_r[~wr], "o", color=C_FD, ms=2.2)
     axV.loglog(epsR[wr], fd_r[wr], "X", color="#1a1a1a", ms=4.5)
