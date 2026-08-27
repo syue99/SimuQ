@@ -31,6 +31,8 @@ import build_F_select as bs
 FIGDIR = bs.FIGDIR
 OUT3 = os.path.abspath(os.path.join(os.path.dirname(__file__), "..",
                                     "paper_fig_3", "figs"))
+OUT2 = os.path.abspath(os.path.join(os.path.dirname(__file__), "..",
+                                    "paper_fig_2"))
 CACHE = os.path.join(FIGDIR, "F_select_balanced_data.json")
 
 # balanced plane (ruling option 1): P down, k up to the full 35-term alphabet
@@ -49,11 +51,14 @@ def render(data):
     import matplotlib.pyplot as plt
     from scipy.ndimage import gaussian_filter
 
+    from matplotlib.colors import LinearSegmentedColormap
+
     g = data["general"]
     Ps, ks = data["meta"]["Ps"], data["meta"]["ks"]
     Pg, Kg = np.meshgrid(Ps, ks)
     Z = gaussian_filter(np.array(g["Z"]), sigma=0.8)
     Zp = gaussian_filter(np.array(g["Zpred"]), sigma=0.8)
+    F = gaussian_filter(np.array(g["logminN"]), sigma=0.5)
 
     plt.rcParams.update({"font.size": 7})
     fig, ax = plt.subplots(figsize=(3.4, 3.0), dpi=300)
@@ -63,9 +68,26 @@ def render(data):
     for s in ax.spines.values():
         s.set_color(GRID)
 
-    # shading = measured winner
+    # original F_select format: neutral gray cost fill in discrete
+    # half-decade bands (readable off the colorbar), hue reserved for the
+    # winner washes
+    grays = LinearSegmentedColormap.from_list(
+        "costgray", ["#f4f3f0", "#43423f"])
+    lo = np.floor(F.min() * 2) / 2
+    hi = np.ceil(F.max() * 2) / 2
+    levels = np.arange(lo, hi + 0.25, 0.5)
+    pc = ax.contourf(Pg, Kg, F, levels=levels, cmap=grays)
+    cb = fig.colorbar(pc, ax=ax, fraction=0.045, pad=0.02)
+    cb.set_label("executions to target (best strategy)", fontsize=7,
+                 color=SEC)
+    cb.ax.tick_params(labelsize=7, colors=SEC)
+    ticks = np.arange(np.ceil(lo), np.floor(hi) + 1)
+    cb.set_ticks(ticks)
+    cb.set_ticklabels([f"$10^{{{int(t)}}}$" for t in ticks])
+
+    # shading = measured winner (transparent washes over the gray fill)
     ax.contourf(Pg, Kg, Z, levels=[-99.0, 0.0, 99.0], colors=[C_NSR, C_PSR],
-                alpha=0.28, antialiased=True)
+                alpha=0.30, antialiased=True, zorder=3)
     ax.contour(Pg, Kg, Z, levels=[0.0], colors="k", linewidths=1.5, zorder=4)
     # compiler's certificate choice (dashed) — only if it crosses on this plane
     cert_crosses = bool((Zp > 0).any() and (Zp < 0).any())
@@ -102,10 +124,12 @@ def render(data):
             va="top", path_effects=halo)
     fig.tight_layout(pad=0.4)
     os.makedirs(OUT3, exist_ok=True)
-    fig.savefig(os.path.join(OUT3, "F_select.pdf"), bbox_inches="tight",
-                pad_inches=0.02)
-    fig.savefig(os.path.join(OUT3, "F_select.png"), bbox_inches="tight",
-                pad_inches=0.02)
+    os.makedirs(OUT2, exist_ok=True)
+    for out in (OUT3, OUT2):
+        fig.savefig(os.path.join(out, "F_select.pdf"), bbox_inches="tight",
+                    pad_inches=0.02)
+        fig.savefig(os.path.join(out, "F_select.png"), bbox_inches="tight",
+                    pad_inches=0.02)
     plt.close(fig)
     return cert_crosses
 

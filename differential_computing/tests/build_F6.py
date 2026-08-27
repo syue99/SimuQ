@@ -388,8 +388,8 @@ def main():
     axS.set_ylabel(r"RMSE vs $\nabla C_{\rm noisy}$", fontsize=7.5)
     axS.tick_params(labelsize=7)
     axS.grid(True, which="both", alpha=0.12)
-    axS.legend(fontsize=7, loc="upper right", framealpha=0.85, handlelength=1.5,
-               borderpad=0.3, labelspacing=0.3, handletextpad=0.5)
+    axS.legend(fontsize=5.8, loc="upper right", framealpha=0.85, handlelength=1.4,
+               borderpad=0.28, labelspacing=0.26, handletextpad=0.45)
     axS.text(0.02, 0.98, r"$T/T_2^*=0.15$", transform=axS.transAxes, fontsize=7,
              color="#52514e", va="top")
     # inset: the FD V at fixed N — every dialable ε; PSR/NSR flat; × = wrong sign
@@ -406,8 +406,11 @@ def main():
     for sp in axV.spines.values():
         sp.set_linewidth(0.7)
     figS.tight_layout(pad=0.4)
-    figS.savefig(os.path.join(OUT3, "F6.pdf"), bbox_inches="tight", pad_inches=0.02)
-    figS.savefig(os.path.join(OUT3, "F6.png"), bbox_inches="tight", pad_inches=0.02)
+    OUT2 = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "paper_fig_2"))
+    os.makedirs(OUT2, exist_ok=True)
+    for out in (OUT3, OUT2):
+        figS.savefig(os.path.join(out, "F6.pdf"), bbox_inches="tight", pad_inches=0.02)
+        figS.savefig(os.path.join(out, "F6.png"), bbox_inches="tight", pad_inches=0.02)
     plt.close(figS)
 
     # A4 floors + the text's ordering claim

@@ -262,7 +262,13 @@ time instead; the two agree at the shared truncated target (§A above).
 
 --------------------------------------------------------------------
 ## Deliverable checklist
-- [x] figs/F6.pdf (+png) — single column, inset V, no title, ≥7 pt
+Format amendments (owner request, 2026-08-26): F6 and F_select are also
+written to `paper_fig_2/` (the paper's figure folder); F_select keeps
+the executions-to-target colorbar of the original format (gray
+half-decade cost fill + winner washes) on the new balanced plane; the F6
+legend is set at 5.8 pt (below the ground-rule 7 pt minimum, per owner).
+
+- [x] figs/F6.pdf (+png) — single column, inset V, no title
 - [x] figs/F_loop.pdf (+png)
 - [x] figs/F_select.pdf (+png)
 - [x] figs/F_scale_app.pdf (+png)
