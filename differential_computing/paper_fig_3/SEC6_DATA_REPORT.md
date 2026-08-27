@@ -37,7 +37,8 @@ Run id: `build_F6.py` @ commit f915c86, cache
 `figures/F6_floor_amplification.json`; 100 reps/point, seeds
 `default_rng(1000+s)`; N grid 10²–10⁶; T/T₂* = 0.15 (on-figure); 2q TFIM
 H = θ·Z₀Z₁ + 1.0·ΣX, θ₀ = 1.940, T = 5, readout O = Z₀Z₁; estimand
-∇C_noisy = −0.3850. Series: PSR, NSR M=∞, PSR+gate (ε_ins: 2q 10⁻³, 1q
+∇C_device = −0.3850 (the noisy-landscape gradient; the figure axis uses
+the v11 name ∇C_device). Series: PSR, NSR M=∞, PSR+gate (ε_ins: 2q 10⁻³, 1q
 10⁻⁴, coherent-frac 0.5, T4), **NSR M=5 (trunc, plotted)**, FD ε*=0.17
 (retrospective sweep at N=10⁴, frozen), FD ε=0.05 fixed, N^(−1/2)
 reference. Inset: FD V at N=10⁴ with PSR/NSR flats and × at wrong-sign ε
