@@ -385,7 +385,7 @@ def main():
     axS.loglog(N, psrL[0][0] * (N / N[0]) ** -0.5, ":", color="#999", lw=1.0,
                label=r"$N^{-1/2}$")
     axS.set_xlabel(r"total executions $N$ (one gradient)", fontsize=7.5)
-    axS.set_ylabel(r"RMSE vs $\nabla C_{\rm noisy}$", fontsize=7.5)
+    axS.set_ylabel(r"RMSE vs $\nabla C_{\rm device}$", fontsize=7.5)
     axS.tick_params(labelsize=7)
     axS.grid(True, which="both", alpha=0.12)
     axS.legend(fontsize=5.8, loc="upper right", framealpha=0.85, handlelength=1.4,
