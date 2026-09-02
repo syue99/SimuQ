@@ -29,8 +29,10 @@ SOURCE_TERMS = [
     "mot", "pgc", "helmholtz", "pushout", "push-out", "tweezer", "1055",
     "1061", "nm", "cesium", "cs ", "dispenser", "detuning of ", "anti-",
     "2d ", "3d ", "drop", "ramp-down", "spurious", "image 1", "image 2",
-    "operation",
 ]
+# "Operation" is deliberately NOT forbidden: it is the source figure's own
+# functional name for the programmed window, and the figure follows the
+# source's wording there.
 
 
 def all_label_text():
@@ -44,7 +46,7 @@ def all_label_text():
     out = []
     for _key, hdr, dur, _w in fc.PHASES:
         out += [hdr, dur]
-    out += [label for label, _levels in fc.SLOW_ROWS]
+    out += [label for label, _colour, _levels in fc.SLOW_ROWS]
     out.append(fc.FAST_ROW[0])
     return [t.lower() for t in out]
 
@@ -61,6 +63,17 @@ def test_durations_are_orders_of_magnitude_not_measurements():
     """Every duration is written as an approximate scale, never a value."""
     for _key, _hdr, dur, _w in fc.PHASES:
         assert ("sim" in dur) or ("mu" in dur), dur      # \\sim... or \\mu s
+
+
+def test_every_row_has_its_own_hue():
+    """The source's colour language: one hue per control line."""
+    hues = [colour for _l, colour, _lv in fc.SLOW_ROWS] + [fc.C_FAST]
+    assert len(set(hues)) == len(hues)
+
+
+def test_operation_window_duration_is_the_owner_ruling():
+    dur = dict((k, d) for k, _h, d, _w in fc.PHASES)["op"]
+    assert "1" in dur and "10 ms" in dur
 
 
 def test_caption_disclaims_the_device_and_the_data():
@@ -80,13 +93,14 @@ def test_bib_entry_is_kept_separate_from_the_device_citation():
 
 def test_phase_order():
     assert [k for k, *_ in fc.PHASES] == [
-        "load", "image", "cool", "prep", "window", "readout"]
+        "load", "image", "cool", "prep", "op", "readout"]
 
 
-def test_window_is_the_narrowest_phase_drawn():
+def test_operation_window_is_the_narrowest_phase_drawn():
+    """It is the shortest phase (~1-10 ms), and is drawn as the narrowest."""
     widths = {k: w for k, _h, _d, w in fc.PHASES}
-    assert widths["window"] == min(widths.values())
-    assert widths["window"] < 0.5 * sorted(widths.values())[1]
+    assert widths["op"] == min(widths.values())
+    assert all(w > widths["op"] for k, w in widths.items() if k != "op")
 
 
 def test_spans_are_contiguous_and_ordered():
@@ -102,28 +116,29 @@ def test_spans_are_contiguous_and_ordered():
 def test_every_slow_line_holds_one_level_across_the_window():
     """The figure's claim about slow control: static during the experiment."""
     spans = fc.phase_spans()
-    for label, levels in fc.SLOW_ROWS:
+    for label, _colour, levels in fc.SLOW_ROWS:
         xs, ys = fc.step_trace(levels, spans)
-        wx0, wx1 = [(a, b) for k, a, b in spans if k == "window"][0]
+        wx0, wx1 = [(a, b) for k, a, b in spans if k == "op"][0]
         inside = [y for x, y in zip(xs, ys) if wx0 <= x <= wx1]
         assert len(set(inside)) <= 1, f"{label} changes inside the window"
 
 
 def test_fast_band_is_silent_outside_the_window_and_active_inside():
     levels = fc.FAST_ROW[1]
-    assert levels["window"] > 0
-    assert all(v == 0.0 for k, v in levels.items() if k != "window")
+    assert levels["op"] > 0
+    assert all(v == 0.0 for k, v in levels.items() if k != "op")
 
 
 def test_every_row_defines_a_level_for_every_phase():
     keys = {k for k, *_ in fc.PHASES}
-    for label, levels in list(fc.SLOW_ROWS) + [fc.FAST_ROW]:
+    rows = [(lab, lv) for lab, _c, lv in fc.SLOW_ROWS] + [fc.FAST_ROW]
+    for label, levels in rows:
         assert set(levels) == keys, f"{label} is missing a phase"
         assert all(0.0 <= v <= 1.0 for v in levels.values())
 
 
 def test_slow_rows_cover_the_five_named_control_lines():
-    assert [label for label, _ in fc.SLOW_ROWS] == [
+    assert [label for label, _c, _l in fc.SLOW_ROWS] == [
         "trap depth", "cooling light", "bias field", "pump light",
         "camera trigger"]
 
