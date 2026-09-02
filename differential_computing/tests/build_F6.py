@@ -222,12 +222,22 @@ def main():
     trunc_exact = float(L1 * np.sum(pw[:M_CAP + 1] * ((-1.0) ** ns[:M_CAP + 1])
                                     * mode_val[:M_CAP + 1]))
     trunc_floor = abs(trunc_exact - grad_true)
-    p_fail = float(pw[M_CAP + 1:].sum())            # under the 24-mode sampler
+    # Two different tails, and the paper quotes the SECOND one.  p_fail_sampler
+    # is the mass this simulator's 24-mode sampler puts beyond the cap; it
+    # understates the estimator's true rejection rate because the sampler is
+    # itself truncated at MAXN=24 (its own tail beyond 24 is missing).  The
+    # ANALYTIC excluded mass of the full 1/(n+1/2)^2 series, sum_{n>M} /(pi^2/2)
+    # = psi'(M+3/2)/(pi^2/2), is the deployable number: 3.4% at M=5.
+    from scipy.special import polygamma
+    p_fail_sampler = float(pw[M_CAP + 1:].sum())    # under the 24-mode sampler
+    p_fail = float(polygamma(1, M_CAP + 1.5) / (np.pi ** 2 / 2))   # analytic
     p_fail_bound = (1.0 / (M_CAP + 0.5)) / (np.pi ** 2 / 2)   # D.3/D.4-style tail bound
     print(f"NSR@cap: s_max={S_MAX:.3f} (=θ0, PROVISIONAL)  Ω̄={OBAR:.2f}  M={M_CAP}  "
           f"max shift used={(M_CAP+0.5)/(2*K):.3f} ≤ s_max  R={R_OBS}\n"
           f"  D.5 bound={d5_bound:.3f}  measured trunc floor={trunc_floor:.4f}  "
-          f"p_fail={p_fail:.4f} (bound {p_fail_bound:.4f})  inflation={1/(1-p_fail):.3f}")
+          f"p_fail={p_fail:.4f} analytic = {100*p_fail:.1f}% excluded "
+          f"(sampler tail {p_fail_sampler:.4f}; bound {p_fail_bound:.4f})  "
+          f"inflation={1/(1-p_fail):.3f}")
 
     def fd_est(eps, Ntot, rng):
         nper = Ntot // 2
@@ -427,7 +437,9 @@ def main():
     json.dump(dict(th0=th0, grad_true=grad_true, K=K, eps_star=eps_star, T_over_T2=0.15, delta=R_CTRL,
                    s_max=float(S_MAX), M_cap=int(M_CAP), Obar=float(OBAR), R_obs=float(R_OBS),
                    d5_bound=float(d5_bound), nsr_trunc_floor=float(trunc_floor),
-                   p_fail=float(p_fail), p_fail_bound=float(p_fail_bound),
+                   p_fail=float(p_fail),
+                   p_fail_sampler=float(p_fail_sampler),
+                   p_fail_bound=float(p_fail_bound),
                    shot_inflation=float(1 / (1 - p_fail)),
                    nsr_trunc=nsrTL[0].tolist(), nsr_rej=nsrRL[0].tolist(),
                    nsr_trunc_band=[nsrTL[1].tolist(), nsrTL[2].tolist()],

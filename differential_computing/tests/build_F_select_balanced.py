@@ -10,8 +10,10 @@ Figure (paper_fig_3/figs/F_select.pdf): shading = measured winner (blue PSR,
 green NSR), solid = measured crossing, dashed = the compiler's certificate
 choice (Sec 5.3 policy: PSR unless PSR inadmissible or certified headroom admits
 NSR at strictly lower C) — drawn only if the certified crossing exists on the
-plane. Star = TFIM instance (P=2, k=1); open circle = its global-coefficient
-rewrite (P=1, k=2). Hamiltonian level, no noise (stated on figure).
+plane. Star = TFIM instance (p=2, q=1); open circle = its global-coefficient
+rewrite (p=1, q=2).  Axis names follow the appendix: p = # differentiated
+coefficients, q = # alphabet terms each touches (the code still calls the
+sweep variables PS/KS). Hamiltonian level, no noise (stated on figure).
 
 Numbers (C1-C4) printed and dumped to F_select_balanced_data.json.
 
@@ -117,8 +119,8 @@ def render(data):
 
     ax.set_xticks(range(1, 11))
     ax.set_yticks([1, 5, 10, 15, 20, 25, 30, 35])
-    ax.set_xlabel("# differentiated coefficients  P", fontsize=7.5, color=SEC)
-    ax.set_ylabel("# alphabet terms per coefficient  k", fontsize=7.5, color=SEC)
+    ax.set_xlabel("# differentiated coefficients  $p$", fontsize=7.5, color=SEC)
+    ax.set_ylabel("# alphabet terms per coefficient  $q$", fontsize=7.5, color=SEC)
     ax.text(0.985, 0.985, "Hamiltonian level, no noise",
             transform=ax.transAxes, fontsize=7, color=SEC, ha="right",
             va="top", path_effects=halo)
@@ -153,7 +155,7 @@ def main():
     mism = (choice_nsr != (Z < 0))
     forf = np.where(mism, 10.0 ** np.abs(Z), 1.0)
     print(f"C1: family=TFIM device alphabet (7q; 7 X + 7 Z + 21 ZZ = 35 terms), "
-          f"P∈[1,10], k∈[1,35], seeds={data['meta']['seeds']}")
+          f"p∈[1,10], q∈[1,35], seeds={data['meta']['seeds']}")
     print(f"C2: NSR share of plane = {nsr_share*100:.1f}%")
     print(f"C3: compiler-choice forfeiture max = {forf.max():.2f}x  "
           f"median over plane = {np.median(forf):.2f}x  "
@@ -161,8 +163,8 @@ def main():
           f"{np.median(forf[mism]) if mism.any() else 1.0:.2f}x  "
           f"(divergent on {mism.mean()*100:.1f}% of cells)")
     print(f"C3 aux: certificate crossing drawn = {cert_crosses}")
-    print(f"C4: TFIM star at (P=2, k=1) [PSR side, measured "
-          f"ratio 10^{Z[0,1]:+.2f}]; global-θ rewrite at (P=1, k=2) "
+    print(f"C4: TFIM star at (p=2, q=1) [PSR side, measured "
+          f"ratio 10^{Z[0,1]:+.2f}]; global-θ rewrite at (p=1, q=2) "
           f"[measured ratio 10^{Z[1,0]:+.2f}]")
     summary = dict(nsr_share=nsr_share, forfeit_max=float(forf.max()),
                    forfeit_median=float(np.median(forf)),

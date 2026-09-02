@@ -23,10 +23,15 @@ OUTDIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 
 # columns: channel, operator, rate (default), source, segments applied, θ-indep, note
 ROWS = [
-    ["dressed T2* dephasing", "Z_i  (sqrt(γφ/2))", "γφ = 1/T2*,  T2* = 5.0 μs",
+    ["dressed T2* dephasing",
+     "Z_i, c = sqrt(γφ/2)  ⇒  GKLS term (γφ/2)(ZρZ − ρ)", "γφ = 1/T2*",
      "dressed-state T2*/scattering (literature, Evered/Bluvstein-class)",
-     "interaction / dressed-evolution segments", "yes",
-     "regime set by T/T2* (0.15 headline, 0.5 appendix); T=T/T2*·T2*"],
+     "interaction / dressed-evolution segments (NOT the kick segment)", "yes",
+     "T2* is the 1/e coherence time: coherences decay exp(−t/T2*), so T/T2*=0.15 "
+     "is a factor exp(−0.15)=0.861 over the segment. T2* is NOT a fixed device "
+     "default — the RULING is the ratio T/T2*, T is each figure's segment "
+     "duration and T2* is derived: F6 T=5.0μs→T2*=33.3μs; F-loop T=0.8→5.33; "
+     "Fig 2 T=12→24 (ratio 0.5). Never quote 'T2* = 5.0 μs' as a device number."],
     ["T1 relaxation", "σ⁻_i  (sqrt(1/T1))", "1/T1,  T1 = ∞ (OFF)",
      "amplitude damping (long-clock)",
      "all segments (1q / halt / transport)", "yes",
@@ -51,6 +56,13 @@ ROWS = [
      "control resolution — NOT a device calibration; default from landscape_device.py",
      "programmed θ setpoint: FD's θ±ε, PSR/NSR base θ", "yes",
      "floors FD's ε and enters as δ/ε; ε-free PSR/NSR see only a 2nd-order shift"],
+    ["headroom cap M (NSR)", "probe-shift truncation / rejection",
+     "M = ∞  (UNCAPPED, G1)",
+     "amplitude-headroom policy — H-dependent cap deferred by ruling; get figures out first",
+     "NSR probe-shift amplitude (per drawn shift)", "n/a",
+     "M=∞: no shift rejection or truncation, so NSR carries NO truncation bias (its 'no "
+     "floor' is a statement about the uncapped estimator); a capped device would floor at "
+     "≤ 4Ω̄R/(π²(2M+1)) (Lemma D.5), certifiable, set by amplitude headroom"],
 ]
 HEADER = ["channel", "operator", "rate (default)", "source", "segments applied",
           "θ-independent", "note"]

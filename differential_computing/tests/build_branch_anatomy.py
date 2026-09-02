@@ -197,7 +197,12 @@ def extract():
         {"stage": "3", "seg": "seg2", "sem": "[0,π/4)",
          "wall": [b_us[2], b_us[3]],
          "terms": "s·ZaZb (insertion)",
-         "frame": f"Rz(s·{frame['phase'] / np.pi:.2g}π) a,b",
+         # The ledger stores the frame update as phi, the coefficient of Z in
+         # e^{-i·phi·Z} (cz_kick_decomposition).  This row prints an Rz ANGLE,
+         # and appendix eq:zz-lower fixes Rz(alpha) = e^{-i·alpha·Z/2}, so the
+         # printed angle is alpha = 2·phi = s·0.5π.  The stored phase is right;
+         # printing phi as if it were alpha was the bug (it halved the angle).
+         "frame": f"Rz(s·{2 * frame['phase'] / np.pi:.2g}π) a,b",
          "transport": "–", "ins": "INS"},
         {"stage": "2", "seg": "seg3", "sem": "–",
          "wall": [b_us[3], b_us[4]], "terms": "–",
