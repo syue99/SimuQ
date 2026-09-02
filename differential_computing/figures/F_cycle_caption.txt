@@ -1,0 +1,23 @@
+Figure (App F). The experiment cycle a programmed window sits inside.
+A generalization, not a device description: the sequence is redrawn after
+\cite{cycle-source} -- a different Cs atom array, taken as a representative
+example of this class of machine, NOT the apparatus of \cite{device} -- with
+every lab-specific label replaced by its function and every duration given as an
+order of magnitude rather than that lab's measured value. No trace here is data,
+and no number should be read as a device parameter. The time axis is broken:
+phases are drawn at legible widths, not in proportion to durations that span
+some five decades. What generalizes, and what the figure is for, is the ORDER of
+the phases and which apparatus class drives each.
+
+The figure is about the division of labour between two apparatus classes. The
+slow-control lines -- trap depth, cooling light, bias field, pump light, camera
+trigger, on multifunction-I/O hardware with millisecond updates -- run through
+the whole frame and hold ONE level across the programmed window: they prepare
+and read out a register, they do not compute. The fast-synthesis lines -- the
+window lines, on AWG/RFSoC-class hardware with nanosecond resolution and
+phase coherence, collapsed here into a single band -- are silent for the entire
+cycle and active only inside the shaded sliver.
+
+Everything this paper compiles therefore lives in a sliver of the cycle, driven
+by hardware that is idle the rest of the time, and it is that sliver which
+fig:schedules expands.
