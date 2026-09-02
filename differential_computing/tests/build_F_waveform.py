@@ -4,16 +4,22 @@ both differentiation lanes, all six physical channels, real time axis.
 
 Companion to Fig 5 (build_branch_anatomy.py).  Fig 5 is one PSR branch on an
 event-spaced axis with axis breaks and a simplified direct move; this figure is
-the honest to-scale timeline of the SAME running instance, with the realistic
-transit lanes, and it puts the two lanes side by side:
+the same running instance with the realistic transit lanes, both lanes side by
+side, and the point it makes is STRUCTURAL — which channels a branch has to key
+at all:
 
   PSR lane  — the kick program [evolve tau, kick, evolve T-tau].  The kick is a
-              digital op in the gate zone, so the schedule must transport the
-              pair 100 um and back: transport + CZ + transport dominate the
-              wall clock.
+              digital op in the gate zone, so the schedule must key the
+              transport AODs and the gate AOM to move the pair there and back.
   NSR lane  — the Nyquist waveform shift.  Same frozen geometry, same single
-              evolution segment, no transport and no gate: only the amplitudes
-              on the drive/dressing channels change.
+              evolution segment; the transport AODs and the gate AOM are never
+              keyed and only the drive/dressing amplitudes change.
+
+NOT a wall-clock claim (owner ruling, 09-02).  The per-branch durations are in
+the cache and on the axes, but no speedup is claimed from them: on a real
+machine the branch is not the operative cost — measurement and atom loading /
+rearrangement dominate the shot budget, and a microsecond-scale difference
+between branches decides nothing.
 
 How the NSR lane is built (this is the paper's claimed mechanism, verified
 here, not asserted).  The running example's three terms share one coefficient,

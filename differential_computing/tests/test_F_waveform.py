@@ -121,7 +121,11 @@ class TestCache:
         act = self._meta()["lanes"]["psr"]["active"]
         assert act[0] is True and act[4] is True
 
-    def test_transport_dominates_the_psr_wall_clock(self):
+    def test_transport_accounting_is_consistent(self):
+        """A cache invariant, not a figure claim: the figure no longer asserts
+        anything from the per-branch durations (measurement and loading
+        dominate on a real machine).  The bound only guards the extraction —
+        if interval merging broke, this share would collapse."""
         m = self._meta()
         assert 0.0 < m["psr_transport_ns"] < m["psr_wall_ns"]
         assert m["psr_transport_ns"] / m["psr_wall_ns"] > 0.9

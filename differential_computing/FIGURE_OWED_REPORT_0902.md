@@ -204,21 +204,19 @@ qubits, through the same pipeline as Fig 5. **Both lanes come out of ONE
 compile**, which is what makes the comparison mean anything: same geometry, same
 solve.
 
-| one branch | PSR (kick) | NSR (waveform shift) |
-|---|---|---|
-| duration | 119.834 µs | 5.000 µs (= T), **24× shorter** |
-| transport + gate + transport | 114.138 µs = **95.2%** | none |
-| channels keyed | all six | four (transport AODs and gate AOM silent) |
-
-Layout: the lanes are side by side, **each on its own time axis** — on a shared
-axis the NSR branch collapses into a sliver at the origin and none of its
-structure is readable. The duration strip under the columns is the one
-commensurable view and is where the 24× is read off.
-
-**What the figure does not claim:** that NSR wins overall. It compares *one
-branch* of each. A gradient needs many branches either way — PSR on the τ
-quadrature, NSR on drawn shifts — and how many is Fig 10's (p, q) question. What
-is settled here is the per-branch sequence.
+**The claim is structural, and the figure is scoped to it (owner ruling,
+09-02).** The PSR branch has to key the transport AODs and the gate AOM, because
+the inserted CZ is a digital operation in the gate zone; the NSR branch is the
+source program's own schedule with different amplitudes and never touches those
+channels. An earlier draft of this figure headlined the per-branch wall clock
+(119.83 µs vs 5.00 µs, 95% of the PSR branch being transport + gate) — that
+framing is **withdrawn**: on a real machine the branch is not the operative
+cost, since measurement and atom loading / rearrangement dominate the shot
+budget, and a microsecond-scale difference between branches decides nothing. The
+figure now carries no speedup factors, no percentages and no on-figure title;
+column widths (wide PSR, narrow NSR) and the labelled axis spans convey the
+durations without asserting anything from them. 7.0 × 2.55 in, sized for a
+`figure*` rather than its own page.
 
 **The NSR branch is exact, and the builder proves it rather than asserting it.**
 The three terms share one coefficient, so H(x+s) = [sin(2(x+s))/sin(2x)]·H(x),
@@ -231,19 +229,14 @@ scale = 0.98507.
 Two alternatives were measured and rejected; both are recorded in the module
 docstring so nobody retries them. A **generic recompile at x+s** moves the atoms
 ([−10.49, 0.88] → [−10.05, −3.21]) and jumps amplitudes ~10× — that is the FD
-lane's full recompile (cf. D4: 99.4% of a source compile), not a shift. A
-**frozen-geometry re-solve** lands in a degenerate dressing/detuning direction
-(~10⁵ cancelling amplitudes) because the shifted problem is ill-conditioned
-without the source as a warm start.
+lane's full recompile, not a shift. A **frozen-geometry re-solve** lands in a
+degenerate dressing/detuning direction (~10⁵ cancelling amplitudes) because the
+shifted problem is ill-conditioned without the source as a warm start.
 
-Two notes for whoever writes the caption. (i) This figure uses the module's
-realistic transit lanes (transit_dy = 5 µm: lift, travel, drop) and a to-scale
-axis, whereas Fig 5 simplifies to direct single-leg moves on an event-spaced
-axis — the two timelines are not numerically identical by construction.
-(ii) 95.2% of the branch is spent outside the dressed segments, so a reader will
-ask how that squares with T/T₂* = 0.15; App E's answer (transport and
-single-qubit segments run at the much longer bare coherence time, not the
-dressed T₂*) should be *in* the caption rather than left to be discovered.
+One note for whoever writes the caption: this figure uses the module's realistic
+transit lanes (transit_dy = 5 µm: lift, travel, drop) whereas Fig 5 simplifies
+to direct single-leg moves on an event-spaced axis, so the two timelines are not
+numerically identical by construction.
 
 ---
 
