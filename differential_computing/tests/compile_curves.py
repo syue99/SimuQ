@@ -20,8 +20,15 @@ Two panels:
   right  the differentiation increment per branch against the source compile:
          PSR re-maps the schedule (a kick segment splits the evolution and
          inserts transport + CZ), NSR emits an O(n) coefficient table on the
-         shared schedule.  The FD point is D4: a full recompile, 99.4% of the
-         source compile, i.e. no reuse at all.
+         shared schedule.  FD is drawn TWICE, because D4 measured it twice and
+         the honest answer needs both: a black-box FD branch that calls the
+         compiler again at x+eps pays a full recompile (99.4% of the source
+         compile, no reuse), while the SAME branch routed through the
+         specializer's closed-form shift table costs 0.059 ms — indistinguishable
+         from NSR's own 0.053 ms.  So FD's compile cost is not intrinsic: FD is
+         free exactly when it reuses the differentiation infrastructure it is
+         usually motivated by not needing.  What separates FD from the shift
+         rules is statistical (Fig 8), not compile time.
 
 The 2D series carries a disclosure: the compiled NN-grid model is exact
 (max|dH| <= 1.5e-14 at 32x32), but the diagonal J/8 tail (~14% relative L1) is
@@ -147,18 +154,22 @@ def render(scale, timing, series):
 
     d4 = timing["D4"]
     axR.loglog([d4["n"]], [d4["fd_full_recompile_s"] * 1e3], "X", color=C_FD,
-               ms=7, label=f"FD branch: full recompile "
+               ms=7, label=f"FD branch, black box: recompiles "
                            f"({d4['fd_pct_of_source']:.0f}% of source)")
-    ratio_src = src[-1] * 1e3 / nsr_ms[-1]
-    axR.annotate(f"at $n$=1000 an NSR branch is "
-                 f"{psr_ms[-1] / nsr_ms[-1]:.0f}" + r"$\times$"
-                 " cheaper than\na PSR branch and "
-                 + rf"$3\times10^{{{int(round(np.log10(ratio_src)))}}}$"
-                 + r"$\times$ cheaper" "\nthan recompiling the source",
-                 xy=(ns[-1], nsr_ms[-1]), xytext=(10.5, 6.0e-3), fontsize=6.2,
-                 color="#0f6b52", path_effects=HALO,
-                 arrowprops=dict(arrowstyle="->", color="#0f6b52", lw=0.7,
-                                 connectionstyle="arc3,rad=-0.15"))
+    axR.loglog([d4["n"]], [d4["fd_table_reuse_ms"]], "o", mfc="none",
+               mec=C_FD, mew=1.4, ms=7,
+               label="FD branch, same shift table: free")
+    axR.annotate("", xy=(d4["n"], d4["fd_table_reuse_ms"] * 1.9),
+                 xytext=(d4["n"], d4["fd_full_recompile_s"] * 1e3 * 0.55),
+                 arrowprops=dict(arrowstyle="->", color=C_FD, lw=0.9,
+                                 ls=(0, (2, 1.6))))
+    axR.text(d4["n"] * 1.25, 3.0,
+             "FD is free — through the\nshift table it is\nmotivated by not needing",
+             fontsize=6.0, color=C_FD, path_effects=HALO, va="center")
+    axR.text(11, 3.4e-3,
+             rf"at $n$=1000 a shift-table branch is "
+             rf"{psr_ms[-1] / nsr_ms[-1]:.0f}$\times$ cheaper than a PSR branch",
+             fontsize=6.2, color="#0f6b52", path_effects=HALO, va="bottom")
     axR.set_xlabel("qubits  $n$", fontsize=7.4, color=INK)
     axR.set_ylabel("per-branch increment (ms)", fontsize=7.4, color=INK)
     axR.legend(fontsize=5.9, frameon=False, loc="upper left",
@@ -213,9 +224,14 @@ def report(scale, timing, series):
           f"NSR branch {n1000['nsr_branch_ms']:.3f} ms "
           f"({n1000['psr_branch_ms'] / n1000['nsr_branch_ms']:.0f}x)")
     d4 = timing["D4"]
-    print(f"FD branch (D4, n={d4['n']}): {d4['fd_full_recompile_s']:.2f} s = "
-          f"{d4['fd_pct_of_source']:.1f}% of the source compile "
-          f"(table reuse would be {d4['fd_table_reuse_ms']:.3f} ms)")
+    nsr_at_n = rows[str(d4["n"])]["nsr_branch_ms"]
+    print(f"FD branch (D4, n={d4['n']}): black box = "
+          f"{d4['fd_full_recompile_s']:.2f} s = {d4['fd_pct_of_source']:.1f}% of "
+          f"the source compile; through the shift table = "
+          f"{d4['fd_table_reuse_ms']:.3f} ms, vs NSR's own branch "
+          f"{nsr_at_n:.3f} ms at the same n "
+          f"({d4['fd_table_reuse_ms'] / nsr_at_n:.2f}x) "
+          f"-> FD's compile cost is a reuse question, not an intrinsic one")
 
 
 def main():

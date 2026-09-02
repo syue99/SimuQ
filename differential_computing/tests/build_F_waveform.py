@@ -58,7 +58,12 @@ FIG_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "figures
 NPZ = os.path.join(FIG_DIR, "F_waveform_data.npz")
 META = os.path.join(FIG_DIR, "F_waveform_meta.json")
 
-DT_OVERVIEW_NS = 20.0     # overview sample period (envelope view)
+DT_OVERVIEW_NS = 2.0      # overview sample period.  Must resolve the COMB BEAT,
+                          # not just the segment structure: the addressing comb
+                          # carries tones 10 MHz apart, so |A| beats with a
+                          # ~100 ns period.  At 20 ns that beat aliases into a
+                          # fake ragged envelope in the (5 us wide) NSR column.
+                          # The renderer peak-holds down to display resolution.
 DT_FINE_NS = 0.5          # carrier-resolved inset sample period
 INSET_NS = 250.0          # drive inset width
 NSR_MODE = 0              # Nyquist mode drawn: s = (n + 1/2) / (2K)
@@ -280,7 +285,10 @@ def extract():
         for c in range(nch):
             arrays[f"{tag}_ch{c}"] = waves[c]
         bd = _bounds(sched, nch)
-        lanes[tag] = dict(bounds_ns=bd, t_end_ns=float(t_ns[-1] + DT_OVERVIEW_NS),
+        # branch duration is a property of the SCHEDULE, not of the plotting
+        # sample rate: taking t_ns[-1]+dt made the reported wall clock drift
+        # when DT_OVERVIEW_NS changed.
+        lanes[tag] = dict(bounds_ns=bd, t_end_ns=float(bd[-1]),
                           active=[bool(np.abs(waves[c]).max() > 1e-12)
                                   for c in range(nch)])
         # transport rows carry position, not envelope

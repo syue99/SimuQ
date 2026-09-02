@@ -204,11 +204,21 @@ qubits, through the same pipeline as Fig 5. **Both lanes come out of ONE
 compile**, which is what makes the comparison mean anything: same geometry, same
 solve.
 
-| | PSR (kick) | NSR (waveform shift) |
+| one branch | PSR (kick) | NSR (waveform shift) |
 |---|---|---|
-| wall clock | 119.840 µs | 5.000 µs (= T) |
+| duration | 119.834 µs | 5.000 µs (= T), **24× shorter** |
 | transport + gate + transport | 114.138 µs = **95.2%** | none |
-| channels active | all six | four (transport AODs and gate AOM silent) |
+| channels keyed | all six | four (transport AODs and gate AOM silent) |
+
+Layout: the lanes are side by side, **each on its own time axis** — on a shared
+axis the NSR branch collapses into a sliver at the origin and none of its
+structure is readable. The duration strip under the columns is the one
+commensurable view and is where the 24× is read off.
+
+**What the figure does not claim:** that NSR wins overall. It compares *one
+branch* of each. A gradient needs many branches either way — PSR on the τ
+quadrature, NSR on drawn shifts — and how many is Fig 10's (p, q) question. What
+is settled here is the per-branch sequence.
 
 **The NSR branch is exact, and the builder proves it rather than asserting it.**
 The three terms share one coefficient, so H(x+s) = [sin(2(x+s))/sin(2x)]·H(x),
@@ -257,9 +267,17 @@ to numbers the appendix already quotes.
 - 2D series included per the owner's ruling, with the declared-dropped diagonal
   J/8 tail (~14% relative L1) disclosed on the figure.
 - Panel (b) numbers at n = 1000: source compile 59.6 s, PSR branch 175.0 ms,
-  NSR branch 0.191 ms (**916×**), and the FD point from D4: a full recompile at
-  n = 300, 5.59 s = **99.4%** of the source compile, against 0.059 ms if it
-  could reuse the shift table.
+  NSR branch 0.191 ms (**916×**).
+- **FD is drawn twice, and the correction matters.** The earlier draft plotted
+  only D4's expensive path, which reads as "FD is intrinsically expensive". It
+  is not. D4 measured both: a black-box FD branch that calls the compiler again
+  at x+ε pays **5.59 s = 99.4%** of a source compile, but the same branch routed
+  through the specializer's closed-form shift table costs **0.059 ms** —
+  indistinguishable from NSR's own branch at that n (0.053 ms, a 1.11× ratio).
+  So FD's compile cost is a *reuse* question, not an intrinsic one: FD is free
+  exactly when it reuses the differentiation infrastructure it is usually
+  motivated by not needing. What actually separates FD from the shift rules is
+  statistical (Fig 8), not compile time.
 - Timings are machine-dependent; the machine string
   (`macOS-26.5-arm64-arm-64bit`) is read from the cache and stamped on the
   figure.

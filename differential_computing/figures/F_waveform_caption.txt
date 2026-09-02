@@ -5,7 +5,15 @@ through the same pipeline as Figure 5 (diffQCProvider -> TweezerMapper ->
 physical_channels -> PulseDSL -> AWG sample arrays); rows are |A(t)| except the
 two transport rows, which show the AOD tone frequency mapped to atom position
 (the tones are constant-amplitude, so their envelope carries no information).
-Both lanes are drawn on one absolute wall-clock axis.
+
+The two lanes are drawn side by side, EACH ON ITS OWN TIME AXIS, because the NSR
+branch is 24x shorter and on a shared axis its structure collapses into a sliver
+at the origin. The strip beneath the columns is the one place the two are
+commensurable: it carries both branch durations on a single scale, and it is
+what the 24x should be read off. The ripple on the addressing rows is physical,
+not sampling noise -- the comb carries one tone per atom, 10 MHz apart, so |A|
+beats with a ~100 ns period; the dressing AOM is a single global tone and is
+flat.
 
 PSR (kick): the inserted CZ is a digital operation in the gate zone, so the
 schedule must transport the pair 100 um and back around it. Transport plus gate
@@ -19,6 +27,13 @@ from the source only in the amplitudes on the addressing and dressing channels
 The insets resolve the carrier: the measured 696 ns gate shape, and the
 addressing Rabi comb, where the shifted branch reproduces the source carrier and
 phase exactly and rescales only the amplitude.
+
+What the figure does NOT claim: that NSR wins overall. It compares ONE branch of
+each strategy. A gradient needs many branches either way -- PSR spends them on
+the tau quadrature, NSR on drawn shifts -- and how many each needs is the (p, q)
+question Figure 10 answers. What is settled here is the per-branch sequence: the
+shift rule's branch is the source program's own schedule, 24x shorter, with the
+transport AODs and the gate AOM never keyed.
 
 The shifted branch is exact, not approximate: the running example's three terms
 share one coefficient, so H(x+s) = [sin(2(x+s))/sin(2x)] H(x), and every machine
