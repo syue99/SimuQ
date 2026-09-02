@@ -32,12 +32,16 @@ amplitudes by `scale` realizes H(x+s) EXACTLY: the residual of the shifted
 branch equals the source residual times |scale| (checked in extract(), reported
 in the JSON as `residual_exact`).  No solve, no re-mapping, geometry shared.
 
-Rejected alternatives, both measured (see the data note): a generic recompile
-at x+s moves the atoms (positions [-10.49, 0.88] -> [-10.05, -3.21]) and jumps
-the amplitudes by ~10x -- that is the FD lane's full recompile, not a shift; a
-frozen-geometry RE-SOLVE lands in a degenerate dressing/detuning direction
-(~1e5 cancelling amplitudes) because the shifted problem is ill-conditioned
-without the source as a warm start.
+Rejected alternatives, both measured (see the data note).  Recompiling on the
+GENERIC path at x+s moves the atoms (positions [-10.49, 0.88] -> [-10.05,
+-3.21]) and jumps the amplitudes by ~10x: that is re-solving from scratch, which
+is not what a shifted-setpoint branch costs under this lowering and is not
+anyone's lane in particular -- an FD branch is the source program at a shifted
+setpoint and gets the same frozen-geometry amplitude edit the NSR branch does,
+because the reuse is a property of the compiler, not of a strategy.  A
+frozen-geometry RE-SOLVE lands in a degenerate dressing/detuning direction (~1e5
+cancelling amplitudes) because the shifted problem is ill-conditioned without
+the source as a warm start.
 
 Sign convention: for modes where scale < 0 the Rabi amplitude is kept positive
 and the sign is absorbed into the drive phase (phi -> phi + pi), which is what

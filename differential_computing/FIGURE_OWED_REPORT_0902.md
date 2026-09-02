@@ -261,16 +261,21 @@ to numbers the appendix already quotes.
   J/8 tail (~14% relative L1) disclosed on the figure.
 - Panel (b) numbers at n = 1000: source compile 59.6 s, PSR branch 175.0 ms,
   NSR branch 0.191 ms (**916×**).
-- **FD is drawn twice, and the correction matters.** The earlier draft plotted
-  only D4's expensive path, which reads as "FD is intrinsically expensive". It
-  is not. D4 measured both: a black-box FD branch that calls the compiler again
-  at x+ε pays **5.59 s = 99.4%** of a source compile, but the same branch routed
-  through the specializer's closed-form shift table costs **0.059 ms** —
-  indistinguishable from NSR's own branch at that n (0.053 ms, a 1.11× ratio).
-  So FD's compile cost is a *reuse* question, not an intrinsic one: FD is free
-  exactly when it reuses the differentiation infrastructure it is usually
-  motivated by not needing. What actually separates FD from the shift rules is
-  statistical (Fig 8), not compile time.
+- **FD is not on this figure, and an earlier draft of mine was wrong to put it
+  there** (owner ruling, 09-02). An FD branch is the source program at a shifted
+  setpoint: no transformation, no certificate, nothing new to lower. The
+  frozen-geometry reuse that turns an NSR branch into an amplitude edit is a
+  property of the **compiler**, not of NSR, and it serves FD identically — on
+  the running instance FD's two branches are literally the same rescale.
+  Plotting FD at a from-scratch recompile smuggled an engineering handicap into
+  a comparison whose honest content is B.6's floor, and broke the settled
+  position that FD is a baseline, not a villain.
+- **D4's measurement is real but was mislabeled by that plot.** 5.59 s at
+  n = 300 prices the **generic path** re-solving from scratch — which no
+  strategy pays under this lowering. It is reported under that name in
+  `compile_curves.report()` and nowhere claimed as FD's cost. For reference the
+  shift-table edit any shifted-setpoint branch uses is 0.059 ms, against the NSR
+  branch's 0.053 ms at the same n.
 - Timings are machine-dependent; the machine string
   (`macOS-26.5-arm64-arm-64bit`) is read from the cache and stamped on the
   figure.
