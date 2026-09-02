@@ -1,0 +1,385 @@
+================================================================================
+FIGURE / NOISE-MODEL Q&A  —  answers read from code + committed caches
+2026-09-01.  No simulations were re-run; every number below is either a literal
+in a builder or a value in a committed cache JSON/NPZ.
+
+Sources:
+  differential_computing/noise_model.py, noisy_qutip.py
+  differential_computing/tests/{build_fig1,build_F6,replot_F6,
+      build_Floop,build_Floop_trajectory,build_Floop_direction,
+      sec6_T4_noise_table}.py
+  differential_computing/figures/{fig1_intro_data.json,
+      F6_floor_amplification.json, F_loop.json,
+      F_loop_trajectory.json, F_loop_meta.json}
+  differential_computing/T4.csv, PLOT_HANDOVER.md
+  Paper_writing/appendix_2.tex  (T4 table, lines ~970-1010)
+================================================================================
+
+
+================================================================================
+Q1 — THE r GENERATOR
+================================================================================
+
+(a) "One r per dialed theta, shifted NSR branches not re-rounded"
+    NO — neither half matches the code.
+
+There is no "one r per dialed theta".  Every builder draws TWO INDEPENDENT
+Gaussians per FD gradient component, per estimate — one for each arm — freshly
+from the trial RNG:
+
+  tests/build_F6.py:234        dp, dm = rng.normal(0, R_CTRL), rng.normal(0, R_CTRL)
+                               then  theta0+eps+dp  /  theta0-eps+dm
+  same shape at:
+    build_Floop.py:120,  build_Floop_real.py:174,  build_Floop_landscape.py:161,
+    build_Floop_multiP.py:167, build_Floop_direction.py:132,
+    build_fig1.py:145,169,     landscape_device.py:87,
+    build_Floop_trajectory.py:145-146
+
+Properties of the draw as coded:
+  * NOT keyed to theta, not cached, not hashed.  The SAME dialed theta visited
+    twice in a descent gets two DIFFERENT delta values.
+  * Independent between the + and - arms (NOT common-mode).
+  * Independent across gradient components and across iterations.
+  * The base operating point theta0 is NEVER jittered — only the two probe
+    offsets are.
+
+And the shifted branches: PSR AND NSR NEVER SEE delta AT ALL in any builder.
+  build_F6.py:167-214  nsr_est / nsr_trunc_est / nsr_rej_est evaluate
+                       Cint(theta0 + shift) with no delta term.
+  build_F6.py:151      psr_est samples the branch expectations directly.
+So "shifted NSR branches not re-rounded" is true only in the trivial sense that
+they are never rounded or offset in the first place.
+
+(b) Is 0.02 the resolution grid or a bound on |r|?
+    NEITHER.  0.02 is the STANDARD DEVIATION sigma of a zero-mean Gaussian.
+
+  R_CTRL = 0.02  feeds  rng.normal(0, R_CTRL)  everywhere.
+  |delta| is unbounded; ~32% of draws exceed 0.02 in magnitude.
+  build_F6.py:98-99 (comment) and the predicted-floor Monte Carlo at
+  build_F6.py:244-248 both treat it as sigma.
+
+(c) How is r(theta) actually produced?
+    A per-call draw from the builder's seeded np.random.default_rng stream —
+    closest to "hash-seeded draw with scale 0.02", minus the hash.  Seeded per
+    trial / per descent seed, so runs reproduce exactly; it is NOT rounding to a
+    0.02 grid and NOT a per-theta memoized value.
+
+--------------------------------------------------------------------------------
+CONSEQUENCE: the appendix T4 model cell is currently WRONG
+--------------------------------------------------------------------------------
+Paper_writing/appendix_2.tex:988-991 says:
+   "a DETERMINISTIC coefficient offset theta -> theta + r fixed per operating
+    point, not a per-shot draw"
+   "ALL STRATEGIES execute at the offset setpoint; only FD divides by it"
+Both clauses contradict the emulator.
+
+Knock-on, appendix_2.tex:997-1010:
+  * "it survives averaging because it is not a fluctuation" — true only of a
+    deterministic offset.  Under the code the delta/eps term IS a zero-mean
+    fluctuation: it survives SHOT averaging (it is a landscape-argument error,
+    not a binomial one) but would average down over independent re-programmings.
+  * "NSR and PSR remain exactly unbiased for the offset landscape C(theta+r)" —
+    describes a model the code does not run.  In the code PSR/NSR see no offset
+    at all and are unbiased for C at the exact theta.
+
+Model cell rewritten to match the code:
+
+   control setpoint error r — an i.i.d. zero-mean Gaussian offset
+   delta ~ N(0, r^2), r = 0.02, drawn independently for each programmed probe
+   setpoint (each FD arm, each component, each estimate).  Touches FD only:
+   PSR/NSR are eps-free and execute at the nominal setpoint.  FD converts it
+   into a gradient error
+        sqrt( C'(theta+eps)^2 + C'(theta-eps)^2 ) * r / (2 eps),
+   an irreducible RMSE floor that no number of shots removes.
+
+That expression is literally F6's predicted floor, build_F6.py:99.
+
+
+================================================================================
+Q2 — WHICH CHANNELS THE EMULATOR RUNS, AND THE GKLS NORMALIZATION
+================================================================================
+
+ROW LABEL: "dephasing / decay"  ->  should be "dephasing".
+
+There is no amplitude damping anywhere in the Sec-6 figures.  The sigma-minus
+collapse operator exists (noise_model.py:160-162) but is gated on T1, and NO
+BUILDER EVER SETS T1.  Every instantiation is NoiseModel(n_qubits=N, T2=T2)
+(+ optional gate error):
+   build_F6.py:80,85            build_fig1.py:72
+   build_Floop.py:62            landscape_device.py:56
+   build_Floop_real.py:96       build_Floop_landscape.py:70
+   build_Floop_direction.py:54  build_Floop_multiP.py:97
+   build_Floop_trajectory.py:47 build_Floop_traj_iqs.py:63
+leakage_rate is likewise never set, so the no-jump conditional generator is dead
+code in Sec 6.  T4.csv already marks T1 and leakage OFF; "decay" is the stray
+word in the appendix row.
+
+ACTIVE CHANNELS, Sec 6:
+  (i)  per-qubit Z dissipator on every non-kick segment;
+  (ii) the discrete Z-type gate channel (coherent over-rotation + incoherent Z,
+       gate_coherent_frac = 0.5) applied after kick segments — and that one is
+       OFF in F6's headline (GATE_2Q = None, build_F6.py:49), entering only the
+       faint psr_gate disclosure series and F_loop_real's gate variant.
+
+SEGMENT SCOPE: the appendix's "on interaction (dressed) segments" is CORRECT.
+noisy_qutip.py:118 sets seg_c_ops = [] on the kick segment of the 3-segment PSR
+branch unless kick_dephases=True (never set).
+
+--------------------------------------------------------------------------------
+GKLS NORMALIZATION: gamma multiplies (1/2)(Z rho Z - rho)
+--------------------------------------------------------------------------------
+noise_model.py:164-177 builds the collapse operator
+
+        c = sqrt(gamma_phi / 2) * Z ,      gamma_phi = 1/T2*
+
+so the master-equation term is
+
+        D[c] rho = c rho c^dag - (1/2){c^dag c, rho}
+                 = (gamma_phi/2) (Z rho Z - rho),     gamma_phi = 1/T2*
+
+and coherences decay as rho_01(t) = rho_01(0) exp(-gamma_phi t) = exp(-t/T2*).
+T2* is the 1/e coherence time, full stop.
+
+So T/T2* = 0.15 means a coherence factor exp(-0.15) = 0.861 over the segment —
+NOT exp(-0.30) = 0.741, which is what the other convention (gamma (Z rho Z - rho)
+at gamma = 1/T2*) would give.  Recommend writing the dissipator explicitly in the
+cell rather than "at 1/T2*", since that phrase reads either way.
+
+--------------------------------------------------------------------------------
+THE 33 us CROSS-CHECK PASSES; T4.csv's DEFAULT CELL DOES NOT
+--------------------------------------------------------------------------------
+F6 sets T = 5.0 us and T2 = T/0.15 (build_F6.py:40-41) -> T2* = 33.3 us, matching
+App E's "dressed T2 ~ 33 us at the 5.0 us segment" exactly under the (1/2)-
+convention above.
+
+But T4.csv / tests/sec6_T4_noise_table.py:26-29 states the default as
+"T2* = 5.0 us ... T = T/T2* * T2*", i.e. T2* fixed and T derived, which would
+give T = 0.75 us.  The code does the OPPOSITE: T is each figure's segment
+duration and T2* is DERIVED from the held ruling T/T2*.  Consequently T2* is not
+one number across the figure set:
+
+    figure                        T (us)   T/T2*    T2* (us)
+    F6                              5.0     0.15      33.3
+    F_loop (build_Floop*.py)        1.5     0.15      10.0
+    F_loop (trajectory, paper)      0.8     0.15       5.33
+    Fig 1                          12.0     0.5       24.0
+    landscape_device (legacy F3)   10.0     0.5       20.0
+
+T4 can honestly quote the RATIO as the ruling plus one worked instantiation
+(F6: 5.0 us / 33.3 us), but it cannot quote "T2* = 5.0 us" as a device default —
+that number appears nowhere in the emulator.
+
+--------------------------------------------------------------------------------
+OPEN QUESTION BACK TO THE OWNER (delta model: physics, not wording)
+--------------------------------------------------------------------------------
+(A) the code's i.i.d. per-programming jitter (a resolution/quantization dither)
+    -> appendix_2.tex:997-1010 needs rewriting; PSR/NSR are simply untouched.
+    TEXT EDIT ONLY; all caches stay valid.
+(B) the appendix's deterministic per-operating-point calibration offset
+    -> physically the more defensible reading of "amplitude resolution", but
+    every builder's FD path needs a fixed delta per operating point, PSR/NSR need
+    the same offset applied, and F6's floor curve (currently a 600-draw MC,
+    build_F6.py:244-248) becomes a single deterministic bias.
+    RE-RUN of F6 and the whole F_loop set.
+Default recommendation: (A), since that is what is cached.
+
+
+================================================================================
+build_fig1.py — THE ANCHOR theta* AND ITS THREE eps PROBES
+================================================================================
+
+theta* = 1.290
+
+System: 2 qubits, H(theta) = theta*Z0 + X0; cost C_device(theta) = <Z0> under the
+Z dissipator; T = 12 us, T2* = 24 us (T/T2* = 0.5, the Fig-1 ruling).
+At the anchor:  C = 0.5468,  grad C_device = -4.347  (h = 1e-3;
+np.gradient cross-check -4.35).
+
+The three probes are eps_min + (0, 0.07, 0.14) with eps_min = 0.18:
+
+    eps     C(th*-eps)   C(th*+eps)   secant slope    vs grad = -4.347
+    0.18      0.354        0.633         +0.775        WRONG SIGN
+    0.25      0.081        0.800         +1.438        WRONG SIGN
+    0.32      0.227        0.643         +0.651        WRONG SIGN
+
+theta* is NOT an optimum.  It is a steep mid-flank point picked by an automated
+sweep (build_fig1.py:78-125) over
+    T in {8, 10, 12, 14}  x  anchors on a 0.01 grid in [1.00, 1.60]
+    x  eps_min in [0.15, 0.22],   with T/T2* = 0.5 held.
+41 configs pass all three criteria; the winner is chosen NON-MARGINAL (score =
+criterion-2 margin + 0.25 * steepness, gated on min|secant| >= 0.55).
+At theta* = 1.290:
+    |grad| = 4.347 = 61% of the window max 7.13   (criterion 3: >= 50%)
+    0.077 from the nearest extremum = 25% of the local ripple period 0.313
+                                                  (criterion 2: >= 20%)
+
+Separately (not one of the three probes): the purple small-eps noise cone is
+drawn at eps = 0.03 ~ 1.5*delta, 4000 shots per arm, 60 realizations —
+mean -4.01, std 1.66, 3.3% wrong-signed.
+eps-window sweep over [delta, lambda/2 = 0.157] at N = 4000: best eps = 0.056
+(RMSE/|g| = 0.28); usable window [0.026, 0.072].
+
+
+================================================================================
+build_F6.py — PARAMETER, theta_0, Omega, INSET eps GRID AND N
+================================================================================
+
+PARAMETER DIFFERENTIATED
+theta is the ZZ COUPLING of the 2-qubit TFIM,
+        H(theta) = theta * Z0 Z1 + g * (X0 + X1)          (Htfim, :63-65)
+The generator is the single Pauli Z0Z1.  The transverse field is fixed and is
+NEVER differentiated.
+
+theta_0 = 1.940        grad C_device(theta_0) = -0.38497
+Selected (build_F6.py:90-107) by scanning theta over linspace(0.7, 2.5, 46),
+keeping |grad C| >= 0.35, and MAXIMIZING the shot-free FD floor ratio — i.e.
+deliberately the operating point where FD fails hardest, not a random point.
+
+OMEGA — two distinct quantities; worth disambiguating in the caption:
+  * the transverse field  G_FIELD = 1.0  (Omega in the TFIM sense),
+    with T = 5.0 us, T2* = 33.3 us;
+  * the NSR bandwidth certificate  Omega_bar = 2 pi K = 10.0,
+    from K = 1.5915 ( = T/pi ).  This is the L1 weight mass and is what sets the
+    D.5 cap arithmetic:
+        s_max = theta_0 = 1.94 (PROVISIONAL, pending App E)
+        M = floor(2 K s_max - 1/2) = 5
+        D.5 bound = 0.368,  measured truncation floor = 0.0123,
+        p_fail = 0.0255,  shot inflation = 1.026.
+
+INSET (the FD-V panel; replot_F6.py:62-78)
+  eps grid : np.geomspace(0.02, 1.2, 24)  — 24 points, eps in [0.02, 1.2]
+  N        : FIXED at 10^4
+  seeds    : 100 per point  (build_F6.py:298-306)
+  It draws EXACTLY three things:
+    1. the orange FD RMSE-vs-eps curve with circle markers;
+    2. black X markers where the sign-error rate >= 20% — starts at eps ~ 0.412
+       and is 100% from eps ~ 0.49 up;
+    3. two horizontal reference lines: PSR (blue solid, RMSE 0.0804) and NSR
+       (green dashed, 0.0937) at that same N = 10^4, flat because they have no
+       step size.
+  NOT in the inset (they live in the cache and in the two-panel appendix render):
+    the delta/eps floor curve, the eps = delta marker, and the usable-window band
+    (eps in [0.083, 0.202]).
+
+For reference, the MAIN panel's FD series use eps* = 0.1708, tuned once at
+N = 10^4 over geomspace(0.02, 1.2, 22) and then frozen for all N; the deployable
+fixed-eps baseline is eps = 0.05 (its predicted floor 0.1793).
+
+
+================================================================================
+build_Floop_trajectory.py — TASK, theta*, OPTIMIZER, INSET
+(this is the PAPER figure: paper_fig_2/F_loop.pdf)
+================================================================================
+
+TASK / OBJECTIVE
+2-qubit system,  H(theta) = theta_1 * Z0 Z1 + theta_2 * (X0 + X1),
+T = 0.8 us (TEVOL), T2* = T/0.15 = 5.33 us — T shortened from the direction map's
+1.5 because <O> curvature scales ~ T^2 and T = 1.5 is too stiff for a stable GD
+demo; the noise regime T/T2* = 0.15 is unchanged.
+
+Two-observable RESIDUAL (inverse-quantum-simulation) cost:
+
+    C(theta) = ( <Z0 Z1> - a* )^2  +  w * ( <Z0 + Z1> - b* )^2
+
+    w  = 0.25   (env pin W; builder default is 0.04)
+    a* = 0.22057,  b* = 0.38824      (the observable values AT theta*)
+    C(theta*) = 0 exactly — an interior, non-degenerate minimum with a SLOPPY
+    valley (mu_soft = 0.3098, C3_soft = 1.2401), which is the whole point:
+    FD's loop-space failure there is truncation-only.
+theta box: DOM = [0.2, 1.4] on both components.
+
+TARGET theta*
+    theta* = [1.0, 1.0]      (env pin TSTAR=1.0,1.0 — INTERIOR, no edge clip)
+    start  = [0.8019, 1.2512]   (auto-selected: a basin start from which exact GD
+                                 at the run's eta lands within 0.04 of theta*)
+
+OPTIMIZER AND STEP SIZE
+    plain fixed-step gradient descent with box clipping:
+        theta <- clip( theta - ETA * g_hat , 0.2, 1.4 )        (:218)
+    ETA is AUTO-SET, not a literal:  ETA = clip(1.4 / mu_stiff, 0.05, 0.9) (:246)
+        -> the realized value is printed at run time and is NOT stored in
+           F_loop_meta.json / F_loop_trajectory.json.  If the exact number is
+           needed for the caption it must be taken from the run printout (or the
+           builder taught to dump it).
+    iterations : 100      (env pin FLOOP_ITERS; builder default 90)
+    seeds      : 20, median + 25-75 IQR band
+    budget     : B = 6000 quantum executions per gradient (env pin B_BUDGET;
+                 builder default 3000) — identical for every method
+    PSR        : M_PSR = 32 tau-samples per generator (converged at this T)
+    delta      : 0.02, FD arms only (see Q1)
+
+ARMS AND OUTCOMES (figures/F_loop_trajectory.json, tolerance 0.03)
+    method                      colour    marker  final ||th-th*||  held-step
+    PSR                         #0072B2     o        0.0220            10
+    NSR                         #009E73     s        0.0291            34
+    FD eps=0.15 (best; needs th*) #E69F00    ^        0.0437           never
+    FD eps=0.7  (too large: fails) #d62728   D        0.5657           never
+    FD eps=0.04 (too small: unrel.) #7b3fa0  (line)   0.0383           never
+    "held-step" = first step at which the median holds tolerance 0.03 for 5
+    consecutive steps (the terminal markers on the figure).  Only the eps-free
+    estimators ever hold it.
+
+MAIN PANEL
+    figsize (3.3, 3.05) dpi 300, semilog-y, ||theta_t - theta*|| (median + IQR)
+    vs optimization step; dotted tolerance line at 0.03; terminal markers as
+    above; legend lower-left inside the axes; "T/T2* = 0.15" regime stamp.
+
+THE INSET (build_Floop_trajectory.py:497-522)
+    Deliberately a GEOMETRY CUE, not a readable chart — no colorbar, no ticks,
+    no axis labels, no legend; thin #444 frame at 0.7 lw.
+    Placed in DATA coordinates:
+        ax.inset_axes([27.5, 0.135, 22.0, 0.325], transform=ax.transData)
+        (floor raised from the spec's 0.08 because the purple IQR band tops out
+         at 0.128 in that window — re-check band extents before moving it.)
+    Contents:
+      * filled viridis contour of C(theta) over
+            theta_1 in [0.78, 1.05]  x  theta_2 in [0.95, 1.28]   (75 x 75 grid)
+        = the trajectories' actual extent — this is the sloppy valley;
+      * white contour lines, 10 levels, lw 0.25, alpha 0.35;
+      * the five methods' MEDIAN paths in the main legend's colours, every 5th
+        step as a dot (matches the main panel's markevery=5), terminal dot
+        enlarged;
+      * gold star at theta* = [1, 1];  white-filled black-edged circle at the
+        start [0.802, 1.251].
+    What it shows: PSR/NSR crawl along the valley floor into theta*, while the
+    too-large-eps FD path runs off the frame edge.
+
+REPLOT (from PLOT_HANDOVER.md — env pins are MANDATORY)
+    REPLOT=1 TSTAR=1.0,1.0 W=0.25 B_BUDGET=6000 FLOOP_ITERS=100 \
+      conda run -n qec_pg python differential_computing/tests/build_Floop_trajectory.py
+    Sanity check: the setup printout must read
+      theta*=[1. 1.] ... W=0.25 mu_soft=0.310 START=[0.802 1.251]
+    If it does not, the env pins are wrong — STOP.  REPLOT skips the 20-seed
+    descent sims but still evaluates the landscape grids (2q QuTiP, ~1 min).
+    Output lands in paper_fig_2/; copy to paper_fig_3/figs/ BY HAND.
+
+
+================================================================================
+APPENDIX — build_Floop.py (LEGACY single-panel builder, NOT the paper figure)
+Kept here because the numbers differ completely from the trajectory builder and
+are easy to confuse.
+================================================================================
+
+TASK      5-qubit TFIM chain, P = 4 couplings:
+          H(theta) = sum_i theta_i Z_i Z_{i+1} + 1.0 * sum_k X_k,
+          T = 1.5 us, T2* = 10 us.  C_device = <sum_i Z_i Z_{i+1}> from |00000>,
+          minimized; y-axis is C(theta_t) - C(theta*), log scale, vs cumulative
+          executions.
+theta*    [-0.0706, -2.5, +2.5, +0.0706],  C* = -2.8775.
+          The BASIN minimum, not a global argmin: 400 steps of noiseless GD at
+          eta = 0.1 from theta_init = [0.7, -0.5, 0.6, -0.4], couplings clipped
+          to the box +-2.5 — TWO OF THE FOUR COMPONENTS SIT ON THE BOX EDGE.
+OPTIMIZER plain fixed-step GD with box clipping, ETA = 0.25, 60 iterations,
+          B = 1000 executions per gradient (-> 125 shots per FD +- evaluation),
+          20 seeds, per-seed start jitter N(0, 0.08) shared across methods,
+          median + 25-75 IQR.
+ARMS      PSR, NSR, FD at eps* = 0.25, 0.3 eps* = 0.075, 3 eps* = 0.75.
+CAVEAT    ONLY FD IS A REAL SIMULATED SECANT here.  PSR and NSR are modelled as
+          grad_exact + N(0, sigma) with sigma_nsr = 2 T sqrt(P/B) = 0.1897 and
+          sigma_psr = 0.85 sigma_nsr = 0.1613 (build_Floop.py:105) — an
+          L1-functional surrogate, not executed branches.
+RESULTS   final medians: PSR 0.0067, NSR 0.0125, FD 3x 0.752, and FD 1x and
+          FD 0.3x BOTH frozen at 4.885 (identical to 15 digits — the
+          truncation-blind arms never leave theta_init).
+LAYOUT    single 6.2 x 4.4 in panel, NO INSET, with a leader-arrow annotation
+          "FD eps <= eps*: truncation-blind".
