@@ -3,63 +3,69 @@
 2026-09-04. Figure 8 (`tests/build_F6.py`) is the first figure regenerated under
 the rule. Figs 2 and 9 follow and will be appended here.
 
-## The rule, per estimator
+## What a setpoint draw is attached to — the question that decides the figure
 
-`r = 0.02` (coefficient units), zero-mean Gaussian, **one draw per programmed
-setpoint, frozen over every shot taken at that setpoint within one gradient
-estimate, redrawn for the next estimate**. δ applies to programmed coefficients
-only — never to τ, segment boundaries, or the inserted gate (that is ε_ins).
+`r = 0.02`, zero-mean Gaussian, frozen across the shots of the execution it
+belongs to. The rule only fixes *how many independent draws each estimator gets*,
+and that is what decides which strategies floor. Two readings:
 
-| estimator | draws per estimate | code |
-|---|---|---|
-| FD | 2 (one per probe θ ± ε/2) | `build_F6.py` `fd_est()` — `dp, dm = rng.normal(0, R_CTRL), rng.normal(0, R_CTRL)` once per call |
-| NSR | one per distinct (κ, σ) actually programmed | `_setpoint_table()` returns `rng.normal(0, R_CTRL, 2*n_modes)`, indexed `2κ + [σ>0]`; used by `nsr_est`, `nsr_trunc_est`, `nsr_rej_est` |
-| PSR | **1**, shared by all 2m branches | `psr_est()` / `psr_gate_est()` — `d = rng.normal(0, R_CTRL)` once, then `_branch_at(d, ...)` |
-
-Reference `∇C_device` is evaluated at nominal θ, δ-free and shot-free. δ is drawn
-from the same per-estimate `default_rng(1000+seed)` stream as the shots but
-before them, so δ and shot noise are independent draws; seeds are unchanged from
-the pre-δ build.
-
-**PSR needed real work, not a model.** Every PSR branch programs the source
-coefficient, so one shared δ makes the estimate the exact device gradient *at
-θ₀+δ*. Realizing that requires the 2m branch expectations at the dialed
-coefficient, so `_psr_branches()` is now evaluated on a 7-point grid over
-±3r and interpolated per estimate (`_branch_at`). The alternative — asserting
-the estimator equals the shifted exact gradient plus shot noise — would have
-made PSR's floor a model of itself rather than a simulation, which is not
-something a floor claim should rest on.
-
-## Floors, predicted vs measured (Fig. 8, θ₀ = 1.940)
-
-Measured floor = RMSE at N = 10⁶, 100 seeds.
-
-| series | predicted | measured | verdict |
+| model | FD | PSR | NSR |
 |---|---|---|---|
-| PSR | \|f″\|·r = **0.2028** | **0.2178** | confirmed (residual is 3rd order) |
-| PSR + gate | same + ε_ins bias 0.0138 | **0.2179** | displacement dominates the gate bias |
-| NSR M=∞ | leading order Ω̄r\|f′\|/√3 = 0.0445; **exact-F′ 0.1506** | **0.1496** | confirmed against the exact form (0.7%) |
-| NSR M=5 | as above | **0.1495** | same |
-| FD @ ε*=0.252 | B.6.4 analytic 0.0663; MC floor 0.1467 | **0.1390** | confirmed against the MC floor |
-| FD @ ε=0.05 | MC floor 0.2693 | **0.2687** | confirmed |
+| **per_programming** (default, used for the paper figure) | 2 draws (its two probes) | 2m = 96, one per branch execution | N, one per execution |
+| per_value (the handover's literal wording) | 2 | **1** — all 2m branches dial the same source coefficient | one per distinct (κ, σ) |
 
-### The leading-order NSR prediction does not hold at this point
+`per_programming` says the setpoint error is noise in the act of dialing, so a
+program that is executed again draws again. `per_value` says it is a property of
+the value requested, so re-requesting it reproduces it. Selected by
+`DELTA_MODEL` in `build_F6.py`; `PSR_DELTA` follows from it.
 
-P0-0 predicts RMS ≈ Ω̄·r·|f′|/√3 = 0.0445 by taking F′(h_κ) ≈ f′(θ₀). The exact
-setpoint contribution for this sampler is
+**The models must not be mixed.** Applying `per_value` to NSR (one draw per
+distinct κ,σ) while applying `per_programming` to PSR is not a modelling choice,
+it is a bug: it gives NSR a floor no averaging can remove while letting PSR
+average, and it is what the first two runs of this figure did.
 
-    RMS = r · sqrt( Σ_{κ,σ} [ p_κ · Ω̄ · F′(σh_κ) / 2 ]² )
+### Measured floors under each (RMSE at N = 10⁶, 100 seeds)
 
-which evaluates to **0.1506** here, against a measured 0.1496. The reason is that
-F′ at the probed shifts is *not* f′(θ₀): at κ=0 it is −1.42 and +1.16 against
-f′(θ₀) = −0.385, and the shifts run out to h₅ = 1.73 on a landscape with
-f″ = 10.1. So the 3.4× gap is the approximation, not the implementation.
-Script: `scratchpad/nsr_floor_check.py` (recomputable; F′ from the same mesolve
-landscape).
+| series | per_value | mixed (bug) | **per_programming** |
+|---|---|---|---|
+| PSR | 0.2178 | 0.0274 | **0.0274** |
+| PSR + gate | 0.2179 | 0.0274 | **0.0274** |
+| NSR M=∞ | 0.1496 | 0.1496 | **0.0102** (no floor, N^−0.50) |
+| NSR M=5 | 0.1495 | 0.1495 | **0.0134** (truncation 0.0123) |
+| FD @ ε*=0.252 | 0.1390 | 0.1390 | **0.1390** |
+| FD @ ε=0.05 | 0.2687 | 0.2687 | **0.2687** |
 
-**This is the diagnostic P0-0 asked for, and it passes**: δ is not averaging
-away. If it were being redrawn per execution, NSR would keep descending past
-10⁵ instead of flattening at 0.15.
+FD is identical in all three, because FD programs exactly twice per estimate
+whatever the model says — which is the point: **the setpoint error is what floors
+FD, and only FD.**
+
+### Why per_value inverts the paper
+
+Under it PSR gets one draw at std r and no averaging at all, so it floors at
+\|f″\|·r = 0.203 — *above* FD's 0.139. The ordering has nothing to do with FD's
+1/ε amplification and everything to do with draw multiplicity: FD's two probes
+give its common-mode displacement a std of r/√2 = 0.0141 against PSR's r.
+
+## Where FD's floor actually comes from
+
+At the tuned ε* = 0.252, decomposed:
+
+| term | value | note |
+|---|---|---|
+| differential √2·r·\|f′\|/ε | 0.0432 | the 1/ε amplification |
+| common-mode displacement \|f″\|·r/√2 | 0.1434 | **dominant here**; not in B.6.4 |
+| truncation ε²\|f‴\|/24 | 0.0602 | |
+| quadrature sum | 0.161 | measured 0.139 |
+
+Both of the first two are δ, so δ sets FD's floor. At ε = 0.05 the differential
+term is 0.218 and dominates outright — the amplification is what makes small
+steps unusable, and it is visible as the inset's left arm.
+
+**B.6.4 is missing a term.** As written it is truncation ⊕ δ/ε and predicts a
+floor of 0.0663 at ε*_analytic = 0.201, against a measured 0.139 at 0.252. Adding
+the common-mode displacement in quadrature gives 0.161, which brackets the
+measurement. At a point this curved (f″ = 10.1) the displacement is the largest
+of the three.
 
 ## δ off (diagnostic, not a paper figure)
 

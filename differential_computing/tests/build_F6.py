@@ -74,6 +74,25 @@ def shots(val, n, rng):
 GATE_2Q_T4 = 1.0e-3                 # 99.9% 2q gate (Evered et al.) — for the B2 disclosure
 GATE_1Q_T4 = 1.0e-4                 # 99.99% 1q gate
 
+# Which setpoint model PSR executes under (P0-0).  All 2m PSR branches dial
+# the SAME source coefficient, so this is exactly the question of whether the
+# setpoint error is a property of the value dialed or of each programming --
+# and it sets PSR's floor to |f''|r or |f''|r/sqrt(2m).
+# DELTA_MODEL fixes what a setpoint draw is attached to, for EVERY estimator:
+#   per_programming - each program execution dials its own coefficient and
+#                     draws its own delta (frozen across that execution's
+#                     shots).  FD gets 2 per estimate, PSR 2m, NSR N.
+#   per_value       - delta is a property of the VALUE dialed, so programs
+#                     that request the same coefficient share a draw.  FD 2,
+#                     PSR 1 (all branches dial the source coefficient), NSR
+#                     one per distinct (kappa, sigma).
+# The two differ only in how much averaging each estimator gets, and that is
+# what decides which floors: under per_value PSR floors at |f''|r with no
+# averaging at all, which puts it ABOVE FD.  Applying one model to PSR and
+# the other to NSR is not a choice, it is a bug.
+DELTA_MODEL = os.environ.get("DELTA_MODEL", "per_programming")
+PSR_DELTA = "per_branch" if DELTA_MODEL == "per_programming" else "shared"
+
 
 def main():
     os.makedirs(FIGDIR, exist_ok=True)
@@ -191,14 +210,32 @@ def main():
         fp = 2 * rng.binomial(nper, 0.5 * (1 + np.clip(pp_, -1, 1))) / nper - 1
         return (T / NSAMP) * ug_ * np.sum(fm - fp)
 
+    def _branch_per(deltas, A_, B_):
+        """Every branch at ITS OWN realized setpoint (PSR_DELTA=per_branch)."""
+        dm_ = np.clip(deltas[:nb], DGRID[0], DGRID[-1])
+        dp_ = np.clip(deltas[nb:], DGRID[0], DGRID[-1])
+        pm_ = np.array([np.interp(dm_[j], DGRID, A_[:, j]) for j in range(nb)])
+        pp_ = np.array([np.interp(dp_[j], DGRID, B_[:, j]) for j in range(nb)])
+        ug_ = float(np.interp(float(np.mean(deltas)), DGRID, UG))
+        return pm_, pp_, ug_
+
+    def _psr_setpoints(rng, A_, B_):
+        # PSR_DELTA selects the setpoint model, and it decides PSR's floor:
+        #   shared     - delta is a property of the dialed VALUE, so all 2m
+        #                branches (which all program the source coefficient u)
+        #                share one draw.  Floor = |f''|r, no averaging.
+        #   per_branch - delta is per PROGRAMMING, so each of the 2m branch
+        #                executions draws its own.  Floor = |f''|r/sqrt(2m).
+        if PSR_DELTA == "per_branch":
+            return _branch_per(rng.normal(0, R_CTRL, 2 * nb), A_, B_)
+        return _branch_at(rng.normal(0, R_CTRL), A_, B_)
+
     def psr_est(Ntot, rng):
-        d = rng.normal(0, R_CTRL)              # ONE setpoint draw, all branches
-        pm_, pp_, ug_ = _branch_at(d, PM, PP)
+        pm_, pp_, ug_ = _psr_setpoints(rng, PM, PP)
         return _psr_from(pm_, pp_, ug_, Ntot, rng)
 
     def psr_gate_est(Ntot, rng):                                 # PSR carrying its gate bias
-        d = rng.normal(0, R_CTRL)
-        pm_, pp_, ug_ = _branch_at(d, PMG, PPG)
+        pm_, pp_, ug_ = _psr_setpoints(rng, PMG, PPG)
         return _psr_from(pm_, pp_, ug_, Ntot, rng)
 
     psr_gate_bias = abs((T / NSAMP) * float(ug) * np.sum(pm_g - pp_g) - grad_true)
@@ -207,17 +244,21 @@ def main():
     MAXN = 24; ns = np.arange(MAXN); u_w = 1.0 / (ns + 0.5) ** 2
     pw = u_w / u_w.sum(); L1 = 2 * np.pi * K
 
-    def _setpoint_table(rng, nmodes=None):
-        """P0-0: ONE setpoint draw per distinct (kappa, sigma) branch, frozen for
-        every shot taken at it within this estimate.  Indexed 2*kappa + [sigma>0],
-        so drawing the whole table and indexing into it is exactly one draw per
-        distinct programmed coefficient; unused rows are simply never read."""
-        return rng.normal(0, R_CTRL, size=2 * (nmodes or MAXN))
+    def _nsr_deltas(rng, n, sig, nmodes=None):
+        """One setpoint draw per NSR execution (per_programming) or one per
+        distinct (kappa, sigma) branch (per_value).  Under per_programming the
+        draws average away over the N executions, so NSR carries no setpoint
+        floor; under per_value they do not, and it floors at the Omega-weighted
+        sum over the sampler's shifts."""
+        if DELTA_MODEL == "per_programming":
+            return rng.normal(0, R_CTRL, size=len(n))
+        tab = rng.normal(0, R_CTRL, size=2 * (nmodes or MAXN))
+        idx = np.minimum(n, (nmodes or MAXN) - 1)
+        return tab[2 * idx + (sig > 0).astype(int)]
 
     def nsr_est(Ntot, rng):
         n = rng.choice(ns, size=int(Ntot), p=pw); sig = rng.choice([-1.0, 1.0], size=int(Ntot))
-        dtab = _setpoint_table(rng)
-        d = dtab[2 * n + (sig > 0).astype(int)]
+        d = _nsr_deltas(rng, n, sig)
         sft = sig * (n + 0.5) / (2 * K)
         val = Cint(np.clip(th0 + sft + d, grid[0], grid[-1]))
         sh = 2 * rng.binomial(1, 0.5 * (1 + np.clip(val, -1, 1))) - 1
@@ -243,7 +284,7 @@ def main():
     def nsr_trunc_est(Ntot, rng):
         n = rng.choice(ns_t, size=int(Ntot), p=pw_t)
         sig = rng.choice([-1.0, 1.0], size=int(Ntot))
-        d = _setpoint_table(rng, M_CAP + 1)[2 * n + (sig > 0).astype(int)]
+        d = _nsr_deltas(rng, n, sig, M_CAP + 1)
         val = Cint(np.clip(th0 + sig * (n + 0.5) / (2 * K) + d, grid[0], grid[-1]))
         sh = 2 * rng.binomial(1, 0.5 * (1 + np.clip(val, -1, 1))) - 1
         return float(np.mean(L1_t * ((-1.0) ** n) * sig * sh))
@@ -257,8 +298,7 @@ def main():
         n = rng.choice(ns, size=int(Ntot), p=pw)
         sig = rng.choice([-1.0, 1.0], size=int(Ntot))
         acc = n <= M_CAP
-        d = _setpoint_table(rng, M_CAP + 1)[
-            2 * np.minimum(n, M_CAP) + (sig > 0).astype(int)]
+        d = _nsr_deltas(rng, n, sig, M_CAP + 1)
         val = Cint(np.clip(th0 + sig * (n + 0.5) / (2 * K) + d, grid[0], grid[-1]))
         sh = 2 * rng.binomial(1, 0.5 * (1 + np.clip(val, -1, 1))) - 1
         contrib = L1 * ((-1.0) ** n) * sig * sh
@@ -521,7 +561,7 @@ def main():
     print(f"A4 claim PSR+gate floor < FD ε* floor: "
           f"{'CONFIRMED' if psr_gate_bias < floor_star else 'CONTRADICTED'}")
 
-    json.dump(dict(th0=th0, grad_true=grad_true, K=K, eps_star=eps_star, T_over_T2=0.15, delta=R_CTRL,
+    json.dump(dict(delta_model=DELTA_MODEL, psr_delta_rule=PSR_DELTA, th0=th0, grad_true=grad_true, K=K, eps_star=eps_star, T_over_T2=0.15, delta=R_CTRL,
                    eps_convention='paper: probes theta+-eps/2, divide by eps',
                    f1=float(f1), f2=float(f2), f3=float(f3), f3_check=float(f3_check),
                    eps_star_analytic=float(eps_star_analytic),
