@@ -319,6 +319,20 @@ def extract():
         tt, ww = _fine_window(sched, pc.ADDR_RABI, 0.0, INSET_NS)
         arrays[f"{tag}_inset_t"] = tt
         arrays[f"{tag}_inset_w"] = ww
+    # carrier-resolved window on the transport AOD, mid-move: proof that the
+    # dense band on that row is a real oscillation, not a filled shape
+    aod_entries = sorted(
+        ((float(e._ScheduleEntry__t0), float(e._ScheduleEntry__t1))
+         for e in sched_psr._Sched__schedule[pc.TRANSPORT_AOD_X]),
+        key=lambda ab: ab[1] - ab[0])
+    if aod_entries:
+        a0, a1 = aod_entries[-1]                     # the longest move leg
+        amid = 0.5 * (a0 + a1)
+        tt, ww = _fine_window(sched_psr, pc.TRANSPORT_AOD_X, amid, 200.0)
+        arrays["aod_t"] = tt
+        arrays["aod_w"] = ww
+        lanes["aod_window_ns"] = [amid, amid + 200.0]
+
     gate_entries = [e for e in sched_psr._Sched__schedule[pc.GATE_AOM]]
     if gate_entries:
         g0 = float(gate_entries[0]._ScheduleEntry__t0)

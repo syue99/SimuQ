@@ -5,43 +5,45 @@ through the same pipeline as Figure 5 (diffQCProvider -> TweezerMapper ->
 physical_channels -> PulseDSL -> AWG sample arrays). Both branches come out of
 ONE compile, so the two lanes share a geometry and a solve.
 
-Every row is a quantity the hardware emits. The four drive and gate rows show
-|A(t)| of the compiled sample arrays. The two transport rows show the
-SYNTHESIZED TONE FREQUENCY: those channels play constant-amplitude tones, so
-amplitude carries no information there and frequency is what the synthesizer
-varies. One line per atom -- the AOD comb assigns one tone to each -- so the x
-row is the pair being chirped from the interaction zone out to the gate zone and
-back, and the y row is the transit lane they ride, with its notch at the gate.
-Atom position is this same trace through the device's fixed linear AOD
-calibration, f = 100 MHz + (0.05 MHz/um) x, and is kept in the cache; it is a
-derived quantity and is deliberately not what the rows plot. The ripple on the
-addressing rows is the comb beat (one tone per atom, 10 MHz apart), not sampling
-noise. The columns are on their own time axes, labelled with their spans, and
-the column widths carry the duration difference.
+Each row is the compiled record itself, Re w(t), not an envelope. A ~100 MHz
+carrier cannot be resolved across 120 us of page, so every row is drawn the way
+an instrument draws a record too dense to resolve: the minimum and maximum of
+the real samples in each display bin, filled between. The band's outline is the
+true excursion of the signal; nothing is smoothed or interpolated. The three
+panels underneath resolve the carrier from the same schedules at 0.5 ns -- the
+transport tone mid-move, the addressing comb, and the measured gate pulse -- so
+the bands above can be read as the oscillations they are.
+
+On the two transport rows the black line is the atom position, on the right-hand
+axis: the same tone through the device's fixed linear AOD calibration,
+f = 100 MHz + (0.05 MHz/um) x. The x row is the pair chirped out to the gate zone
+about 100 um away and back; the y row is the transit lane, with its notch where
+the atoms are dropped for the gate.
+
+The trap tone is on in both lanes. It is a standing condition of the tweezers
+rather than a scheduled operation, so the compiler emits transport entries only
+where atoms MOVE, and the transport rows are the one place the record is
+reconstructed rather than read from the sample array: the tone frequency comes
+from the real schedule where it exists and holds at the atom's position
+elsewhere. A silent AOD would mean a dropped register, which is why the NSR lane
+shows a held tone rather than silence there.
 
 The difference the figure is about is STRUCTURAL, not a duration. The PSR branch
-inserts a CZ, which is a digital operation in the gate zone, so the schedule must
-key the transport AODs and the gate AOM to move the pair there and back. The NSR
-branch is the source program's own schedule: the transport AODs and the gate AOM
-are never keyed, and the branch differs from the source only in the amplitudes on
-the addressing and dressing channels (x 0.985 for the drawn Nyquist mode n = 0,
+inserts a CZ, a digital operation in the gate zone, so the schedule must chirp
+the transport AODs and fire the gate AOM to move the pair there and back. The NSR
+branch is the source program's own schedule: the AODs only hold, the gate AOM is
+never fired, and the branch differs from the source only in the amplitudes on the
+addressing and dressing channels (x 0.985 for the drawn Nyquist mode n = 0,
 s = 0.2067 at bandwidth K = 1.210).
 
-No speedup is claimed from the per-branch durations. On a real machine the
-branch itself is not the operative cost -- measurement and atom loading /
-rearrangement dominate the shot budget, and the microsecond-scale difference
-between these two branches does not decide anything. What the figure settles is
-which channels each strategy has to touch at all, and therefore which parts of
-the machine its branch depends on.
+No speedup is claimed from the per-branch durations. On a real machine the branch
+itself is not the operative cost -- measurement and atom loading / rearrangement
+dominate the shot budget. What the figure settles is which channels each strategy
+has to drive at all.
 
 The shifted branch is exact, not approximate: the running example's three terms
 share one coefficient, so H(x+s) = [sin(2(x+s))/sin(2x)] H(x), and every machine
 instruction is linear in its amplitude variable at frozen geometry. Scaling the
-amplitudes therefore realizes the shifted target with residual 8.8e-5, exactly
-the source compile's 9.0e-5 residual times the scale factor -- no solve, no
-re-mapping, and no additional compilation error.
-
-Time-axis note: unlike Figure 5, which simplifies the moves to direct single-leg
-hops on an event-spaced axis, this figure uses the module's realistic transit
-lanes (transit_dy = 5 um: lift, travel, drop), so the two figures' timelines are
-not numerically identical by construction.
+amplitudes realizes the shifted target with residual 8.8e-5, exactly the source
+compile's 9.0e-5 residual times the scale factor -- no solve, no re-mapping, and
+no additional compilation error.
