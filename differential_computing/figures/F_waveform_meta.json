@@ -116,6 +116,8 @@
  "psr_transport_ns": 114138.0,
  "psr_wall_ns": 119834.0,
  "nsr_wall_ns": 5000.0,
+ "aod_base_mhz": 100.0,
+ "aod_kappa_mhz_per_um": 0.05,
  "gate_us": 0.6960000000000002,
  "zone_um": 100.0,
  "v_max": 4.0,

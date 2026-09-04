@@ -161,11 +161,15 @@ def _fine_window(sched, ch_idx, t0_ns, width_ns, dt=DT_FINE_NS):
 
 
 def _tone_traces(sched, ch_idx):
-    """Per-tone (t_ns, position_um) traces for a transport AOD channel.
+    """Per-tone (t_ns, freq_MHz, position_um) traces for a transport AOD.
 
-    The AOD plays constant-amplitude tones, so |A| carries no information
-    (it only shows the COMB beat); the tone FREQUENCY is the atom position
-    via the device calibration, and that is what the row should show.
+    The AOD plays CONSTANT-AMPLITUDE tones, so |A| on these channels carries no
+    information beyond the COMB beat.  What the synthesizer actually varies is
+    the tone FREQUENCY, and that is the emitted quantity the row should show —
+    the figure is evidence of an end-to-end path, so the rows must be what the
+    hardware plays, not a derived quantity.  The calibrated position is kept
+    alongside it (a fixed linear map, f = base + kappa*x) for the caption and
+    for anyone who wants to read the row as a trajectory.
     """
     from awg_compile import ChirpTone
     import physical_channels as pc
@@ -181,11 +185,11 @@ def _tone_traces(sched, ch_idx):
         wf = e._ScheduleEntry__pulse.waveform
         if isinstance(wf, ChirpTone):
             tt = np.linspace(0.0, wf.duration_ns, 160)
-            f = wf.instantaneous_freq_mhz(tt)
-            out.append((t0 + tt, pos_of(f)))
+            f = np.asarray(wf.instantaneous_freq_mhz(tt), dtype=float)
+            out.append((t0 + tt, f, pos_of(f)))
         elif getattr(wf, "freq_mhz", 0.0):
-            f = float(wf.freq_mhz)
-            out.append((np.array([t0, t1]), pos_of([f, f])))
+            f = np.array([float(wf.freq_mhz)] * 2)
+            out.append((np.array([t0, t1]), f, pos_of(f)))
     return out
 
 
@@ -301,12 +305,13 @@ def extract():
         lanes[tag] = dict(bounds_ns=bd, t_end_ns=float(bd[-1]),
                           active=[bool(np.abs(waves[c]).max() > 1e-12)
                                   for c in range(nch)])
-        # transport rows carry position, not envelope
+        # transport rows carry the synthesized tone frequency, not an envelope
         for axis, cid in (("x", pc.TRANSPORT_AOD_X), ("y", pc.TRANSPORT_AOD_Y)):
             tones = _tone_traces(sched, cid)
             lanes[tag][f"n_tones_{axis}"] = len(tones)
-            for i, (tt, uu) in enumerate(tones):
+            for i, (tt, ff, uu) in enumerate(tones):
                 arrays[f"{tag}_tone{axis}{i}_t"] = tt
+                arrays[f"{tag}_tone{axis}{i}_mhz"] = ff
                 arrays[f"{tag}_tone{axis}{i}_um"] = uu
 
     # carrier-resolved insets: the drive comb early in each lane, and the gate
@@ -352,6 +357,8 @@ def extract():
         psr_transport_ns=move_ns,
         psr_wall_ns=lanes["psr"]["t_end_ns"],
         nsr_wall_ns=lanes["nsr"]["t_end_ns"],
+        aod_base_mhz=float(pc.TRANSPORT_BASE_FREQ_MHZ),
+        aod_kappa_mhz_per_um=float(pc.TRANSPORT_KAPPA_MHZ_PER_UM),
         gate_us=pw.CZ_GATE_US, zone_um=pw.D_ZONE_UM, v_max=pw.V_MAX_UM_US,
         transit_dy=pw.TRANSIT_DY_UM,
     )

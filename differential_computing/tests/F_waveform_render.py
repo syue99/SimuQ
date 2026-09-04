@@ -15,10 +15,14 @@ us-vs-ms difference between the two branches is not what decides anything.  The
 claim this figure supports is STRUCTURAL: which channels a branch keys at all.
 No title either; titles live in the LaTeX caption.
 
-Transport rows show the AOD tone FREQUENCY mapped to atom position
-(constant-amplitude tones carry no envelope information); the four drive/gate
-rows show |A(t)|, peak-held to display resolution so the addressing comb's beat
-is drawn rather than aliased.
+Every row is an emitted quantity, because this figure is evidence of an
+end-to-end path rather than an illustration of one.  The four drive/gate rows
+show |A(t)|, peak-held to display resolution so the addressing comb's beat is
+drawn rather than aliased.  The two transport rows show the SYNTHESIZED TONE
+FREQUENCY: those channels play constant-amplitude tones, so amplitude carries
+nothing there and frequency is what the synthesizer actually varies.  Atom
+position is that same trace through the fixed linear AOD calibration and is kept
+in the cache, but it is a derived quantity and does not go on the rows.
 """
 
 import os
@@ -80,19 +84,20 @@ def render(meta, arrays):
                   hspace=0.22, wspace=0.055,
                   left=0.152, right=0.995, top=0.90, bottom=0.145)
 
-    # per-axis position scale: x spans the 100 um zone hop, y only the 5 um
-    # transit lane, so one shared scale would hide the lane.  The range is
-    # SIGNED — the two atoms sit either side of the origin (x = 0 and -10.5 um),
-    # and folding that onto |x| would draw them on top of each other.
-    pos_lim = {}
+    # per-axis frequency scale: the x AOD sweeps across the ~5 MHz that spans
+    # the zone hop, the y AOD only the ~0.3 MHz of the transit lane, so one
+    # shared scale would flatten the y row into a straight line.
+    f_lim = {}
     for axis in ("x", "y"):
-        lo, hi = 0.0, 0.0
+        lo, hi = np.inf, -np.inf
         for tag in ("psr", "nsr"):
             for i in range(lanes[tag].get(f"n_tones_{axis}", 0)):
-                u = arrays[f"{tag}_tone{axis}{i}_um"]
-                lo, hi = min(lo, float(u.min())), max(hi, float(u.max()))
-        pad = 0.14 * max(hi - lo, 1.0)
-        pos_lim[axis] = (lo - pad, hi + pad, hi)      # keep the unpadded max
+                f = arrays[f"{tag}_tone{axis}{i}_mhz"]
+                lo, hi = min(lo, float(f.min())), max(hi, float(f.max()))
+        if not np.isfinite(lo):
+            lo, hi = 99.0, 101.0
+        pad = 0.16 * max(hi - lo, 1e-3)
+        f_lim[axis] = (lo - pad, hi + pad, lo, hi)
 
     cols = {}
     for col, (tag, colour) in enumerate((("psr", C_PSR), ("nsr", C_NSR))):
@@ -123,19 +128,16 @@ def render(meta, arrays):
                 for atom in range(min(2, ntone)):
                     segs = sorted(
                         ((arrays[f"{tag}_tone{axis}{k}_t"] / 1e3,
-                          arrays[f"{tag}_tone{axis}{k}_um"])
+                          arrays[f"{tag}_tone{axis}{k}_mhz"])
                          for k in range(atom, ntone, 2)),
                         key=lambda s: s[0][0])
                     tt = np.concatenate([s[0] for s in segs])
-                    uu = np.concatenate([s[1] for s in segs])
-                    ax.plot(tt, uu, color=colour, lw=0.9,
+                    ff = np.concatenate([s[1] for s in segs])
+                    ax.plot(tt, ff, color=colour, lw=0.9,
                             solid_capstyle="round", solid_joinstyle="round")
-                lo, hi, top = pos_lim[axis]
+                lo, hi, fmin, fmax = f_lim[axis]
                 ax.set_ylim(lo, hi)
-                ax.axhline(0.0, color=C_GRID, lw=0.4, zorder=0)
-                # a round tick at or below the real extent (5.9 -> 5, 101 -> 100)
-                dec = 10 ** np.floor(np.log10(max(top, 1.0)))
-                ax.set_yticks(sorted({0.0, float(np.floor(top / dec) * dec)}))
+                ax.set_yticks([round(fmin, 1), round(fmax, 1)])
                 ax.tick_params(axis="y", labelsize=5.4)
                 if col == 1:
                     ax.set_yticklabels([])
@@ -144,7 +146,7 @@ def render(meta, arrays):
                             fontsize=5.8, color="#9a9890", ha="center",
                             va="center", style="italic")
                 elif tag == "psr" and cid == 0:
-                    ax.text(0.012, 0.66, r"$\mu$m", transform=ax.transAxes,
+                    ax.text(0.012, 0.70, "MHz", transform=ax.transAxes,
                             fontsize=5.4, color=C_SEC, va="center")
             else:
                 w = arrays[f"{tag}_ch{cid}"]

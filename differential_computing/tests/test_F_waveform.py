@@ -130,6 +130,34 @@ class TestCache:
         assert 0.0 < m["psr_transport_ns"] < m["psr_wall_ns"]
         assert m["psr_transport_ns"] / m["psr_wall_ns"] > 0.9
 
+    def test_transport_rows_store_the_emitted_frequency(self):
+        """The rows plot what the synthesizer emits, so the tone frequency has
+        to be in the cache — position is derived and must not be the source."""
+        m = self._meta()
+        arrays = np.load(bw.NPZ)
+        seen = 0
+        for tag in ("psr", "nsr"):
+            for axis in ("x", "y"):
+                for i in range(m["lanes"][tag].get(f"n_tones_{axis}", 0)):
+                    f = arrays[f"{tag}_tone{axis}{i}_mhz"]
+                    t = arrays[f"{tag}_tone{axis}{i}_t"]
+                    assert len(f) == len(t) and (f > 0).all()
+                    seen += 1
+        assert seen > 0
+
+    def test_position_is_exactly_the_calibration_of_the_frequency(self):
+        """um is kept for the caption; it must be the stated linear map of the
+        emitted frequency, not an independently drawn quantity."""
+        m = self._meta()
+        base, kappa = m["aod_base_mhz"], m["aod_kappa_mhz_per_um"]
+        arrays = np.load(bw.NPZ)
+        for tag in ("psr", "nsr"):
+            for axis in ("x", "y"):
+                for i in range(m["lanes"][tag].get(f"n_tones_{axis}", 0)):
+                    f = arrays[f"{tag}_tone{axis}{i}_mhz"]
+                    u = arrays[f"{tag}_tone{axis}{i}_um"]
+                    assert np.allclose(u, (f - base) / kappa, atol=1e-9)
+
     def test_every_channel_has_a_waveform_row_in_both_lanes(self):
         m = self._meta()
         arrays = np.load(bw.NPZ)

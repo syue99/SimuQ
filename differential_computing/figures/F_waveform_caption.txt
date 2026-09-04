@@ -3,16 +3,21 @@ differentiation strategies, on the device's six physical channels.
 H(x) = sin(2x)(Z0Z1 + X0 + X1) at x = 0.7, T = 5.0 us, two qubits, compiled
 through the same pipeline as Figure 5 (diffQCProvider -> TweezerMapper ->
 physical_channels -> PulseDSL -> AWG sample arrays). Both branches come out of
-ONE compile, so the two lanes share a geometry and a solve. Rows are |A(t)|
-except the two transport rows, which show the AOD tone frequency mapped to atom
-position (the tones are constant-amplitude, so their envelope carries no
-information); each atom's trajectory is one line, and the positions are signed --
-the pair starts either side of the origin, and the x row shows both atoms
-crossing to the gate zone about 100 um away while the y row shows the 5 um
-transit lane they ride and its dip at the gate. The columns are on their own
-time axes, labelled with their spans, and the column WIDTHS carry the duration
-difference; the ripple on the addressing rows is the comb beat (one tone per atom,
-10 MHz apart), not sampling noise.
+ONE compile, so the two lanes share a geometry and a solve.
+
+Every row is a quantity the hardware emits. The four drive and gate rows show
+|A(t)| of the compiled sample arrays. The two transport rows show the
+SYNTHESIZED TONE FREQUENCY: those channels play constant-amplitude tones, so
+amplitude carries no information there and frequency is what the synthesizer
+varies. One line per atom -- the AOD comb assigns one tone to each -- so the x
+row is the pair being chirped from the interaction zone out to the gate zone and
+back, and the y row is the transit lane they ride, with its notch at the gate.
+Atom position is this same trace through the device's fixed linear AOD
+calibration, f = 100 MHz + (0.05 MHz/um) x, and is kept in the cache; it is a
+derived quantity and is deliberately not what the rows plot. The ripple on the
+addressing rows is the comb beat (one tone per atom, 10 MHz apart), not sampling
+noise. The columns are on their own time axes, labelled with their spans, and
+the column widths carry the duration difference.
 
 The difference the figure is about is STRUCTURAL, not a duration. The PSR branch
 inserts a CZ, which is a digital operation in the gate zone, so the schedule must
