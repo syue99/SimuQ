@@ -38,10 +38,11 @@ C_PSR, C_NSR = "#0072B2", "#009E73"
 C_INK, C_SEC, C_GRID, C_SURFACE = "#0b0b0b", "#52514e", "#d8d7d0", "#fcfcfb"
 C_MOVE, C_GATE = "#d9822b", "#d62728"
 
-# Column widths: wide PSR, narrow NSR.  Not the true 24:1 — at that ratio the
-# NSR column is 4% of the figure and unreadable, which is the failure mode this
-# layout exists to fix.  The axis spans carry the actual numbers.
-WIDTH_RATIO = (3.4, 1.0)
+# Column widths: wide PSR, narrow NSR.  The NSR column can be kept thin because
+# its content is four uniform blocks that stay readable at any width, so the
+# widths can lean closer to the real duration ratio than the layout first did.
+# Still not the true 24:1 — the axis spans carry the actual numbers.
+WIDTH_RATIO = (6.0, 1.0)
 
 # display order groups the two transport axes together; (channel id, label, kind)
 ORDER = [(0, "transport AOD $x$", "pos"), (5, "transport AOD $y$", "pos"),
@@ -80,14 +81,18 @@ def render(meta, arrays):
                   left=0.152, right=0.995, top=0.90, bottom=0.145)
 
     # per-axis position scale: x spans the 100 um zone hop, y only the 5 um
-    # transit lane, so one shared scale would hide the lane
-    pos_max = {}
+    # transit lane, so one shared scale would hide the lane.  The range is
+    # SIGNED — the two atoms sit either side of the origin (x = 0 and -10.5 um),
+    # and folding that onto |x| would draw them on top of each other.
+    pos_lim = {}
     for axis in ("x", "y"):
-        m = 0.0
+        lo, hi = 0.0, 0.0
         for tag in ("psr", "nsr"):
             for i in range(lanes[tag].get(f"n_tones_{axis}", 0)):
-                m = max(m, float(np.abs(arrays[f"{tag}_tone{axis}{i}_um"]).max()))
-        pos_max[axis] = max(m, 1.0) * 1.18
+                u = arrays[f"{tag}_tone{axis}{i}_um"]
+                lo, hi = min(lo, float(u.min())), max(hi, float(u.max()))
+        pad = 0.14 * max(hi - lo, 1.0)
+        pos_lim[axis] = (lo - pad, hi + pad, hi)      # keep the unpadded max
 
     cols = {}
     for col, (tag, colour) in enumerate((("psr", C_PSR), ("nsr", C_NSR))):
@@ -111,15 +116,26 @@ def render(meta, arrays):
             if kind == "pos":
                 axis = "x" if cid == 0 else "y"
                 ntone = lanes[tag].get(f"n_tones_{axis}", 0)
-                for k in range(ntone):
-                    ax.plot(arrays[f"{tag}_tone{axis}{k}_t"] / 1e3,
-                            np.abs(arrays[f"{tag}_tone{axis}{k}_um"]),
-                            color=colour, lw=0.9, solid_capstyle="round")
-                pm = pos_max[axis]
-                ax.set_ylim(-0.06 * pm, pm)
-                top = pm / 1.18
-                step = 10 ** np.floor(np.log10(top))
-                ax.set_yticks([0, float(np.floor(top / step) * step)])
+                # One COMB tone per atom, so the tone list interleaves the two
+                # atoms; regroup by parity and sort in time to get each atom's
+                # real trajectory as one line, instead of per-entry fragments
+                # broken at every schedule boundary.
+                for atom in range(min(2, ntone)):
+                    segs = sorted(
+                        ((arrays[f"{tag}_tone{axis}{k}_t"] / 1e3,
+                          arrays[f"{tag}_tone{axis}{k}_um"])
+                         for k in range(atom, ntone, 2)),
+                        key=lambda s: s[0][0])
+                    tt = np.concatenate([s[0] for s in segs])
+                    uu = np.concatenate([s[1] for s in segs])
+                    ax.plot(tt, uu, color=colour, lw=0.9,
+                            solid_capstyle="round", solid_joinstyle="round")
+                lo, hi, top = pos_lim[axis]
+                ax.set_ylim(lo, hi)
+                ax.axhline(0.0, color=C_GRID, lw=0.4, zorder=0)
+                # a round tick at or below the real extent (5.9 -> 5, 101 -> 100)
+                dec = 10 ** np.floor(np.log10(max(top, 1.0)))
+                ax.set_yticks(sorted({0.0, float(np.floor(top / dec) * dec)}))
                 ax.tick_params(axis="y", labelsize=5.4)
                 if col == 1:
                     ax.set_yticklabels([])

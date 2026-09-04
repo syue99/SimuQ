@@ -6,8 +6,12 @@ physical_channels -> PulseDSL -> AWG sample arrays). Both branches come out of
 ONE compile, so the two lanes share a geometry and a solve. Rows are |A(t)|
 except the two transport rows, which show the AOD tone frequency mapped to atom
 position (the tones are constant-amplitude, so their envelope carries no
-information). The columns are on their own time axes, labelled with their
-spans; the ripple on the addressing rows is the comb beat (one tone per atom,
+information); each atom's trajectory is one line, and the positions are signed --
+the pair starts either side of the origin, and the x row shows both atoms
+crossing to the gate zone about 100 um away while the y row shows the 5 um
+transit lane they ride and its dip at the gate. The columns are on their own
+time axes, labelled with their spans, and the column WIDTHS carry the duration
+difference; the ripple on the addressing rows is the comb beat (one tone per atom,
 10 MHz apart), not sampling noise.
 
 The difference the figure is about is STRUCTURAL, not a duration. The PSR branch
