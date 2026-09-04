@@ -122,18 +122,52 @@ def main():
     # rule, so dressing-only PSR is exactly unbiased for ∇C_noisy (no O(η²) approximation floor
     # bending the tail — F5). The gate-channel bias is a FIXED post-op Z-channel independent of
     # kick shaping (C3), so this choice does not change the B2 disclosure.
-    orig = np.random.rand; np.random.rand = lambda k: (np.arange(k) + 0.5) / k
-    try:
-        progs = observable_program_generator(H, T, n_sample=48, n_repetition=1,
-                                             diff_var=var, value=th0, short_kick=False)
-    finally:
-        np.random.rand = orig
-    H_tot, ug, _ = progs[0]; nb = len(H_tot) // 2
-    pm = np.array([ex(H_tot[2 * i]) for i in range(nb)])         # f⁻  (dressing channel only)
-    pp = np.array([ex(H_tot[2 * i + 1]) for i in range(nb)])     # f⁺
-    pm_g = np.array([ex_g(H_tot[2 * i]) for i in range(nb)])     # f⁻  WITH the gate channel
-    pp_g = np.array([ex_g(H_tot[2 * i + 1]) for i in range(nb)]) #      (for the B2 disclosure)
+    def _psr_branches(value):
+        """The 2m PSR branch expectations for a program dialed at `value`."""
+        orig = np.random.rand; np.random.rand = lambda k: (np.arange(k) + 0.5) / k
+        try:
+            pr = observable_program_generator(H, T, n_sample=48, n_repetition=1,
+                                              diff_var=var, value=value,
+                                              short_kick=False)
+        finally:
+            np.random.rand = orig
+        Ht, u, _ = pr[0]; b = len(Ht) // 2
+        return (np.array([ex(Ht[2 * i]) for i in range(b)]),
+                np.array([ex(Ht[2 * i + 1]) for i in range(b)]),
+                np.array([ex_g(Ht[2 * i]) for i in range(b)]),
+                np.array([ex_g(Ht[2 * i + 1]) for i in range(b)]),
+                float(u), b)
+
+    pm, pp, pm_g, pp_g, ug, nb = _psr_branches(th0)
     NSAMP = nb
+
+    # ── P0-0: the setpoint draw reaches PSR too ──
+    # Every PSR branch programs the SOURCE coefficient, and the cut time and the
+    # insertion carry no setpoint error, so one draw per gradient estimate is
+    # shared by all 2m branches.  The estimate is then the exact device gradient
+    # at theta0+delta, i.e. PSR's exposure is the displacement |f''|r rather than
+    # anything divided by a step.  Realizing that needs the branch values AT the
+    # dialed coefficient, so they are precomputed on a grid across +-3r and
+    # interpolated per estimate; the alternative (asserting the estimator equals
+    # the shifted exact gradient) would make PSR's floor a model rather than a
+    # simulation of it.
+    DGRID = np.linspace(-3 * R_CTRL, 3 * R_CTRL, 7)
+    PM = np.zeros((len(DGRID), nb)); PP = np.zeros((len(DGRID), nb))
+    PMG = np.zeros((len(DGRID), nb)); PPG = np.zeros((len(DGRID), nb))
+    UG = np.zeros(len(DGRID))
+    for gi, dg in enumerate(DGRID):
+        if abs(dg) < 1e-15:
+            PM[gi], PP[gi], PMG[gi], PPG[gi], UG[gi] = pm, pp, pm_g, pp_g, ug
+            continue
+        PM[gi], PP[gi], PMG[gi], PPG[gi], UG[gi], _ = _psr_branches(float(th0 + dg))
+        print(f"  PSR branch grid: delta={dg:+.4f} done", flush=True)
+
+    def _branch_at(delta, A_, B_):
+        """Branch expectations at the realized setpoint theta0+delta."""
+        d = float(np.clip(delta, DGRID[0], DGRID[-1]))
+        return (np.array([np.interp(d, DGRID, A_[:, j]) for j in range(nb)]),
+                np.array([np.interp(d, DGRID, B_[:, j]) for j in range(nb)]),
+                float(np.interp(d, DGRID, UG)))
 
     # G1: PSR's 2m branches = the analog-PSR insertion-time (τ) integral sampled at m=n_sample
     # points (Leng et al.; the compiled program of Sec 5.4 has the same branch count — NOT a
@@ -151,17 +185,21 @@ def main():
         return abs((T / b) * float(u) * np.sum(em - ep) - grad_true)
     m_conv = {m: float(_exact_psr_bias(m)) for m in (16, 24, 48)}
 
-    def _psr_from(pm_, pp_, Ntot, rng):
+    def _psr_from(pm_, pp_, ug_, Ntot, rng):
         nper = int(max(1, round(Ntot / (2 * NSAMP))))            # split N over 2·nb branches
         fm = 2 * rng.binomial(nper, 0.5 * (1 + np.clip(pm_, -1, 1))) / nper - 1
         fp = 2 * rng.binomial(nper, 0.5 * (1 + np.clip(pp_, -1, 1))) / nper - 1
-        return (T / NSAMP) * float(ug) * np.sum(fm - fp)
+        return (T / NSAMP) * ug_ * np.sum(fm - fp)
 
     def psr_est(Ntot, rng):
-        return _psr_from(pm, pp, Ntot, rng)
+        d = rng.normal(0, R_CTRL)              # ONE setpoint draw, all branches
+        pm_, pp_, ug_ = _branch_at(d, PM, PP)
+        return _psr_from(pm_, pp_, ug_, Ntot, rng)
 
     def psr_gate_est(Ntot, rng):                                 # PSR carrying its gate bias
-        return _psr_from(pm_g, pp_g, Ntot, rng)
+        d = rng.normal(0, R_CTRL)
+        pm_, pp_, ug_ = _branch_at(d, PMG, PPG)
+        return _psr_from(pm_, pp_, ug_, Ntot, rng)
 
     psr_gate_bias = abs((T / NSAMP) * float(ug) * np.sum(pm_g - pp_g) - grad_true)
 
@@ -169,10 +207,19 @@ def main():
     MAXN = 24; ns = np.arange(MAXN); u_w = 1.0 / (ns + 0.5) ** 2
     pw = u_w / u_w.sum(); L1 = 2 * np.pi * K
 
+    def _setpoint_table(rng, nmodes=None):
+        """P0-0: ONE setpoint draw per distinct (kappa, sigma) branch, frozen for
+        every shot taken at it within this estimate.  Indexed 2*kappa + [sigma>0],
+        so drawing the whole table and indexing into it is exactly one draw per
+        distinct programmed coefficient; unused rows are simply never read."""
+        return rng.normal(0, R_CTRL, size=2 * (nmodes or MAXN))
+
     def nsr_est(Ntot, rng):
         n = rng.choice(ns, size=int(Ntot), p=pw); sig = rng.choice([-1.0, 1.0], size=int(Ntot))
+        dtab = _setpoint_table(rng)
+        d = dtab[2 * n + (sig > 0).astype(int)]
         sft = sig * (n + 0.5) / (2 * K)
-        val = Cint(np.clip(th0 + sft, grid[0], grid[-1]))
+        val = Cint(np.clip(th0 + sft + d, grid[0], grid[-1]))
         sh = 2 * rng.binomial(1, 0.5 * (1 + np.clip(val, -1, 1))) - 1
         return float(np.mean(L1 * ((-1.0) ** n) * sig * sh))
 
@@ -196,7 +243,8 @@ def main():
     def nsr_trunc_est(Ntot, rng):
         n = rng.choice(ns_t, size=int(Ntot), p=pw_t)
         sig = rng.choice([-1.0, 1.0], size=int(Ntot))
-        val = Cint(np.clip(th0 + sig * (n + 0.5) / (2 * K), grid[0], grid[-1]))
+        d = _setpoint_table(rng, M_CAP + 1)[2 * n + (sig > 0).astype(int)]
+        val = Cint(np.clip(th0 + sig * (n + 0.5) / (2 * K) + d, grid[0], grid[-1]))
         sh = 2 * rng.binomial(1, 0.5 * (1 + np.clip(val, -1, 1))) - 1
         return float(np.mean(L1_t * ((-1.0) ** n) * sig * sh))
 
@@ -209,7 +257,9 @@ def main():
         n = rng.choice(ns, size=int(Ntot), p=pw)
         sig = rng.choice([-1.0, 1.0], size=int(Ntot))
         acc = n <= M_CAP
-        val = Cint(np.clip(th0 + sig * (n + 0.5) / (2 * K), grid[0], grid[-1]))
+        d = _setpoint_table(rng, M_CAP + 1)[
+            2 * np.minimum(n, M_CAP) + (sig > 0).astype(int)]
+        val = Cint(np.clip(th0 + sig * (n + 0.5) / (2 * K) + d, grid[0], grid[-1]))
         sh = 2 * rng.binomial(1, 0.5 * (1 + np.clip(val, -1, 1))) - 1
         contrib = L1 * ((-1.0) ** n) * sig * sh
         return float(np.mean(np.where(acc, contrib, 0.0)))
@@ -239,13 +289,19 @@ def main():
           f"(sampler tail {p_fail_sampler:.4f}; bound {p_fail_bound:.4f})  "
           f"inflation={1/(1-p_fail):.3f}")
 
+    # -- FD in the PAPER's step convention (handover ground rule) --
+    # eps is the paper step: probe theta +- eps/2, divide by eps.  The
+    # builder previously probed theta +- eps and divided by 2*eps, so a
+    # given NUMBER on the axis now means half the physical separation it
+    # used to.  The estimator is identical; the label is not.
     def fd_est(eps, Ntot, rng):
         nper = Ntot // 2
-        dp, dm = rng.normal(0, R_CTRL), rng.normal(0, R_CTRL)
-        vp = Cint(np.clip(th0 + eps + dp, grid[0], grid[-1])); vm = Cint(np.clip(th0 - eps + dm, grid[0], grid[-1]))
+        dp, dm = rng.normal(0, R_CTRL), rng.normal(0, R_CTRL)   # one per probe
+        vp = Cint(np.clip(th0 + 0.5 * eps + dp, grid[0], grid[-1]))
+        vm = Cint(np.clip(th0 - 0.5 * eps + dm, grid[0], grid[-1]))
         fp = 2 * rng.binomial(nper, 0.5 * (1 + np.clip(vp, -1, 1))) / nper - 1
         fm = 2 * rng.binomial(nper, 0.5 * (1 + np.clip(vm, -1, 1))) / nper - 1
-        return (fp - fm) / (2 * eps)
+        return (fp - fm) / eps
 
     _fl_rng = np.random.default_rng(12345)
 
@@ -254,10 +310,39 @@ def main():
         # δ-setpoint spread (Monte-Carlo, so it stays correct on sharp/curved landscapes where
         # a linear δ-propagation over-estimates). This is exactly where FD saturates.
         dp = _fl_rng.normal(0, R_CTRL, nmc); dm = _fl_rng.normal(0, R_CTRL, nmc)
-        vp = Cint(np.clip(th0 + eps + dp, grid[0], grid[-1]))
-        vm = Cint(np.clip(th0 - eps + dm, grid[0], grid[-1]))
-        est = (vp - vm) / (2 * eps)
+        vp = Cint(np.clip(th0 + 0.5 * eps + dp, grid[0], grid[-1]))
+        vm = Cint(np.clip(th0 - 0.5 * eps + dm, grid[0], grid[-1]))
+        est = (vp - vm) / eps
         return float(np.sqrt(np.mean((est - grad_true) ** 2)))
+
+    # -- B.6.4: the analytic FD curve the inset is meant to be showing --
+    # RMSE(eps) = sqrt( (eps^2 f3/24)^2 + 2 f1^2 r^2 / eps^2 ), with f1 the
+    # first and f3 the THIRD derivative of C_noisy at theta0.  f3 needs a
+    # wide stencil: at h=1e-3 it is pure round-off, so it is taken at h=0.05
+    # and cross-checked at h=0.08.
+    def _f3(hh):
+        return float((C(th0 + 2 * hh) - 2 * C(th0 + hh) + 2 * C(th0 - hh)
+                      - C(th0 - 2 * hh)) / (2 * hh ** 3))
+    f1, f2 = grad_true, C2
+    f3, f3_check = _f3(0.05), _f3(0.08)
+    eps_star_analytic = float((24 * abs(f1) * R_CTRL / abs(f3)) ** (1.0 / 3.0))
+    fd_floor_analytic = float(0.60 * abs(f3) ** (1.0 / 3.0)
+                              * (abs(f1) * R_CTRL) ** (2.0 / 3.0))
+    psr_displacement = float(abs(f2) * R_CTRL)                    # B.6.2
+    nsr_setpoint_floor = float(OBAR * R_CTRL * abs(f1) / np.sqrt(3.0))
+
+    def fd_curve_analytic(eps):
+        return np.sqrt((eps ** 2 * f3 / 24.0) ** 2
+                       + 2.0 * f1 ** 2 * R_CTRL ** 2 / eps ** 2)
+
+    print('B.6.4 at th0=%.3f: f1=%+.4f  f2=%+.3f  f3=%+.2f (h=0.08 check %+.2f)'
+          % (th0, f1, f2, f3, f3_check))
+    print('  eps*_analytic=%.3f (paper conv)  FD floor=%.4f'
+          % (eps_star_analytic, fd_floor_analytic))
+    print('  predicted NSR setpoint floor Obar*r*|f1|/sqrt3=%.4f   '
+          'PSR displacement |f2|*r=%.4f (%.1f%% of |f1|)'
+          % (nsr_setpoint_floor, psr_displacement,
+             100 * psr_displacement / abs(f1)), flush=True)
 
     # tune FD ε once at N_TARGET (freeze)
     eps_grid = np.geomspace(0.02, 1.2, 22)
@@ -404,6 +489,8 @@ def main():
              color="#52514e", va="top")
     # inset: the FD V at fixed N — every dialable ε; PSR/NSR flat; × = wrong sign
     axV = axS.inset_axes([0.10, 0.10, 0.38, 0.29])
+    axV.loglog(epsR, fd_curve_analytic(epsR), "-", color="#8a8880", lw=0.9,
+               zorder=1)                       # B.6.4 analytic curve (P0-5)
     axV.loglog(epsR, fd_r, "-", color=C_FD, lw=1.2)
     axV.loglog(epsR[~wr], fd_r[~wr], "o", color=C_FD, ms=2.2)
     axV.loglog(epsR[wr], fd_r[wr], "X", color="#1a1a1a", ms=4.5)
@@ -435,6 +522,13 @@ def main():
           f"{'CONFIRMED' if psr_gate_bias < floor_star else 'CONTRADICTED'}")
 
     json.dump(dict(th0=th0, grad_true=grad_true, K=K, eps_star=eps_star, T_over_T2=0.15, delta=R_CTRL,
+                   eps_convention='paper: probes theta+-eps/2, divide by eps',
+                   f1=float(f1), f2=float(f2), f3=float(f3), f3_check=float(f3_check),
+                   eps_star_analytic=float(eps_star_analytic),
+                   fd_floor_analytic=float(fd_floor_analytic),
+                   psr_displacement=float(psr_displacement),
+                   nsr_setpoint_floor=float(nsr_setpoint_floor),
+                   fd_analytic_curve=[float(v) for v in fd_curve_analytic(epsR)],
                    s_max=float(S_MAX), M_cap=int(M_CAP), Obar=float(OBAR), R_obs=float(R_OBS),
                    d5_bound=float(d5_bound), nsr_trunc_floor=float(trunc_floor),
                    p_fail=float(p_fail),
