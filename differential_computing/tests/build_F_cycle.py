@@ -25,16 +25,17 @@ The point of the figure: the two apparatus classes have disjoint jobs.
                 lines set up and read out a register, they do not compute.
   fast synthesis (AWG/RFSoC class, ns resolution, phase-coherent) — the window
                 lines, collapsed here into one band.  SILENT through the entire
-                frame and active only inside the shaded sliver.
+                frame and active only inside the boxed operation phase.
 
-So everything this paper compiles lives in a sliver of the cycle, driven by
-hardware that is idle the rest of the time; the sliver is what fig:schedules
+So everything this paper compiles lives in ONE phase of the cycle, driven by
+hardware that is idle for all the others; that phase is what fig:schedules
 expands.
 
-Illustrative, not measured: this figure plots no data and has no cache.  Drawn
-widths are a broken axis — phases are given legible widths, NOT widths
-proportional to their durations, which span five orders of magnitude; the
-durations are printed on the phase headers instead and the axis says so.
+Illustrative, not measured: this figure plots no data and has no cache.  The
+axis is broken — phase widths are drawn for legibility, not in proportion to
+durations that span some three decades — but the widths PRESERVE THE ORDER of
+the durations, which a test enforces.  The durations themselves are printed on
+the phase headers and the axis says what it is doing.
 
 Run:  conda run -n qec_pg python differential_computing/tests/build_F_cycle.py
 """
@@ -71,17 +72,23 @@ C_FAST = "#26268f"
 # line count drawn in fig:schedules; the thumbnail draws that many.
 N_FAST_LINES = 8
 
-# (key, header, duration text, drawn width).  WIDTHS ARE NOT DURATIONS: the
-# durations span some four decades, so proportional widths would leave every
-# phase but the first invisible.
+# (key, header, duration text, drawn width, representative ms).  WIDTHS ARE NOT
+# DURATIONS: the durations span some three decades, so proportional widths would
+# leave every phase but the first invisible.  They do, however, PRESERVE THE
+# ORDER — a phase drawn wider than another is longer than it — which a test
+# enforces against the representative-ms column.  That column exists only to
+# order the phases; it is never drawn and is not a device number.
 PHASES = [
-    ("load",    "load register",           r"$\sim$100s of ms", 3.00),
-    ("image",   "image & repair register", r"$\sim$100 ms",     2.45),
-    ("cool",    "cool",                    r"$\sim$10 ms",      1.35),
-    ("prep",    r"set qubits to $|0\rangle$", r"$\sim$ms",     1.15),
-    ("op",      "Operation",               r"$\sim$1–10 ms",   0.95),
-    ("readout", "readout image",           r"$\sim$10s of ms",  2.20),
+    ("load",    "load register",           r"$\sim$100s of ms", 3.00, 300.0),
+    ("image",   "image & repair register", r"$\sim$100 ms",     2.45, 100.0),
+    ("readout", "readout image",           r"$\sim$10s of ms",  2.20,  50.0),
+    ("cool",    "cool",                    r"$\sim$10 ms",      1.35,  10.0),
+    ("op",      "Operation",               r"$\sim$1–10 ms",    1.10,   5.0),
+    ("prep",    r"set qubits to $|0\rangle$", r"$\sim$1 ms",    0.85,   1.0),
 ]
+# Drawing order along the axis (PHASES above is written longest-first so the
+# width/duration ordering is readable at a glance).
+SEQUENCE = ["load", "image", "cool", "prep", "op", "readout"]
 
 # Slow-control rows: (label, colour, level per phase in [0, 1]).  A level says
 # "this line is doing something", not a calibrated amplitude.  Every row holds
@@ -106,10 +113,11 @@ FAST_ROW = ("window lines", dict(load=0.0, image=0.0, cool=0.0, prep=0.0,
 
 def phase_spans():
     """[(key, x0, x1)] in drawn coordinates."""
+    width = {k: w for k, _h, _d, w, _ms in PHASES}
     out, x = [], 0.0
-    for key, _hdr, _dur, w in PHASES:
-        out.append((key, x, x + w))
-        x += w
+    for key in SEQUENCE:
+        out.append((key, x, x + width[key]))
+        x += width[key]
     return out
 
 
@@ -158,7 +166,7 @@ def render():
         ax.plot([x0, x0], [BOT, TOP], color="#9a9890", lw=0.6,
                 ls=(0, (2.5, 2.0)), zorder=1)
 
-    for key, hdr, dur, _w in PHASES:
+    for key, hdr, dur, _w, _ms in PHASES:
         x0, x1 = span[key]
         xm = 0.5 * (x0 + x1)
         if key == "op":                      # named inside its box, as in the
@@ -209,8 +217,8 @@ def render():
                 arrowprops=dict(arrowstyle="-|>", color=INK, lw=1.1))
     ax.text(total * 1.02, 3.22, "time", ha="right", va="top", fontsize=6.6,
             color=INK)
-    ax.text(0, 3.22, "broken axis: phase widths are drawn for legibility, "
-            "not in proportion", ha="left", va="top", fontsize=6.2, color=SEC)
+    ax.text(0, 3.22, "broken axis: widths keep the ORDER of the durations, "
+            "not their ratios", ha="left", va="top", fontsize=6.2, color=SEC)
     ax.text(0, 2.72, "slow control: multifunction-I/O class, ms updates",
             ha="left", va="top", fontsize=6.3, color=SEC)
     ax.text(0, 2.30, "fast synthesis: AWG/RFSoC class, ns resolution, "

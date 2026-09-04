@@ -44,7 +44,7 @@ def all_label_text():
     its own test below.
     """
     out = []
-    for _key, hdr, dur, _w in fc.PHASES:
+    for _key, hdr, dur, _w, _ms in fc.PHASES:
         out += [hdr, dur]
     out += [label for label, _colour, _levels in fc.SLOW_ROWS]
     out.append(fc.FAST_ROW[0])
@@ -61,7 +61,7 @@ def test_no_source_lab_vocabulary_in_any_label():
 
 def test_durations_are_orders_of_magnitude_not_measurements():
     """Every duration is written as an approximate scale, never a value."""
-    for _key, _hdr, dur, _w in fc.PHASES:
+    for _key, _hdr, dur, _w, _ms in fc.PHASES:
         assert ("sim" in dur) or ("mu" in dur), dur      # \\sim... or \\mu s
 
 
@@ -72,7 +72,7 @@ def test_every_row_has_its_own_hue():
 
 
 def test_operation_window_duration_is_the_owner_ruling():
-    dur = dict((k, d) for k, _h, d, _w in fc.PHASES)["op"]
+    dur = dict((k, d) for k, _h, d, _w, _ms in fc.PHASES)["op"]
     assert "1" in dur and "10 ms" in dur
 
 
@@ -91,16 +91,24 @@ def test_bib_entry_is_kept_separate_from_the_device_citation():
 
 # ── phase layout ─────────────────────────────────────────────────────────────
 
-def test_phase_order():
-    assert [k for k, *_ in fc.PHASES] == [
-        "load", "image", "cool", "prep", "op", "readout"]
+def test_phase_order_along_the_axis():
+    assert fc.SEQUENCE == ["load", "image", "cool", "prep", "op", "readout"]
+    assert {k for k, *_ in fc.PHASES} == set(fc.SEQUENCE)
 
 
-def test_operation_window_is_the_narrowest_phase_drawn():
-    """It is the shortest phase (~1-10 ms), and is drawn as the narrowest."""
-    widths = {k: w for k, _h, _d, w in fc.PHASES}
-    assert widths["op"] == min(widths.values())
-    assert all(w > widths["op"] for k, w in widths.items() if k != "op")
+def test_drawn_widths_preserve_the_duration_ordering():
+    """The axis is broken, so widths are not proportional — but a phase drawn
+    wider than another must still be the longer of the two.  Without this the
+    operation (1-10 ms) could end up drawn narrower than the ~1 ms prepare."""
+    rows = sorted(fc.PHASES, key=lambda r: -r[4])          # longest first
+    widths = [r[3] for r in rows]
+    assert widths == sorted(widths, reverse=True), rows
+
+
+def test_operation_is_longer_than_the_prepare_phase():
+    ms = {k: m for k, _h, _d, _w, m in fc.PHASES}
+    wd = {k: w for k, _h, _d, w, _m in fc.PHASES}
+    assert ms["op"] > ms["prep"] and wd["op"] > wd["prep"]
 
 
 def test_spans_are_contiguous_and_ordered():
