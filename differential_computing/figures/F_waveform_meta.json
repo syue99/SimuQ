@@ -70,10 +70,6 @@
    "n_tones_x": 0,
    "n_tones_y": 0
   },
-  "aod_window_ns": [
-   88384.5,
-   88584.5
-  ],
   "gate_window_ns": [
    59154.0,
    59850.0

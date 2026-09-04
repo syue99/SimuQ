@@ -237,29 +237,54 @@ def render(meta, arrays):
     fig.text(0.865, 0.965, "NSR (waveform shift)", fontsize=7.5, color=C_NSR,
              va="bottom", ha="right", weight="bold")
 
-    # ── carrier resolved, same schedules, 0.5 ns ──
-    zooms = []
-    if "aod_t" in arrays:
-        zooms.append((arrays["aod_t"], arrays["aod_w"], C_PSR,
-                      "transport AOD, mid-move"))
-    zooms.append((arrays["psr_inset_t"], arrays["psr_inset_w"], C_PSR,
-                  "addressing comb"))
+    # ── the same schedules at 0.5 ns ──
+    zgs = gs[7, :].subgridspec(1, 3, wspace=0.22)
+
+    # dressing: the channel an NSR shift actually lands on.  It is baseband, so
+    # there is no carrier to resolve — what the panel shows is the amplitude
+    # difference between the two branches, which IS the shift.
+    azd = fig.add_subplot(zgs[0, 0])
+    for tag, colour, lab in (("psr", C_PSR, "PSR"), ("nsr", C_NSR, "NSR")):
+        azd.plot(arrays[f"{tag}_dress_t"], np.abs(arrays[f"{tag}_dress_w"]),
+                 color=colour, lw=1.5 if tag == "psr" else 1.0,
+                 ls="-" if tag == "psr" else (0, (2.6, 1.8)), label=lab)
+    dp = float(np.abs(arrays["psr_dress_w"]).max())
+    dn = float(np.abs(arrays["nsr_dress_w"]).max())
+    gap = max(dp - dn, 1e-9)
+    azd.set_ylim(dn - 0.75 * gap, dp + 0.75 * gap)   # zoom on the 1.5% step
+    azd.text(0.985, 0.86, f"{dp:.4f}", transform=azd.transAxes, fontsize=5.8,
+             color=C_PSR, ha="right", va="center")
+    azd.text(0.985, 0.14, f"{dn:.4f}", transform=azd.transAxes, fontsize=5.8,
+             color=C_NSR, ha="right", va="center")
+    azd.text(0.5, 0.5, r"$\times$" + f"{dn / dp:.3f}", transform=azd.transAxes,
+             fontsize=6.6, color=C_INK, ha="center", va="center")
+    azd.legend(fontsize=5.6, frameon=False, loc="center left", ncol=1,
+               handlelength=1.6, borderpad=0.15, labelspacing=0.15)
+    azd.set_title("dressing AOM — where the shift lands", fontsize=6.2,
+                  color=C_INK, pad=2)
+
+    # addressing comb and the measured gate pulse, carrier resolved
+    azc = fig.add_subplot(zgs[0, 1])
+    azc.plot(arrays["psr_inset_t"], np.real(arrays["psr_inset_w"]),
+             color=C_PSR, lw=0.45)
+    azc.set_title("addressing comb  (0.5 ns)", fontsize=6.2, color=C_INK, pad=2)
+
+    azg = fig.add_subplot(zgs[0, 2])
     if "gate_t" in arrays:
-        zooms.append((arrays["gate_t"], arrays["gate_w"], C_GATE,
-                      f"gate pulse, {meta['gate_us'] * 1e3:.0f} ns"))
-    zgs = gs[7, :].subgridspec(1, len(zooms), wspace=0.22)
-    for j, (tz, wz, cz, title) in enumerate(zooms):
-        az = fig.add_subplot(zgs[0, j])
-        az.plot(tz, np.real(wz), color=cz, lw=0.45)
+        azg.plot(arrays["gate_t"], np.real(arrays["gate_w"]), color=C_GATE,
+                 lw=0.45)
+        azg.set_title(f"gate pulse, {meta['gate_us'] * 1e3:.0f} ns  (0.5 ns)",
+                      fontsize=6.2, color=C_INK, pad=2)
+
+    for az in (azd, azc, azg):
         az.set_facecolor(C_SURFACE)
-        az.set_xlim(tz[0], tz[-1])
         az.tick_params(labelsize=5.6, colors=C_SEC, length=2, pad=1.2)
         az.set_yticks([])
         for sp in az.spines.values():
             sp.set_color(C_GRID)
             sp.set_linewidth(0.6)
-        az.set_title(title + "  (0.5 ns)", fontsize=6.2, color=C_INK, pad=2)
         az.set_xlabel("ns", fontsize=6.0, color=C_SEC, labelpad=0.5)
+
     os.makedirs(FIG_DIR, exist_ok=True)
     for out in (FIG_DIR, OUT2, OUT3):
         os.makedirs(out, exist_ok=True)

@@ -10,9 +10,13 @@ carrier cannot be resolved across 120 us of page, so every row is drawn the way
 an instrument draws a record too dense to resolve: the minimum and maximum of
 the real samples in each display bin, filled between. The band's outline is the
 true excursion of the signal; nothing is smoothed or interpolated. The three
-panels underneath resolve the carrier from the same schedules at 0.5 ns -- the
-transport tone mid-move, the addressing comb, and the measured gate pulse -- so
-the bands above can be read as the oscillations they are.
+panels underneath come from the same schedules at 0.5 ns. Two of them resolve the
+carrier -- the addressing comb and the measured gate pulse -- so the bands above
+can be read as the oscillations they are. The third is the dressing channel,
+where a Nyquist shift actually lands: it is baseband, so there is no carrier to
+resolve and what the panel shows instead is the amplitude, 0.6947 in the source
+branch against 0.6843 in the shifted one. That step, x 0.985, is the whole
+physical content of the shift on this channel.
 
 On the two transport rows the black line is the atom position, on the right-hand
 axis: the same tone through the device's fixed linear AOD calibration,
