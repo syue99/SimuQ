@@ -3,7 +3,7 @@ build_F_epssweep.py — P1-1 (App C.3 companion): FD's bias floor as a function 
 at three operating points of increasing landscape sharpness.  SHOT-FREE (N → ∞): the figure
 compares bias floors only, so the shot budget never enters.
 
-Per panel (T = 0.6, 2.5, 7 µs; T/T₂* = 0.15 held; same 2q TFIM, same device model r = 0.02):
+Per panel (T = 1, 2, 7 µs; T/T₂* = 0.15 held; same 2q TFIM, same device model r = 0.02):
   θ0    a generic point (not an inflection): a random steep point, fixed seed, whose
         shared-draw displacement |f''|·r/|∇C| lies in PSR_BAND = 2–5%, so PSR's floor is of
         the same order in every panel and the panels differ in the step scale (owner,
@@ -40,10 +40,10 @@ from noise_model import NoiseModel
 
 R_CTRL = 0.02
 REGIME = 0.15
-TS = [0.6, 2.5, 7.0]                         # owner 2026-09-05: healthy a bit better, ill a bit worse
+TS = [1.0, 2.0, 7.0]                         # owner 2026-09-05: the PSR line matched across panels (2.5%) limits how smooth 'healthy' can be
 # sparse, per-landscape step grids (owner: zoom each panel to its own relevant ε range)
-EPS_BY_T = {0.6: [0.05, 0.1, 0.2, 0.4, 0.7, 1.0, 1.5, 2.0, 3.0, 4.0],
-            2.5: [0.03, 0.06, 0.1, 0.2, 0.3, 0.45, 0.6, 0.8, 1.0, 1.2],
+EPS_BY_T = {1.0: [0.05, 0.1, 0.2, 0.4, 0.7, 1.0, 1.5, 2.0, 2.5, 3.0],
+            2.0: [0.03, 0.06, 0.1, 0.2, 0.3, 0.45, 0.6, 0.8, 1.0, 1.2],
             7.0: [0.02, 0.04, 0.06, 0.09, 0.12, 0.16, 0.2, 0.26, 0.33, 0.42]}
 EPS = np.array(EPS_BY_T[7.0])
 NDRAW = 2000
@@ -77,29 +77,31 @@ def landscape(T):
     return g, v, d1, d2, d3
 
 
-PSR_BAND = (0.02, 0.05)                      # |f''| r / |f'| band for the operating point
-PICK_SEED = 11
+PSR_TARGET = 0.025                           # |f''| r / |f'| matched across the three panels (the smooth landscape caps it)
+PSR_TOL = 0.004
 
 
 def pick_theta(g, d1, d2, d3):
-    """A generic operating point (owner, 2026-09-05: NOT an inflection): a random steep point
-    (|∇C| ≥ ½ max, θ ∈ [0.5, 3]) whose shared-draw displacement |f''|·r/|∇C| lies in PSR_BAND,
-    so PSR's floor is of the same order in every panel, and whose sharpness |f'''|/|f'| is
-    typical of its landscape (middle quintile over the steep points).  Fixed seed.
-    Returns (θ0, predicted FD floor)."""
+    """A generic operating point (owner, 2026-09-05): among points of typical sharpness for
+    the landscape (middle quintile of |f3|/|f1| over the candidate set), the one whose
+    shared-draw displacement |f2| r / |f1| is closest to PSR_TARGET, so PSR's floor is the
+    SAME in every panel.  Candidates are steep points (|f1| >= 1/2 max, theta in [0.5, 3]);
+    if a landscape is too smooth to reach the target there, the steepness cut is relaxed
+    (0.5 -> 0.35 -> 0.25 of max).  Returns (theta0, predicted FD floor)."""
     eps = np.geomspace(0.01, 2.0, 500)
-    m = (g >= 0.5) & (g <= 3.0) & (np.abs(d1) >= 0.5 * np.abs(d1).max())
     disp = np.abs(d2) * R_CTRL / np.abs(d1)
     sharp = np.abs(d3) / np.abs(d1)
-    lo, hi = np.percentile(sharp[m], [40, 60])          # typical sharpness for THIS landscape
-    typ = m & (sharp >= lo) & (sharp <= hi)
-    ok = typ & (disp >= PSR_BAND[0]) & (disp <= PSR_BAND[1])
-    idx = np.flatnonzero(ok)
-    if idx.size:
-        i = int(np.random.default_rng(PICK_SEED).choice(idx))
-    else:                                   # a landscape too smooth for the band: closest to it
-        cand = np.flatnonzero(typ)
-        i = int(cand[np.argmin(np.abs(disp[cand] - 0.5 * sum(PSR_BAND)))])
+    best = None
+    for fmin in (0.5, 0.35, 0.25):
+        m = (g >= 0.5) & (g <= 3.0) & (np.abs(d1) >= fmin * np.abs(d1).max())
+        lo, hi = np.percentile(sharp[m], [40, 60])
+        cand = np.flatnonzero(m & (sharp >= lo) & (sharp <= hi))
+        i = int(cand[np.argmin(np.abs(disp[cand] - PSR_TARGET))])
+        if best is None or abs(disp[i] - PSR_TARGET) < abs(disp[best] - PSR_TARGET):
+            best = i
+        if abs(disp[i] - PSR_TARGET) <= PSR_TOL:
+            break
+    i = best
     a, b, c = float(d1[i]), float(d2[i]), float(d3[i])
     fd = np.sqrt((np.sqrt(2) * R_CTRL * abs(a) / eps) ** 2 + (abs(b) * R_CTRL / np.sqrt(2)) ** 2
                  + (eps ** 2 * abs(c) / 24) ** 2)

@@ -306,32 +306,32 @@ schematic for anonymity. Fred's call.
 
 ## New appendix figure — FD step window at three landscapes (P1-1) — `tests/build_F_epssweep.py`, 2026-09-05 (final)
 
-Owner's design: three **landscapes** of increasing sharpness (bandwidth Ω̄ = 2T = 1.2, 5, 14 at
+Owner's design: three **landscapes** of increasing sharpness (bandwidth Ω̄ = 2T = 2, 4, 14 at
 fixed T/T₂* = 0.15; same 2q TFIM, same device model), each at a **generic** operating point
-(not an inflection): a random steep point (|∇C| ≥ ½ max, fixed seed 11) whose shared-draw
-displacement |f″|·r/|∇C| lies in 2–5% (or, on a landscape too smooth for that, closest to it) and whose sharpness |f‴|/|f′| is typical of its
-landscape (middle quintile), so PSR's floor is of the same order in every panel and only
-the step scale moves. Top row: the landscape, the shift-rule tangent, FD's secant at ε*, the usable window (RMSE ≤ 10%)
+(not an inflection) chosen so that PSR's floor is the **same** in every panel: among points of
+typical sharpness for the landscape (middle quintile of |f‴|/|f′| over the steep points,
+|∇C| ≥ ½ max), the one whose shared-draw displacement |f″|·r/|∇C| is closest to 2.5% (the
+largest value the healthy landscape can reach; a smoother one has f″ too small). Top row: the landscape, the shift-rule tangent, FD's secant at ε*, the usable window (RMSE ≤ 10%)
 shaded; no T or θ₀ on the figure. Bottom row, **|error|/|∇C| on a log axis, ε linear and zoomed
 per landscape, shot-free (N → ∞)**: FD as the median with 16–84 percentile bars over 2000
 setpoint draws per step (two draws per estimate, θ ± ε/2, r = 0.02) on a sparse per-landscape
-grid (10 steps; healthy [0.05, 4], intermediate [0.03, 1.2], ill [0.02, 0.42]); PSR as its RMS line
+grid (10 steps; healthy [0.05, 3], intermediate [0.03, 1.2], ill [0.02, 0.42]); PSR as its RMS line
 with the 16–84% band of one shared draw (2000 draws); NSR at the axis floor (error 0). Legend
 row under the figure. Cache `figures/F_epssweep_data.json`; figure
 `F_epssweep.{pdf,png}` in `figures/`, `paper_fig_2/`, `paper_fig_3/figs/`.
 
 | panel | T / T₂* (µs) | θ₀ | f′ | f″ | f‴ | \|f‴\|/\|f′\| | ε* (B.6.4) | FD floor (B.6.4) | usable window (RMSE ≤ 10%) | PSR line (RMS) | NSR |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| (a) healthy | 0.6 / 4.0 | 2.928 | +0.236 | -0.10 | -0.1 | 1 | 1.00 (0.97) | 3.1% (3.6%) | [0.40, 2.00] | 0.8% | none |
-| (b) intermediate | 2.5 / 16.7 | 1.192 | +0.766 | -1.39 | -5.9 | 8 | 0.45 (0.40) | 8.8% (8.7%) | [0.30, 0.45] | 3.6% | none |
-| (c) ill | 7 / 46.7 | 1.596 | +2.393 | +4.84 | -169.3 | 71 | 0.20 (0.19) | 15.5% (18.3%) | none | 4.5% | none |
+| (a) healthy | 1 / 6.7 | 1.768 | +0.366 | -0.46 | -0.6 | 2 | 0.70 (0.66) | 4.6% (5.3%) | [0.40, 1.00] | 2.5% | none |
+| (b) intermediate | 2 / 13.3 | 1.968 | +0.725 | -0.85 | -4.4 | 6 | 0.45 (0.43) | 7.8% (8.1%) | [0.30, 0.60] | 2.3% | none |
+| (c) ill | 7 / 46.7 | 1.640 | +2.436 | -2.95 | -180.0 | 74 | 0.20 (0.19) | 15.8% (18.6%) | none | 3.6% | none |
 
-Reading (10% threshold, sparse grids): healthy — usable for ε ∈ [0.4, 2.0], best 3.1% at
-ε = 1.0, and ε = 2 still at 6%; intermediate — only [0.3, 0.45], best 8.8%; ill — **no usable
-step**: at its best step (ε = 0.2, 15.5%) the 16–84% bar spans 0.04–0.2, i.e. the setpoint
-draw alone decides whether that estimate is good, and every larger step is pure truncation
-bias. Below ε ≈ 0.1 the bars span a decade in every panel (δ/ε). PSR's RMS is 0.8 / 3.6 /
-4.0%; NSR has no floor.
+Reading (10% threshold, sparse grids): healthy — usable for ε ∈ [0.4, 1.0], best 4.6% at
+ε = 0.7, ε = 1.0 still at 5%; intermediate — [0.3, 0.6], best 7.8%; ill — **no usable step**:
+at its best step (ε = 0.2, 15.8%) the 16–84% bar spans 0.04–0.2, i.e. the setpoint draw alone
+decides whether that estimate is good, and every larger step is pure truncation bias. Below
+ε ≈ 0.1 the bars span a decade in every panel (δ/ε). PSR's first-order displacement is
+2.5 / 2.3 / 2.4% by construction (RMS incl. second order 2.5% / 2.3% / 3.6%); NSR has no floor.
 
 Deviations from the handover's P1-1 recipe (owner's rulings): landscapes vary (via T at
 fixed T/T₂*) instead of three θ₀ at one T; shot-free instead of N = 10⁴; generic θ₀ with
