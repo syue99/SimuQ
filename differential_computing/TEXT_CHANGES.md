@@ -209,23 +209,25 @@ is the lab's own apparatus, anonymity may require a schematic instead.
 
 ## New appendix figure (P1-1) — `F_epssweep` — caption draft
 
-> **FD's step window at three landscape sharpnesses.** Bias floor of the central difference,
-> RMSE/|∇C_device| as N → ∞, versus the step ε for the 2-qubit TFIM coupling at T = 1, 2.5
-> and 5 µs (T/T₂* = 0.15, setpoint error r = 0.02 on both probes). The lower edge of the
-> usable window (shaded, RMSE ≤ 30%) sits at ε ≈ √2·r/0.3 ≈ 0.1 in every panel: it is set by
-> the setpoint error. The upper edge closes as the landscape sharpens (ε ≈ 2.1, 0.75, 0.38)
-> and the best achievable error rises from 5% to 15%, as (|f‴|/|f′|)^{1/3}·r^{2/3}
-> (App. B.6.4, which reproduces the curves to within 10%). × marks steps at which ≥ 20% of
-> setpoint draws flip the sign. The shift rules have no step: PSR's only floor is the
-> shared-draw displacement |f″|r (0.3 / 1.3 / 4.9% here), NSR's is zero.
+> **What a healthy and an ill landscape look like to a finite difference.** Top: the device
+> landscape C_device(θ) around the operating point (black), the shift-rule tangent (blue)
+> and the finite-difference secant at its best step ε* (orange); the shaded band is the
+> usable step window. Bottom: the bias floor of the central difference as N → ∞,
+> RMSE/|∇C_device| versus ε, with the setpoint error r = 0.02 on both probes. The three
+> landscapes have the same |f″|·r (≈ 0) and differ only in sharpness (bandwidth Ω̄ = 2, 5,
+> 10). The window's lower edge, ε ≈ √2·r/0.3 ≈ 0.1, is the same everywhere: it is set by
+> the setpoint error. Its upper edge closes as the landscape sharpens (2.1, 1.1, 0.53), and
+> the best achievable error rises from 5% to 11% as (|f‴|/|f′|)^{1/3}·r^{2/3} (App. B.6.4,
+> within 5% of the curves). × marks steps at which ≥ 20% of setpoint draws flip the sign.
+> The shift rules have no step and, at these points, no floor.
 
 Suggested conclusion sentence for App. C.3: "Fig. 8's operating point is not a singleton:
 on every landscape the FD window is bounded below by r and above by the landscape's
-sharpness, and even its best step leaves 5–15% error, while the shift rules need no step."
+sharpness, and even its best step leaves 5–11% error, while the shift rules need no step."
 
 C.3's "was selected by scanning … for the point maximizing FD's predicted floor" should
-describe the new rule (Fig 8: the C″ = 0 point in the M = 5 window; this figure: the
-median-floor steep point per T).
+describe the rules actually used (Fig 8: the C″ = 0 point in the M = 5 window; this
+figure: the C″ = 0 point nearest the steepest point of each landscape).
 
 ## Pending
 Nothing on the plot side. Open questions for Fred are listed in the sections above

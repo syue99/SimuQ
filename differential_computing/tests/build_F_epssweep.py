@@ -4,8 +4,10 @@ at three operating points of increasing landscape sharpness.  SHOT-FREE (N → �
 compares bias floors only, so the shot budget never enters.
 
 Per panel (T = 1, 2.5, 5 µs; T/T₂* = 0.15 held; same 2q TFIM, same device model r = 0.02):
-  θ0    the median point of FD's predicted floor among steep points (|∇C| ≥ ½ max), no
-        constraint on f'' — f'' and f''' are reported.
+  θ0    the C'' = 0 crossing nearest the landscape's steepest point, so the shared-draw
+        displacement |f''|·r is ≈ 0 in every panel and the panels differ ONLY in sharpness
+        (owner: match |f''|δ, vary the step scale).  The landscape itself is drawn above
+        each sweep; T and θ0 are not printed on the figure (caption / data note only).
   FD    RMSE(ε)/|∇C| with the paper's probes θ ± ε/2 each carrying its own setpoint draw
         (per-change rule, 2 draws per estimate), 2000 draws per step, 30 steps in [0.02, 3.0].
         × = steps where ≥ 20% of draws give the wrong sign.  Shaded = usable window
@@ -42,6 +44,7 @@ EPS = np.geomspace(0.02, 3.0, 30)          # wider than Fig 8's inset grid so th
 NDRAW = 2000
 WIN = 0.30                                   # usable-window threshold (fraction of |∇C|)
 WRONG = 0.20                                 # × marker threshold (fraction of draws)
+LAND_HALF = 1.6                              # landscape drawn over θ0 ± LAND_HALF (same for all panels)
 FIGDIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "figures"))
 OUT2 = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "paper_fig_2"))
 OUT3 = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "paper_fig_3", "figs"))
@@ -66,17 +69,19 @@ def landscape(T):
 
 
 def pick_theta(g, d1, d2, d3):
-    """Median of FD's predicted shot-free floor over steep points (|∇C| ≥ ½ max), θ ∈ [0.5, 3]."""
+    """The C'' = 0 crossing (θ ∈ [0.5, 3]) with the largest |∇C|: the steepest point of the
+    landscape, where the shared-draw displacement vanishes.  Returns (θ0, predicted floor)."""
     eps = np.geomspace(0.01, 2.0, 500)
-    m = (g >= 0.5) & (g <= 3.0) & (np.abs(d1) >= 0.5 * np.abs(d1).max())
-    fl = []
-    for a, b, c in zip(d1[m], d2[m], d3[m]):
-        fd = np.sqrt((np.sqrt(2) * R_CTRL * abs(a) / eps) ** 2 + (abs(b) * R_CTRL / np.sqrt(2)) ** 2
-                     + (eps ** 2 * abs(c) / 24) ** 2)
-        fl.append(fd.min() / abs(a))
-    fl = np.array(fl)
-    i = int(np.argmin(np.abs(fl - np.median(fl))))
-    return float(g[m][i]), float(fl[i])
+    cand = []
+    for i in range(len(g) - 1):
+        if 0.5 <= g[i] <= 3.0 and d2[i] * d2[i + 1] < 0:
+            t = g[i] - d2[i] * (g[i + 1] - g[i]) / (d2[i + 1] - d2[i])
+            cand.append((abs(np.interp(t, g, d1)), t))
+    _, th0 = max(cand)
+    a, b, c = (float(np.interp(th0, g, d)) for d in (d1, d2, d3))
+    fd = np.sqrt((np.sqrt(2) * R_CTRL * abs(a) / eps) ** 2 + (abs(b) * R_CTRL / np.sqrt(2)) ** 2
+                 + (eps ** 2 * abs(c) / 24) ** 2)
+    return float(th0), float(fd.min() / abs(a))
 
 
 def panel(T, rng):
@@ -95,7 +100,10 @@ def panel(T, rng):
     rr = np.array([r["rmse_rel"] for r in rows])
     ok = rr <= WIN
     win = (float(EPS[ok].min()), float(EPS[ok].max())) if ok.any() else None
+    xs = np.linspace(-LAND_HALF, LAND_HALF, 361)
     return dict(T=T, T2=T / REGIME, theta0=th0, f1=f1, f2=f2, f3=f3,
+                land_x=[float(x) for x in xs], land_y=[float(Cint(th0 + x)) for x in xs],
+                C0=float(Cint(th0)),
                 eps_star=float(EPS[int(np.argmin(rr))]), floor_rel=float(rr.min()),
                 floor_pred_rel=fl_pred,
                 eps_star_b64=float((24 * abs(f1) * R_CTRL / abs(f3)) ** (1 / 3)),
@@ -113,9 +121,36 @@ def compute():
 
 def render(d):
     plt.rcParams.update({"font.size": 7})
-    fig, axs = plt.subplots(1, 3, figsize=(7.0, 2.35), dpi=300, sharey=True)
-    labels = ["(a) well-conditioned", "(b) intermediate", "(c) ill-conditioned"]
-    for ax, p, lab in zip(axs, d["panels"], labels):
+    fig, axs = plt.subplots(2, 3, figsize=(7.0, 3.6), dpi=300,
+                            gridspec_kw=dict(height_ratios=[0.62, 1.0], hspace=0.38, wspace=0.10))
+    labels = ["(a) healthy: wide step window", "(b) intermediate", "(c) ill: narrow step window"]
+    ally = np.concatenate([p["land_y"] for p in d["panels"]])
+    ylo, yhi = float(ally.min()) - 0.12, float(ally.max()) + 0.12
+    for k, (p, lab) in enumerate(zip(d["panels"], labels)):
+        # ── top: the landscape around θ0, tangent = ∇C_device, best FD secant at ε* ──
+        axL = axs[0, k]
+        x = np.array(p["land_x"]); y = np.array(p["land_y"]); f1 = p["f1"]; C0 = p["C0"]
+        axL.plot(x, y, color="#1a1a1a", lw=1.3)
+        axL.plot([0], [C0], "o", color="#1a1a1a", ms=3.2, zorder=5)
+        ht = min(0.45, 0.22 / abs(f1))          # tangent of fixed vertical extent
+        axL.plot([-ht, ht], [C0 - ht * f1, C0 + ht * f1], color=C_PSR, lw=2.2, zorder=4,
+                 solid_capstyle="round")
+        if p["window"]:
+            axL.axvspan(-p["window"][1] / 2, p["window"][1] / 2, color=C_FD, alpha=0.08, lw=0)
+        e = p["eps_star"]
+        axL.plot([-e / 2, e / 2], [np.interp(-e / 2, x, y), np.interp(e / 2, x, y)], "o-",
+                 color=C_FD, lw=1.1, ms=2.6, zorder=3)
+        axL.set_xlim(-LAND_HALF, LAND_HALF); axL.set_ylim(ylo, yhi)
+        axL.tick_params(labelsize=6.5)
+        if k > 0:
+            axL.tick_params(labelleft=False)
+        axL.set_xlabel(r"$\theta-\theta_0$", fontsize=7, labelpad=1)
+        axL.set_title(lab, fontsize=7.2)
+        axL.grid(True, alpha=0.12)
+        if k == 0:
+            axL.set_ylabel(r"$C_{\rm device}(\theta)$", fontsize=7.5)
+        # ── bottom: shot-free bias floor vs ε ──
+        ax = axs[1, k]
         e = np.array([r["eps"] for r in p["sweep"]]); rr = np.array([r["rmse_rel"] for r in p["sweep"]])
         wr = np.array([r["wrong"] for r in p["sweep"]]) >= d["wrong"]
         if p["window"]:
@@ -125,25 +160,23 @@ def render(d):
         ax.loglog(e[wr], rr[wr], "X", color="#1a1a1a", ms=4.5)
         ax.axvline(p["eps_star"], color=C_FD, lw=0.6, ls=":")
         ax.axhline(d["win"], color="#888888", lw=0.7, ls="--")
-        if p["psr_disp_rel"] > 0.004:
-            ax.axhline(p["psr_disp_rel"], color=C_PSR, lw=1.3)
-            ax.text(0.021, p["psr_disp_rel"] * 1.15, "PSR (shared draw)", color=C_PSR, fontsize=5.8, va="bottom")
-        else:
-            ax.text(0.021, 0.0062, "PSR: no floor at $C''=0$", color=C_PSR, fontsize=5.8, va="bottom")
-        ax.text(0.021, 0.0045, "NSR: no floor", color=C_NSR, fontsize=5.8, va="bottom")
-        ax.text(p["eps_star"] * 1.08, 0.9, rf"$\varepsilon^*={p['eps_star']:.2f}$", color=C_FD,
+        ax.text(p["eps_star"] * 1.1, 0.9, rf"$\varepsilon^*={p['eps_star']:.2f}$", color=C_FD,
                 fontsize=6, va="top")
-        ax.set_title(lab + rf"  $T={p['T']:g}\,\mu$s, $\theta_0={p['theta0']:.2f}$", fontsize=7)
-        ax.text(0.98, 0.04, rf"$|f'''|/|f'|={abs(p['f3'] / p['f1']):.0f}$, $f''r/|f'|={p['psr_disp_rel']:.2f}$",
-                transform=ax.transAxes, fontsize=5.8, ha="right", va="bottom", color="#52514e")
-        ax.set_xlabel(r"FD step $\varepsilon$", fontsize=7.5)
+        ax.text(0.021, 0.0068, "PSR: no floor at $C''=0$", color=C_PSR, fontsize=5.8, va="bottom")
+        ax.text(0.021, 0.0045, "NSR: no floor", color=C_NSR, fontsize=5.8, va="bottom")
+        ax.set_xlabel(r"FD step $\varepsilon$", fontsize=7.5, labelpad=1)
         ax.set_xlim(0.018, 3.3); ax.set_ylim(0.004, 1.5)
         ax.grid(True, which="both", alpha=0.12)
         ax.tick_params(labelsize=6.5)
-    axs[0].set_ylabel(r"bias floor  RMSE$/|\nabla C_{\rm device}|$  ($N\to\infty$)", fontsize=7.5)
-    axs[2].text(0.03, 0.40, rf"$T/T_2^*={d['regime']}$, $r={d['r']}$" + "\n" + rf"shaded: RMSE $\leq$ {int(100 * d['win'])}%",
-                transform=axs[2].transAxes, fontsize=6, va="top", ha="left", color="#52514e")
-    fig.tight_layout(pad=0.4)
+        if k > 0:
+            ax.tick_params(labelleft=False)
+    axs[1, 0].set_ylabel(r"FD bias floor RMSE$/|\nabla C|$ ($N\to\infty$)", fontsize=7.5)
+    axs[1, 2].text(0.97, 0.40, rf"$r={d['r']}$; shaded: RMSE $\leq$ {int(100 * d['win'])}%",
+                   transform=axs[1, 2].transAxes, fontsize=6, va="top", ha="right", color="#52514e")
+    from matplotlib.lines import Line2D
+    axs[0, 2].legend(handles=[Line2D([], [], color=C_PSR, lw=2.2, label="shift-rule tangent"),
+                              Line2D([], [], color=C_FD, lw=1.1, marker="o", ms=2.6, label=r"FD secant at $\varepsilon^*$")],
+                     fontsize=5.6, loc="lower right", frameon=False, handlelength=1.6, borderpad=0.2)
     for out in (FIGDIR, OUT2, OUT3):
         os.makedirs(out, exist_ok=True)
         for ext in ("pdf", "png"):
