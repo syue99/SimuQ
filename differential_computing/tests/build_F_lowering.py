@@ -42,8 +42,8 @@ def badge(ax, x, y, letter, color):
 
 def main():
     plt.rcParams.update({"font.size": 7, "font.family": "sans-serif"})
-    fig, ax = plt.subplots(figsize=(7.0, 3.1), dpi=300)
-    ax.set_xlim(0, 14.0); ax.set_ylim(0, 5.95); ax.axis("off")
+    fig, ax = plt.subplots(figsize=(7.0, 2.45), dpi=300)
+    ax.set_xlim(0, 14.6); ax.set_ylim(1.25, 5.95); ax.axis("off")
 
     # ── legend row ──
     for x, edge, fill, lab in [(0.3, C_NEW, C_NEW_FILL, "this paper"),
@@ -65,18 +65,20 @@ def main():
          "multiplexing,\ntransport plans,\ninsertions", "this paper"),
     ]
     for x, w, L, edge, fill, title, body, tag in stages:
-        box(ax, x, Y, w, H, edge, fill)
+        hh = 1.0 if L == "D" else H                 # D is only a title; the emulator sits under it
+        box(ax, x, Y + H - hh, w, hh, edge, fill)
         badge(ax, x + 0.24, Y + H - 0.26, L, edge)
         if L == "D":
             ax.text(x + 0.46, Y + H - 0.30, title, ha="left", va="center", fontsize=7.2, weight="bold",
                     color=INK, zorder=6, linespacing=1.05)
+            ax.text(x + w / 2, Y + H - hh + 0.17, "", zorder=6)
         else:
             ax.text(x + w / 2 + 0.14, Y + H - 0.30, title, ha="center", va="center", fontsize=7.5,
                     weight="bold", color=INK, zorder=6, linespacing=1.05)
         if body:
             ax.text(x + w / 2, Y + 0.88, body, ha="center", va="center", fontsize=7, color=INK, zorder=6,
                     linespacing=1.15)
-        ax.text(x + w / 2, Y + 0.17, tag, ha="center", va="center", fontsize=7, color=edge, zorder=6,
+        ax.text(x + w / 2, Y + H - hh + 0.17, tag, ha="center", va="center", fontsize=7, color=edge, zorder=6,
                 style="italic")
     # C: the two sub-boxes this paper adds inside the reused solver
     cx, cw = 6.25, 2.5
@@ -86,20 +88,21 @@ def main():
                 linespacing=1.05)
     # D: the emulator below it (this paper)
     ex_, ew = 9.25, 1.9
-    box(ax, ex_, 1.5, ew, 0.78, C_NEW, C_NEW_FILL)
-    ax.text(ex_ + ew / 2, 2.07, "Emulator", ha="center", va="center", fontsize=7.5, weight="bold", color=INK, zorder=6)
-    ax.text(ex_ + ew / 2, 1.72, "expectation values,\ndevice noise model", ha="center", va="center",
+    box(ax, ex_, Y, ew, 0.78, C_NEW, C_NEW_FILL)
+    ax.text(ex_ + ew / 2, Y + 0.57, "Emulator", ha="center", va="center", fontsize=7.5, weight="bold", color=INK, zorder=6)
+    ax.text(ex_ + ew / 2, Y + 0.24, "expectation values,\ndevice noise model", ha="center", va="center",
             fontsize=7, color=INK, zorder=6, linespacing=1.05)
-    arrow(ax, ex_ + ew / 2, Y, ex_ + ew / 2, 2.3)
+    arrow(ax, ex_ + ew / 2, Y + H - 1.0, ex_ + ew / 2, Y + 0.8)
 
     # ── flow arrows and end labels ──
-    ym = Y + H / 2
+    ym = Y + H - 0.5                             # flow arrows at the height of D's short box
     ax.text(0.5, ym, "analog\nprogram", ha="center", va="center", fontsize=7, color=INK)
     arrow(ax, 0.9, ym, 1.15, ym)
     for x0, x1 in [(3.25, 3.6), (5.9, 6.25), (8.75, 9.1), (11.3, 11.65)]:
         arrow(ax, x0, ym, x1, ym)
-    arrow(ax, 13.8, ym, 13.98, ym)
-    ax.text(12.7, Y - 0.2, "device-ready waveforms", ha="center", va="top", fontsize=7, color=INK)
+    arrow(ax, 13.75, ym, 14.0, ym)
+    ax.text(14.05, ym, "device-\nready\nwave-\nforms", ha="left", va="center", fontsize=7, color=INK,
+            linespacing=1.0)
 
     # boundary of existing analog toolchains
     xb = 11.48
@@ -108,7 +111,7 @@ def main():
             color=SEC, linespacing=1.05)
 
     # ── the running NSR branch through the five stages (App F instance, Fig 13's compile) ──
-    ax.text(1.15, 1.27, "the running NSR branch at each stage (ledger vocabulary of Fig. 7):", ha="left", va="bottom",
+    ax.text(1.15, Y - 0.06, "the running NSR branch at each stage (ledger vocabulary of Fig. 7):", ha="left", va="top",
             fontsize=7, color=SEC, style="italic")
     strip = [   # the branch in the ledger's own vocabulary (Fig 7): segment · terms (provenance) · frame · transport · insertion
         (1.15, 2.1, "ev[0,T): c·ZaZb\nc·Xa  c·Xb  (src)\ndifferentiate x"),
@@ -118,8 +121,8 @@ def main():
         (11.65, 2.1, "seg0: drive I/Q ✓\ndressing ✓\nmove –, gate –"),
     ]
     for x, w, txt in strip:
-        box(ax, x, 0.12, w, 1.05, "#bbbbbb", "#f7f7f5", lw=0.8, r=0.05)
-        ax.text(x + w / 2, 0.645, txt, ha="center", va="center", fontsize=7, color=INK, zorder=6,
+        box(ax, x, Y - 1.3, w, 0.95, "#bbbbbb", "#f7f7f5", lw=0.8, r=0.05)
+        ax.text(x + w / 2, Y - 0.825, txt, ha="center", va="center", fontsize=7, color=INK, zorder=6,
                 linespacing=1.2)
 
     fig.subplots_adjust(left=0.005, right=0.995, top=0.995, bottom=0.005)
