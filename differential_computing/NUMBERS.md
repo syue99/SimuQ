@@ -250,3 +250,56 @@ Replots from the existing caches (`figures/F_select_balanced_data.json`,
 
 Consistency checks: 3 (factor 2, near-tie at (2,1)) — holds, SELECTOR_FACTOR2.md; 4
 (Fig 14(a) == Fig 10) — holds.
+
+## Figures 7 and 13 — `tests/build_branch_anatomy.py` (REBUILD=1), `tests/build_F_waveform.py` (unchanged), 2026-09-05
+
+Owner's ruling: the 5 µm transit lane is the real schedule. Fig 7 is now extracted from
+the same mapper configuration as Fig 13 (`transit_dy = 5 µm`, `TweezerMapper._transit_legs`:
+lift → travel → drop per relocation). Both figures now come from the same nine-segment
+schedule; the previous Fig 7 compile (direct move) is kept as
+`figures/branch_anatomy_data_v1_direct.json`.
+
+| quantity | old (Fig 7 / Table 3 / App E) | new (= Fig 13 / Table 5) |
+|---|---|---|
+| segments | 5 | **9** (ev · lift · travel · drop · CZ · lift · travel · drop · ev) |
+| τ | 2.085 µs | 2.085 µs |
+| move legs | 52.4 / 52.3 µs | **57.07 / 57.07 µs** each = 2.344 (lift, +5 µm) + 52.381 (travel, 100 µm) + 2.344 (drop) |
+| CZ | 696 ns | 696 ns |
+| total | 110.5 = 5.0 ev + 104.8 move + 0.70 gate | **119.83 = 5.0 ev + 114.14 move + 0.70 gate** (transport 95.2%) |
+| Fig 7 label "AOD moves pair (52 µs)" | | "(57.1 µs)" |
+| R_CZ | 2.5 µm | 2.5 µm |
+| NSR branch (Fig 13) | 5.000 µs | 5.000 µs |
+
+Fig 13 itself is unchanged (its compile already had the lane); its caption's "same
+schedule, different accounting" must go — see TEXT_CHANGES.md.
+
+## Figure 12 — `tests/build_F_cycle.py`, 2026-09-05
+"the window schedule (see fig:schedules)" → "the window schedule (Figure 13)". Box label
+"~1–10 ms" for the operation window kept **pending Fred's answer** (App F says the window is
+"at most hundreds of microseconds"; the branch here is 120 µs, so a 1–10 ms operation phase
+means many branches per cycle, or the label is wrong).
+
+## Figure 15(b) / Table 6 — `tests/compile_curves.py` (no change), checks from `figures/sec6_compile_timing.json`
+
+| quantity | value |
+|---|---|
+| n | 10 / 30 / 100 / 300 / 1000 |
+| source compile (s) | 0.0165 / 0.0751 / 0.634 / 5.654 / 59.61 |
+| PSR branch (ms) | 0.544 / 1.760 / 6.483 / 27.03 / 174.97 |
+| NSR branch (ms) | 0.00229 / 0.00579 / 0.01733 / 0.05323 / 0.19106 |
+| ratio at n = 1000, unrounded | **915.7×** (the figure prints "916×"); Table 6's rounded 175 / 0.19 = 921 |
+| check 1 | 174.97 ms / 59.61 s = **0.293%** (6.3's "0.3%" ✓); 0.191 ms / 59.61 s = **3.2·10⁻⁴ %** ✓ |
+| check 5, exponents (log-log fit, all 5 points) | source **1.80**, PSR **1.24**, NSR **0.96** (text 1.8 / 1.3 / 1.0 ✓ at one decimal: PSR 1.24 rounds to 1.2, not 1.3; n ≥ 100 fits give 1.97 / 1.43 / 1.04) |
+| platform string | `macOS-26.5-arm64-arm-64bit` is real: `platform.platform()` recorded in `F_scale_data.json` meta |
+
+Table 6 fix so the annotation and the table agree at displayed precision: print NSR at
+n = 1000 as **0.191 ms** (then 175 / 0.191 = 916) — or quote the ratio as "≈ 9×10²".
+
+## Figure 6 (lowering stack) — no builder in this repo
+The figure is authored in the paper source (TikZ/tex). Handover default applied: **drop the
+instance strip**, let Figs 7 and 13 carry the instance; Fred confirms.
+
+## Figure 11 (P1-3) — attribution
+Not a plot task. The figure file needs the "reproduced from [ref] (CC BY 4.0)" text once
+the bib entry exists; if it is the lab's own apparatus figure it may need replacing with a
+schematic for anonymity. Fred's call.

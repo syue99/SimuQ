@@ -61,9 +61,12 @@ def extract():
     from awg_compile import ChirpTone, SampledTone, _fallback_waveform
     from physical_walkthrough import build_schedule
 
-    # Simplification for this figure: atoms always ride the AOD, so moves
-    # are direct (no lift/drop transit legs).
-    schedule, mapper, meta = build_schedule(verbose=False, transit_dy=None)
+    # 2026-09-05 (owner): the real schedule routes the pair through the 5 µm
+    # transit lane (lift → travel → drop per relocation), the same compile as
+    # App F's waveform figure; the direct single-leg move was a simplification.
+    import physical_walkthrough as pw
+    schedule, mapper, meta = build_schedule(verbose=False,
+                                            transit_dy=pw.TRANSIT_DY_UM)
     rows = schedule._Sched__schedule
 
     def entries(ch):
@@ -186,7 +189,50 @@ def extract():
     aods = [e for e in mapper.ledger.entries if e.op_type == "aod"]
     b_us = [b * 1e-3 for b in bounds]
     src_terms = "Ω·Xa Ω·Xb θJ·ZaZb (src)"
+    # segment structure: ev | out-legs… | CZ | back-legs… | ev.  With the transit
+    # lane each relocation is three ledger rows (lift, travel, drop); the Time
+    # column keeps ONE band per relocation ("bands").
+    n_seg = len(bounds) - 1
+    k_cz = next(i for i in range(n_seg)
+                if abs(bounds[i] - cz["t0"]) < 1.0 and abs(bounds[i + 1] - cz["t1"]) < 1.0)
+    legs_out = list(range(1, k_cz)); legs_back = list(range(k_cz + 1, n_seg - 1))
+    bands = [bounds[0], bounds[1], bounds[k_cz], bounds[k_cz + 1], bounds[n_seg - 1], bounds[n_seg]]
+    dy = getattr(mapper, "transit_dy", None)
+
+    def leg_label(j, nlegs, dest):
+        if nlegs == 1:
+            return f"a,b→{dest}"
+        return [f"a,b lift +{dy:g} µm (lane)", f"a,b→{dest} (lane)", "a,b drop onto row"][j] \
+            if nlegs == 3 else f"a,b→{dest} leg {j + 1}/{nlegs}"
+
     ledger_rows = [
+        {"stage": "1", "seg": "seg0", "sem": "[0,τ)",
+         "wall": [b_us[0], b_us[1]], "terms": src_terms,
+         "frame": "–", "transport": "–", "ins": "–"}]
+    for j, i in enumerate(legs_out):
+        ledger_rows.append({"stage": "2", "seg": f"seg{i}", "sem": "–",
+                            "wall": [b_us[i], b_us[i + 1]], "terms": "–", "frame": "–",
+                            "transport": leg_label(j, len(legs_out), aods[0].zone[0]), "ins": "–"})
+    ledger_rows.append(
+        {"stage": "3", "seg": f"seg{k_cz}", "sem": "[0,π/4)",
+         "wall": [b_us[k_cz], b_us[k_cz + 1]],
+         "terms": "s·ZaZb (insertion)",
+         # The ledger stores the frame update as phi, the coefficient of Z in
+         # e^{-i·phi·Z} (cz_kick_decomposition).  This row prints an Rz ANGLE,
+         # and appendix eq:zz-lower fixes Rz(alpha) = e^{-i·alpha·Z/2}, so the
+         # printed angle is alpha = 2·phi = s·0.5π.
+         "frame": f"Rz(s·{2 * frame['phase'] / np.pi:.2g}π) a,b",
+         "transport": "–", "ins": "INS"})
+    for j, i in enumerate(legs_back):
+        dest = {"interaction": "int"}.get(aods[-1].zone[0], aods[-1].zone[0])
+        ledger_rows.append({"stage": "2", "seg": f"seg{i}", "sem": "–",
+                            "wall": [b_us[i], b_us[i + 1]], "terms": "–", "frame": "–",
+                            "transport": leg_label(j, len(legs_back), dest), "ins": "–"})
+    ledger_rows.append(
+        {"stage": "4", "seg": f"seg{n_seg - 1}", "sem": "[τ,T)",
+         "wall": [b_us[n_seg - 1], b_us[n_seg]], "terms": src_terms,
+         "frame": "–", "transport": "–", "ins": "–"})
+    _old_rows = [
         {"stage": "1", "seg": "seg0", "sem": "[0,τ)",
          "wall": [b_us[0], b_us[1]], "terms": src_terms,
          "frame": "–", "transport": "–", "ins": "–"},
@@ -220,9 +266,9 @@ def extract():
                    (np.abs(p.amplitude or 0.0) > 1e-12)
                    for e0, e1, p in entries(ch))
 
-    ev_w = [(bounds[0], bounds[1]), (bounds[4], bounds[5])]
-    mv_w = [(bounds[1], bounds[2]), (bounds[3], bounds[4])]
-    cz_w = [(bounds[2], bounds[3])]
+    ev_w = [(bands[0], bands[1]), (bands[4], bands[5])]
+    mv_w = [(bands[1], bands[2]), (bands[3], bands[4])]
+    cz_w = [(bands[2], bands[3])]
 
     def stages_of(ch):
         return [any(active(ch, lo, hi) for lo, hi in ev_w),
@@ -245,6 +291,8 @@ def extract():
         "meta": {k: (list(v) if isinstance(v, tuple) else v)
                  for k, v in meta.items()},
         "bounds_ns": bounds,
+        "bands_ns": bands,
+        "transit_dy_um": dy,
         "x_tones": tone_traces(pc.TRANSPORT_AOD_X),
         "y_tones": tone_traces(pc.TRANSPORT_AOD_Y),
         "dressing": drive_blocks(pc.DRESSING_AOM),
@@ -297,7 +345,7 @@ def render(data):
     from matplotlib.patches import Rectangle, Polygon
 
     meta = data["meta"]
-    bounds = data["bounds_ns"]
+    bounds = data.get("bands_ns", data["bounds_ns"])   # one band per relocation
     cz = data["cz"]
 
     # compact layout, same canvas as the original working anatomy:
@@ -403,7 +451,7 @@ def render(data):
                  arrowprops=dict(arrowstyle="-|>", color=C_AOD, lw=0.85,
                                  ls="--", mutation_scale=9, alpha=0.7))
     badge(ax2, -28.8, 0.0, "2", C_AOD)
-    ax2.text(-26.6, 0.0, f"AOD moves pair ({move_us:.0f} μs)",
+    ax2.text(-26.6, 0.0, f"AOD moves pair ({move_us:.1f} μs)",     # the ledger value (P0-2)
              fontsize=6.2, color=C_AOD, ha="left", va="center")
 
     ax3 = fig.add_subplot(gsA[2, 0])
@@ -594,22 +642,26 @@ def render(data):
             return f"move {r['transport']}"
         return f"ev{r['sem']}: {r['terms']}"
 
-    y = 0.83
+    nrow = len(data["ledger_rows"])
+    step = 0.115 if nrow <= 5 else min(0.115, 0.76 / (nrow + 1.3))
+    if nrow > 5:
+        mono["fontsize"] = 4.3
+    y = 0.855 if nrow > 5 else 0.83
     axL.text(0.075, y, "seg  wall clock (µs)  content", family="monospace",
              fontsize=4.2, va="center", color="#777777")
-    y -= 0.115
+    y -= step
     for r in data["ledger_rows"]:
         col = stage_color[r["stage"]]
         if r["ins"] == "INS":
-            axL.add_patch(plt.Rectangle((0.008, y - 0.048), 0.987, 0.096,
+            axL.add_patch(plt.Rectangle((0.008, y - 0.42 * step), 0.987, 0.84 * step,
                                         fc=C_DIGITAL, alpha=0.07,
                                         ec="none"))
-        badge(axL, 0.033, y, r["stage"], col, fs=4.4)
+        badge(axL, 0.033, y, r["stage"], col, fs=4.4 if nrow <= 5 else 4.0)
         axL.text(0.075, y,
-                 f"{r['seg'][-1]}  [{r['wall'][0]:6.1f},{r['wall'][1]:6.1f}]"
+                 f"{r['seg'][3:]:>2s}  [{r['wall'][0]:6.1f},{r['wall'][1]:6.1f}]"
                  f"  {content(r)}",
                  color=(C_DIGITAL if r["ins"] == "INS" else C_ATOM), **mono)
-        y -= 0.115
+        y -= step
     y -= 0.010
     axL.text(0.075, y,
              f"total {b_us[-1]:.1f} µs = "

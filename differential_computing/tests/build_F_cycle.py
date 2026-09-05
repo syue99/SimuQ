@@ -242,7 +242,7 @@ def render():
                         lw=1.3, solid_capstyle="butt", zorder=6)
             x += w + 0.07
     ax.text(0.5 * (tx0 + tx1), ty0 - 0.06,
-            "the window schedule (see fig:schedules)", ha="center", va="top",
+            "the window schedule (Figure 13)", ha="center", va="top",
             fontsize=6.3, color=C_FAST)
     for xw, xt in ((ox0, tx0), (ox1, tx1)):
         ax.add_artist(ConnectionPatch((xw, y_fast - H), (xt, ty1),

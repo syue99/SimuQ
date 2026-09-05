@@ -163,5 +163,49 @@ it is Fig. 14 and App. G that change, not Fig. 10.
 All quoted numbers reproduce (42.3%, 88.3%, 1.07×, 1.26×, 41 → 6 ties; 92.6 / 96.0%,
 1.39× / 2.17×, 27.7 / 94.3%, 72.3% → 92.6% on 20.9%). No change.
 
-## Pending, not yet regenerated
-Figs 7/13 (P0-2), Fig 12 (P0-3), Fig 15b (P0-6), Fig 6 (P0-7).
+## From Figures 7 and 13 (P0-2) — 2026-09-05, one compile (5 µm transit lane)
+
+### Fig. 7 caption
+Legs 52.4 / 52.3 µs → **57.1 µs each (lift 2.34 + travel 52.38 + drop 2.34)**; total
+110.5 → **119.8 µs = 5.0 ev + 114.1 move + 0.70 gate**. Say the pair is routed through a
+5 µm transit lane so the moving tweezers never sweep parked rows.
+
+### Table 3 (two rows)
+"legs 52.4 / 52.3 µs" → 57.1 / 57.1 µs; "total 110.5 = 5.0 + 104.8 + 0.70" → 119.8 = 5.0 +
+114.1 + 0.70. τ = 2.085 µs, CZ 696 ns, R_CZ = 2.5 µm unchanged.
+
+### App. E "transport leg" paragraph
+Derive 57.07 = 2.344 + 52.381 + 2.344: each relocation is three minimum-jerk legs at the
+4 µm/µs cap (lift +5 µm, travel 100 µm, drop), each a ledger row; the episode is
+57.07 + 0.696 + 57.07 = 114.8 µs, plus 5.0 µs evolution = 119.8 µs.
+
+### Fig. 13 caption
+Delete "transit lanes staged per leg here; Figure 7's ledger sums the same episode
+single-leg — same schedule, different accounting". Both figures are the same compile;
+119.84 µs, 114.14 µs (95.2%) transport+gate, NSR 5.000 µs stand.
+
+### Table 5 (last row)
+Unchanged (119.84 / 114.14 / 95.2%); now equal to Fig 7's ledger.
+
+## From Figure 12 (P0-3)
+"(see fig:schedules)" → "(Figure 13)" — done in the figure. **Question for Fred:** the
+operation-window box says "~1–10 ms" while App. F says the window is at most hundreds of
+microseconds. The branch in Figs 7/13 is 120 µs.
+
+## From Figure 15(b) / Table 6 (P0-6)
+Annotation "916× cheaper" is the unrounded 174.97 / 0.19106. Table 6: print the NSR branch
+at n = 1000 as **0.191 ms** so 175 / 0.191 = 916 matches (or quote "≈ 9×10²"). Exponents:
+PSR's log-log slope over the five points is 1.24; Table 6 says 1.3 — say 1.2, or state the
+fit range (n ≥ 100 gives 1.43). Platform footnote string is real; keep.
+
+## Figure 6 (P0-7)
+Default applied per handover: drop the instance strip (it is unreadable at column width;
+Figs 7 and 13 carry the instance). If Fred prefers the strip, it needs ≥ 7 pt in a
+two-column float — his TikZ, not a builder here.
+
+## Figure 11 (P1-3)
+Needs "reproduced from [bib] (CC BY 4.0)" in the figure file once the entry exists; if it
+is the lab's own apparatus, anonymity may require a schematic instead.
+
+## Pending
+P1-1 (FD ε-sweep at three operating points): Fred's data run; formatting only, on request.
