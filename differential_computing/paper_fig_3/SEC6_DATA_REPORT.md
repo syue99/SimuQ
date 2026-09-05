@@ -1,7 +1,9 @@
-# SEC6_DATA_REPORT — data + figure handover (6-Evaluation.tex v11; F6 → v2 2026-09-04)
+# SEC6_DATA_REPORT — data + figure handover (6-Evaluation.tex v11; v2 2026-09-05)
 
-2026-08-26 (F6 section regenerated 2026-09-04 under the P0-0 setpoint rule; see
-`../NUMBERS.md`, `../DELTA_NOISE.md`, `../TEXT_CHANGES.md`). Emulator = QuTiP under the Appendix C.3 device model, measured
+2026-08-26; v2 2026-09-04/05: every P0 item of the plot-redo handover applied (F6,
+F_loop, F_select/F_regimes, fig1, F_cycle, branch_anatomy). Old → new numbers in
+`../NUMBERS.md`, text lines in `../TEXT_CHANGES.md`, the setpoint rule in
+`../DELTA_NOISE.md`, the C_PSR factor-2 audit in `../SELECTOR_FACTOR2.md`. Emulator = QuTiP under the Appendix C.3 device model, measured
 against ∇C_device (the noisy landscape). No rescale / corrected-estimator
 series anywhere. Deliverables: `figs/F6.pdf`, `figs/F_loop.pdf`,
 `figs/F_select.pdf`, `figs/F_scale_app.pdf` (this folder), this report.
@@ -265,6 +267,24 @@ rejected, **never resampled** — they consume budget and contribute 0
 with the L1 weight unchanged. The (a) variant renormalises at compile
 time instead; the two agree at the shared truncated target (§A above).
 
+### E6. One compile for Fig 7 and Fig 13 (v2, P0-2)
+`figures/branch_anatomy_data.json` is now extracted with the 5 µm transit lane
+(`transit_dy = 5`, owner's ruling: the lane is the real schedule), the same
+mapper configuration as `F_waveform_meta.json`; both give the nine-segment
+schedule 119.834 µs (τ 2.085 · lift 2.344 · travel 52.381 · drop 2.344 · CZ
+0.696 · lift · travel · drop · 2.915), transport 114.14 µs = 95.2%, NSR lane
+5.000 µs. Fig 7 is written to `figures/branch_anatomy.{pdf,png}` only. The
+direct-move extraction (110.46 µs) is kept as `branch_anatomy_data_v1_direct.json`.
+
+### E7. Other v2 figure fixes
+- fig1 (paper Fig 2): setpoint draws on the secants, analytic cone, C_device
+  notation, no "T4", illustration-only (no numeric annotations); numbers in
+  `../NUMBERS.md`. Written to `figures/`, `paper_fig_2/`, `figs/`.
+- F_cycle (paper Fig 12): "(see fig:schedules)" → "(Figure 13)"; the 1–10 ms
+  window label is an open question for the text owner.
+- compile_curves (paper Fig 15b): unchanged; 916× is unrounded, Table 6 should
+  print 0.191 ms.
+
 ### E5. Run ids for tab:strategies rows
 - "compile per branch" row (source / +PSR / +NSR / FD): cache
   `figures/F_scale_data.json` (n=10,100,500,1000 from the original
@@ -277,14 +297,18 @@ time instead; the two agree at the shared truncated target (§A above).
 
 --------------------------------------------------------------------
 ## Deliverable checklist
-Format amendments (owner request, 2026-08-26): F6 and F_select are also
-written to `paper_fig_2/` (the paper's figure folder); F_select keeps
-the executions-to-target colorbar of the original format (gray
-half-decade cost fill + winner washes) on the new balanced plane; the F6
-legend is set at 5.8 pt (below the ground-rule 7 pt minimum, per owner).
+Format (v2, 2026-09-05): F6, F_loop, F_select and fig1 are written to
+`paper_fig_2/` and `figs/`; F_select's colour is the log₁₀(N_NSR/N_PSR)
+diverging map (the executions-to-target gray fill is gone), thin black
+measured crossing, orange dashed selector; F_regimes uses the same styles.
+The F6 legend is 5.8 pt (below the ground-rule 7 pt minimum, per owner).
 
-- [x] figs/F6.pdf (+png) — single column, inset V, no title
-- [x] figs/F_loop.pdf (+png)
-- [x] figs/F_select.pdf (+png)
-- [x] figs/F_scale_app.pdf (+png)
-- [x] SEC6_DATA_REPORT.md (this file)
+- [x] figs/F6.pdf (+png) — v2: θ₀ = 1.757, δ on every estimator
+- [x] figs/F_loop.pdf (+png) — v2: T = 2.5, SGD schedule, tail-averaged iterate
+- [x] figs/F_select.pdf (+png), figs/F_regimes.pdf (+png) — v2 log-ratio plane
+- [x] figs/fig1_intro_trap.pdf (+png), figs/F_cycle.pdf (+png), figs/F_waveform.pdf (+png)
+- [x] figures/branch_anatomy.pdf (+png) — v2 transit-lane compile
+- [x] figs/F_scale_app.pdf (+png), figs/compile_curves.pdf (+png) — unchanged
+- [x] SEC6_DATA_REPORT.md (this file); ../NUMBERS.md, ../TEXT_CHANGES.md,
+      ../DELTA_NOISE.md, ../SELECTOR_FACTOR2.md
+- [x] figs/F_epssweep.pdf (+png) — P1-1, shot-free bias floors at T = 1 / 2.5 / 5 µs

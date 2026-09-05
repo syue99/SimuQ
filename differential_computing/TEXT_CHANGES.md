@@ -207,5 +207,26 @@ two-column float — his TikZ, not a builder here.
 Needs "reproduced from [bib] (CC BY 4.0)" in the figure file once the entry exists; if it
 is the lab's own apparatus, anonymity may require a schematic instead.
 
+## New appendix figure (P1-1) — `F_epssweep` — caption draft
+
+> **FD's step window at three landscape sharpnesses.** Bias floor of the central difference,
+> RMSE/|∇C_device| as N → ∞, versus the step ε for the 2-qubit TFIM coupling at T = 1, 2.5
+> and 5 µs (T/T₂* = 0.15, setpoint error r = 0.02 on both probes). The lower edge of the
+> usable window (shaded, RMSE ≤ 30%) sits at ε ≈ √2·r/0.3 ≈ 0.1 in every panel: it is set by
+> the setpoint error. The upper edge closes as the landscape sharpens (ε ≈ 2.1, 0.75, 0.38)
+> and the best achievable error rises from 5% to 15%, as (|f‴|/|f′|)^{1/3}·r^{2/3}
+> (App. B.6.4, which reproduces the curves to within 10%). × marks steps at which ≥ 20% of
+> setpoint draws flip the sign. The shift rules have no step: PSR's only floor is the
+> shared-draw displacement |f″|r (0.3 / 1.3 / 4.9% here), NSR's is zero.
+
+Suggested conclusion sentence for App. C.3: "Fig. 8's operating point is not a singleton:
+on every landscape the FD window is bounded below by r and above by the landscape's
+sharpness, and even its best step leaves 5–15% error, while the shift rules need no step."
+
+C.3's "was selected by scanning … for the point maximizing FD's predicted floor" should
+describe the new rule (Fig 8: the C″ = 0 point in the M = 5 window; this figure: the
+median-floor steep point per T).
+
 ## Pending
-P1-1 (FD ε-sweep at three operating points): Fred's data run; formatting only, on request.
+Nothing on the plot side. Open questions for Fred are listed in the sections above
+(Fig 12 window label, Fig 6 strip, Fig 11 attribution, Table 6 0.191 ms).

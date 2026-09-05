@@ -142,6 +142,9 @@ def main():
     cross = [brentq(C2f, tt[i], tt[i + 1]) for i in range(len(tt) - 1) if c2[i] * c2[i + 1] < 0]
     assert cross, "no C''=0 crossing inside the M=%d window %s" % (M_TEXT, win)
     th0 = float(max(cross, key=lambda t: abs((C(t + h) - C(t - h)) / (2 * h))))
+    if os.environ.get("F6_TH0"):            # P1-1 ε-sweep: run the same code at another θ0
+        th0 = float(os.environ["F6_TH0"])
+        print(f"F6_TH0 override: θ0 = {th0:.4f} (the paper's rule would give {cross})")
     grad_true = float((C(th0 + h) - C(th0 - h)) / (2 * h))       # TARGET ∇C_noisy (exact)
     C2 = float((C(th0 + 1e-2) - 2 * C(th0) + C(th0 - 1e-2)) / 1e-4)
     _, A = tangent_hamiltonian(H, var, th0); K = bandwidth_K(A, T)

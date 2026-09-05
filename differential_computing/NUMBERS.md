@@ -303,3 +303,30 @@ instance strip**, let Figs 7 and 13 carry the instance; Fred confirms.
 Not a plot task. The figure file needs the "reproduced from [ref] (CC BY 4.0)" text once
 the bib entry exists; if it is the lab's own apparatus figure it may need replacing with a
 schematic for anonymity. Fred's call.
+
+## New appendix figure — FD ε-sweep at three operating points (P1-1) — `tests/build_F_epssweep.py`, 2026-09-05
+
+Owner's design: **shot-free** (N → ∞) bias floors only, so the shot budget never enters;
+"well-conditioned" = a wide usable ε window. Three panels at T = 1, 2.5, 5 µs with
+T/T₂* = 0.15 held (the window's upper edge scales with the landscape's frequency content,
+∝ 1/T; within one landscape ε* moves only 0.19–0.35). θ₀ per panel = the median-FD-floor
+point among steep points (|∇C| ≥ ½ max), no constraint on f″. Per step: 2000 setpoint
+draws (two per estimate, θ ± ε/2), 30 steps in [0.02, 3.0]; × where ≥ 20% of draws flip
+the sign; shaded = RMSE ≤ 30% of |∇C|. Cache `figures/F_epssweep_data.json`; figure
+`F_epssweep.{pdf,png}` in `figures/`, `paper_fig_2/`, `paper_fig_3/figs/`.
+
+| panel | T / T₂* (µs) | θ₀ | f′ | f″ | f‴ | \|f‴\|/\|f′\| | ε* (B.6.4) | FD floor (B.6.4) | usable window | PSR floor \|f″\|r | NSR floor |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| (a) well | 1 / 6.7 | 1.208 | +0.528 | -0.07 | -0.9 | 2 | 0.63 (0.65) | 5.0% (5.3%) | [0.11, 2.12] = 1.28 dec | 0.3% | none |
+| (b) intermediate | 2.5 / 16.7 | 2.812 | +0.683 | -0.44 | -9.4 | 14 | 0.32 (0.33) | 9.6% (10.6%) | [0.09, 0.75] = 0.90 dec | 1.3% | none |
+| (c) ill | 5 / 33.3 | 2.248 | +1.486 | -3.62 | -74.4 | 50 | 0.22 (0.21) | 14.8% (16.3%) | [0.09, 0.38] = 0.60 dec | 4.9% | none |
+
+Reading: the window's **lower** edge is the same in all three panels (ε ≈ 0.1 = √2·r/0.3;
+set by r alone), the **upper** edge closes with sharpness (2.1 → 0.75 → 0.38), and the
+floor rises 5% → 10% → 15% (∝ (|f‴|/|f′|)^{1/3}, so it is r that keeps FD's best step
+above ~5% everywhere). B.6.4 matches the Monte-Carlo curve to ≤ 10% at all three points
+(the common-mode term |f″|r/√2 is small at these θ₀). PSR's shot-free floor is its shared-
+draw displacement (0.3 / 1.3 / 4.9%); NSR has none.
+
+Deviation from the handover's P1-1 recipe: panels vary T (not a fixed T with three θ₀),
+and the curves are shot-free instead of N = 10⁴ — both owner's rulings.
