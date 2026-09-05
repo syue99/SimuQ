@@ -4,10 +4,11 @@ at three operating points of increasing landscape sharpness.  SHOT-FREE (N → �
 compares bias floors only, so the shot budget never enters.
 
 Per panel (T = 1, 2.5, 5 µs; T/T₂* = 0.15 held; same 2q TFIM, same device model r = 0.02):
-  θ0    the C'' = 0 crossing nearest the landscape's steepest point, so the shared-draw
-        displacement |f''|·r is ≈ 0 in every panel and the panels differ ONLY in sharpness
-        (owner: match |f''|δ, vary the step scale).  The landscape itself is drawn above
-        each sweep; T and θ0 are not printed on the figure (caption / data note only).
+  θ0    a generic point (not an inflection): a random steep point, fixed seed, whose
+        shared-draw displacement |f''|·r/|∇C| lies in PSR_BAND = 2–5%, so PSR's floor is of
+        the same order in every panel and the panels differ in the step scale (owner,
+        2026-09-05).  The landscape itself is drawn above each sweep; T and θ0 are not
+        printed on the figure (caption / data note only).
   FD    RMSE(ε)/|∇C| with the paper's probes θ ± ε/2 each carrying its own setpoint draw
         (per-change rule, 2 draws per estimate), 2000 draws per step, 30 steps in [0.02, 3.0].
         × = steps where ≥ 20% of draws give the wrong sign.  Shaded = usable window
@@ -68,20 +69,29 @@ def landscape(T):
     return g, v, d1, d2, d3
 
 
+PSR_BAND = (0.02, 0.05)                      # |f''| r / |f'| band for the operating point
+PICK_SEED = 11
+
+
 def pick_theta(g, d1, d2, d3):
-    """The C'' = 0 crossing (θ ∈ [0.5, 3]) with the largest |∇C|: the steepest point of the
-    landscape, where the shared-draw displacement vanishes.  Returns (θ0, predicted floor)."""
+    """A generic operating point (owner, 2026-09-05: NOT an inflection): a random steep point
+    (|∇C| ≥ ½ max, θ ∈ [0.5, 3]) whose shared-draw displacement |f''|·r/|∇C| lies in PSR_BAND,
+    so PSR's floor is of the same order in every panel, and whose sharpness |f'''|/|f'| is
+    typical of its landscape (middle quintile over the steep points).  Fixed seed.
+    Returns (θ0, predicted FD floor)."""
     eps = np.geomspace(0.01, 2.0, 500)
-    cand = []
-    for i in range(len(g) - 1):
-        if 0.5 <= g[i] <= 3.0 and d2[i] * d2[i + 1] < 0:
-            t = g[i] - d2[i] * (g[i + 1] - g[i]) / (d2[i + 1] - d2[i])
-            cand.append((abs(np.interp(t, g, d1)), t))
-    _, th0 = max(cand)
-    a, b, c = (float(np.interp(th0, g, d)) for d in (d1, d2, d3))
+    m = (g >= 0.5) & (g <= 3.0) & (np.abs(d1) >= 0.5 * np.abs(d1).max())
+    disp = np.abs(d2) * R_CTRL / np.abs(d1)
+    sharp = np.abs(d3) / np.abs(d1)
+    lo, hi = np.percentile(sharp[m], [40, 60])          # typical sharpness for THIS landscape
+    ok = m & (disp >= PSR_BAND[0]) & (disp <= PSR_BAND[1]) & (sharp >= lo) & (sharp <= hi)
+    idx = np.flatnonzero(ok)
+    assert idx.size, "no steep point with the PSR displacement in band"
+    i = int(np.random.default_rng(PICK_SEED).choice(idx))
+    a, b, c = float(d1[i]), float(d2[i]), float(d3[i])
     fd = np.sqrt((np.sqrt(2) * R_CTRL * abs(a) / eps) ** 2 + (abs(b) * R_CTRL / np.sqrt(2)) ** 2
                  + (eps ** 2 * abs(c) / 24) ** 2)
-    return float(th0), float(fd.min() / abs(a))
+    return float(g[i]), float(fd.min() / abs(a))
 
 
 def panel(T, rng):
@@ -162,7 +172,9 @@ def render(d):
         ax.axhline(d["win"], color="#888888", lw=0.7, ls="--")
         ax.text(p["eps_star"] * 1.1, 0.9, rf"$\varepsilon^*={p['eps_star']:.2f}$", color=C_FD,
                 fontsize=6, va="top")
-        ax.text(0.021, 0.0068, "PSR: no floor at $C''=0$", color=C_PSR, fontsize=5.8, va="bottom")
+        ax.axhline(p["psr_disp_rel"], color=C_PSR, lw=1.3)
+        ax.text(0.021, p["psr_disp_rel"] * 1.15, r"PSR floor $|f''|\,r$ (shared draw)", color=C_PSR,
+                fontsize=5.8, va="bottom")
         ax.text(0.021, 0.0045, "NSR: no floor", color=C_NSR, fontsize=5.8, va="bottom")
         ax.set_xlabel(r"FD step $\varepsilon$", fontsize=7.5, labelpad=1)
         ax.set_xlim(0.018, 3.3); ax.set_ylim(0.004, 1.5)
@@ -171,7 +183,7 @@ def render(d):
         if k > 0:
             ax.tick_params(labelleft=False)
     axs[1, 0].set_ylabel(r"FD bias floor RMSE$/|\nabla C|$ ($N\to\infty$)", fontsize=7.5)
-    axs[1, 2].text(0.97, 0.40, rf"$r={d['r']}$; shaded: RMSE $\leq$ {int(100 * d['win'])}%",
+    axs[1, 2].text(0.97, 0.31, rf"$r={d['r']}$; shaded: RMSE $\leq$ {int(100 * d['win'])}%",
                    transform=axs[1, 2].transAxes, fontsize=6, va="top", ha="right", color="#52514e")
     from matplotlib.lines import Line2D
     axs[0, 2].legend(handles=[Line2D([], [], color=C_PSR, lw=2.2, label="shift-rule tangent"),

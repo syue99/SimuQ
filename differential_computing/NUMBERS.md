@@ -306,27 +306,29 @@ schematic for anonymity. Fred's call.
 
 ## New appendix figure — FD step window at three landscapes (P1-1) — `tests/build_F_epssweep.py`, 2026-09-05 (final)
 
-Owner's design: three **landscapes** of increasing sharpness, |f″|·r matched (≈ 0: each θ₀
-is the C″ = 0 crossing nearest the landscape's steepest point), so the panels differ only
-in the step scale; the landscape is drawn above each sweep and no parameter (T, θ₀) is
-printed on the figure. Curves are **shot-free** (N → ∞) bias floors: two setpoint draws per
-estimate (θ ± ε/2), 2000 draws per step, 30 steps in [0.02, 3.0]; × where ≥ 20% of draws
-flip the sign; shaded = RMSE ≤ 30% of |∇C|. Sharpness was dialed through the evolution
-time at fixed T/T₂* = 0.15 (bandwidth Ω̄ = 2T = 2, 5, 10), same 2q TFIM, same device model.
-Cache `figures/F_epssweep_data.json`; figure `F_epssweep.{pdf,png}` in `figures/`,
-`paper_fig_2/`, `paper_fig_3/figs/`.
+Owner's design: three **landscapes** of increasing sharpness (bandwidth Ω̄ = 2T = 2, 5, 10 at
+fixed T/T₂* = 0.15; same 2q TFIM, same device model), each at a **generic** operating point
+(not an inflection): a random steep point (|∇C| ≥ ½ max, fixed seed 11) whose shared-draw
+displacement |f″|·r/|∇C| lies in 2–5% and whose sharpness |f‴|/|f′| is typical of its
+landscape (middle quintile). So PSR's floor is of the same order in every panel and only
+the step scale moves. The landscape is drawn above each sweep; no parameter (T, θ₀) is
+printed on the figure. Curves are **shot-free** (N → ∞): two setpoint draws per estimate
+(θ ± ε/2), 2000 draws per step, 30 steps in [0.02, 3.0]; × where ≥ 20% of draws flip the
+sign; shaded = RMSE ≤ 30% of |∇C|. Cache `figures/F_epssweep_data.json`; figure
+`F_epssweep.{pdf,png}` in `figures/`, `paper_fig_2/`, `paper_fig_3/figs/`.
 
 | panel | T / T₂* (µs) | θ₀ | f′ | f″ | f‴ | \|f‴\|/\|f′\| | ε* (B.6.4) | FD floor (B.6.4) | usable window | PSR floor \|f″\|r | NSR floor |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| (a) healthy | 1 / 6.7 | 1.135 | +0.530 | -0.00 | -0.9 | 2 | 0.63 (0.65) | 5.0% (5.4%) | [0.11, 2.12] = 1.28 dec | 0.0% | none |
-| (b) intermediate | 2.5 / 16.7 | 0.957 | +0.927 | +0.00 | -5.3 | 6 | 0.45 (0.44) | 7.3% (7.9%) | [0.09, 1.06] = 1.05 dec | 0.0% | none |
-| (c) ill | 5 / 33.3 | 1.237 | +1.827 | +0.03 | -46.9 | 26 | 0.27 (0.27) | 11.4% (13.0%) | [0.09, 0.53] = 0.75 dec | 0.0% | none |
+| (a) healthy | 1 / 6.7 | 1.760 | +0.370 | -0.45 | -0.6 | 2 | 0.75 (0.66) | 4.6% (5.2%) | [0.11, 2.52] = 1.35 dec | 2.5% | none |
+| (b) intermediate | 2.5 / 16.7 | 1.192 | +0.766 | -1.39 | -5.9 | 8 | 0.38 (0.40) | 8.4% (8.7%) | [0.09, 0.90] = 0.98 dec | 3.6% | none |
+| (c) ill | 5 / 33.3 | 1.712 | -1.380 | -3.06 | +66.3 | 48 | 0.22 (0.22) | 14.5% (16.1%) | [0.09, 0.38] = 0.60 dec | 4.4% | none |
 
 Reading: the window's **lower** edge is the same in all three panels (ε ≈ 0.1 = √2·r/0.3,
-set by r alone); the **upper** edge closes with sharpness (2.1 → 1.06 → 0.53) and the floor
-rises 5% → 7% → 11% (∝ (|f‴|/|f′|)^{1/3}·r^{2/3}). B.6.4 reproduces the Monte-Carlo curves
-to ≤ 5% at all three points (f″ = 0 there, so the common-mode term is absent). PSR's
-shot-free floor is its shared-draw displacement, ≈ 0 at these points; NSR has none.
+set by r alone); the **upper** edge closes with sharpness (2.5 → 0.90 → 0.38) and the floor
+rises 4.6% → 8.4% → 14.5% (∝ (|f‴|/|f′|)^{1/3}·r^{2/3}). B.6.4 reproduces the Monte-Carlo
+curves to ≤ 12%. PSR's shot-free floor |f″|r is 2.5 / 3.6 / 4.4%, below FD's best step in
+every panel (by 1.8× / 2.3× / 3.3×); NSR has none.
 
 Deviations from the handover's P1-1 recipe (owner's rulings): landscapes vary (via T at
-fixed T/T₂*) instead of three θ₀ at one T; shot-free instead of N = 10⁴; θ₀ matched on f″.
+fixed T/T₂*) instead of three θ₀ at one T; shot-free instead of N = 10⁴; generic θ₀ with
+matched PSR displacement instead of the FD-floor percentile scan.

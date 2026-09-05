@@ -214,20 +214,21 @@ is the lab's own apparatus, anonymity may require a schematic instead.
 > and the finite-difference secant at its best step ε* (orange); the shaded band is the
 > usable step window. Bottom: the bias floor of the central difference as N → ∞,
 > RMSE/|∇C_device| versus ε, with the setpoint error r = 0.02 on both probes. The three
-> landscapes have the same |f″|·r (≈ 0) and differ only in sharpness (bandwidth Ω̄ = 2, 5,
-> 10). The window's lower edge, ε ≈ √2·r/0.3 ≈ 0.1, is the same everywhere: it is set by
-> the setpoint error. Its upper edge closes as the landscape sharpens (2.1, 1.1, 0.53), and
-> the best achievable error rises from 5% to 11% as (|f‴|/|f′|)^{1/3}·r^{2/3} (App. B.6.4,
-> within 5% of the curves). × marks steps at which ≥ 20% of setpoint draws flip the sign.
-> The shift rules have no step and, at these points, no floor.
+> landscapes differ in sharpness (bandwidth Ω̄ = 2, 5, 10); the operating points are generic
+> and chosen so that the shared-draw displacement |f″|·r is of the same order (2.5–4.4% of
+> |∇C|, the blue floor: the only floor PSR has). The window's lower edge, ε ≈ √2·r/0.3 ≈ 0.1,
+> is the same everywhere: it is set by the setpoint error. Its upper edge closes as the
+> landscape sharpens (2.5, 0.9, 0.38), and the best achievable error rises from 5% to 15%
+> as (|f‴|/|f′|)^{1/3}·r^{2/3} (App. B.6.4, within 12% of the curves), always above PSR's
+> floor. × marks steps at which ≥ 20% of setpoint draws flip the sign. NSR has no floor.
 
 Suggested conclusion sentence for App. C.3: "Fig. 8's operating point is not a singleton:
 on every landscape the FD window is bounded below by r and above by the landscape's
-sharpness, and even its best step leaves 5–11% error, while the shift rules need no step."
+sharpness, and even its best step leaves 5–15% error, while the shift rules need no step."
 
 C.3's "was selected by scanning … for the point maximizing FD's predicted floor" should
 describe the rules actually used (Fig 8: the C″ = 0 point in the M = 5 window; this
-figure: the C″ = 0 point nearest the steepest point of each landscape).
+figure: a generic steep point of typical sharpness with |f″|r/|∇C| in 2–5%).
 
 ## Pending
 Nothing on the plot side. Open questions for Fred are listed in the sections above
