@@ -276,14 +276,9 @@ def main():
     ax.fill_between(xc, np.clip(z0 + s_lo * (xc - a), ylo, yhi),
                     np.clip(z0 + s_hi * (xc - a), ylo, yhi), color=C_FAN, alpha=0.28, lw=0,
                     zorder=1, clip_on=True,
-                    label=rf"FD setpoint cone at $\varepsilon=\sqrt{{2}}\,r$ ($\pm1\sigma=|\nabla C|$)")
-    # the step at which the cone is this wide, drawn to scale: a bracket exactly √2·r wide
-    yb = float(y.max()) + 0.05; xb = win[0] + 0.12
-    ax.errorbar([xb], [yb], xerr=[[0.5 * cone["eps"]], [0.5 * cone["eps"]]], fmt="none",
-                ecolor=C_FAN, elinewidth=1.1, capsize=2.5, zorder=6, clip_on=False)
-    ax.annotate(rf"$\varepsilon=\sqrt{{2}}\,r={cone['eps']:.3f}$ (to scale)",
-                xy=(xb, yb), xytext=(xb + 0.05, yb), fontsize=5.5, color=C_FAN,
-                va="center", ha="left", annotation_clip=False)
+                    label=r"FD at small $\varepsilon$: setpoint-error scatter ($\pm1\sigma$)")
+    # (owner, 2026-09-05: no step-floor bracket and no ε*/RMSE line on the figure — it is an
+    # illustration; the B.6.4 numbers live in NUMBERS.md for the caption.)
 
     # short shift-rule tangent: slope = analytic derivative (equal by construction). Drawn
     # ABOVE the purple noise cone with a white casing (Fig-1 fix 4: the blue read as "buried"
@@ -296,12 +291,9 @@ def main():
     ax.plot([a], [z0], "o", color=C_INK, ms=4, zorder=10)
 
     # R7 in-figure info line (muted, above the axes → collision-free); PSR/NSR-safe, no refs
-    ax.text(0.0, 1.10, r"$H(\theta)=\theta Z_0+X_0$  ·  Hamiltonian-level  ·  "
+    ax.text(0.0, 1.04, r"$H(\theta)=\theta Z_0+X_0$  ·  Hamiltonian-level  ·  "
             rf"$T/T_2^*={d['regime']:.1f}$", transform=ax.transAxes, fontsize=5.8,
             color=C_MUTE, va="bottom", ha="left")
-    ax.text(0.0, 1.03, rf"best FD step $\varepsilon^*={an['mc_best_eps']:.2f}$: "
-            rf"RMSE $\approx {100*an['mc_best_rel']:.0f}\%$ of $|\nabla C|$  ·  $r={d['delta']}$",
-            transform=ax.transAxes, fontsize=5.8, color=C_MUTE, va="bottom", ha="left")
 
     ax.set_xlabel(r"parameter $\theta$"); ax.set_ylabel(r"$C_{\rm device}(\theta)$")
     ax.set_xlim(*win)

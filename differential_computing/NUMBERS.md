@@ -197,8 +197,8 @@ copies in `paper_fig_2/` and `paper_fig_3/figs/`. Hamiltonian-level, T/T₂* = 0
 | secant ε labels | 0.18 / 0.25 / 0.32 | **0.36 / 0.50 / 0.64** | same probes, paper's θ ± ε/2 convention (as Figs 8, 9) |
 | drawn secant slopes | +0.77 / +1.44 / +0.65 (δ-free) | **+0.70 / +1.39 / +0.53** (seed-0 δ draws per probe, P0-0) | wrong-signed in 97% / 100% / 100% of 2000 draws |
 | purple cone | shot-noise fan at ε = 0.03 (builder conv.), ±1.8σ, N = 4000 | **analytic setpoint cone S(ε) = √2·r\|f′\|/ε at ε = √2·r = 0.028**, ±1σ = \|∇C\| | δ only, no shots; 15% wrong sign at that step (measured) |
-| step-floor marker | 0.04 wide, "ε ≳ δ" | **0.028 wide (= √2·r), labelled with the value, to scale** | |
-| title strip | "Hamiltonian-level, T4 noise" | "Hamiltonian-level" + second line "best FD step ε* = 0.11: RMSE ≈ 28% of \|∇C\| · r = 0.02" | |
+| step-floor marker | 0.04 wide, "ε ≳ δ" | **removed** (owner: illustration only) | |
+| title strip | "Hamiltonian-level, T4 noise" | "Hamiltonian-level" (owner: no ε*/RMSE line and no step-floor bracket on the figure; those numbers are for the caption) | |
 | notation | C_noisy, ∇C_noisy | **C_device, ∇C_device** | v11 name, as Fig 8 |
 
 ### B.6.4 at the anchor (for the caption)
