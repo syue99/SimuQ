@@ -1,76 +1,78 @@
 # DELTA_NOISE.md — the setpoint rule as implemented (P0-0)
 
-2026-09-04. Figure 8 (`tests/build_F6.py`) is the first figure regenerated under
-the rule. Figs 2 and 9 follow and will be appended here.
+2026-09-04. Figure 8 (`tests/build_F6.py`) is regenerated under the rule below. Figs 2 and 9
+follow and will be appended here.
 
-## What a setpoint draw is attached to
+## The rule (owner's ruling, 2026-09-04): a draw per *change* of programmed value
 
-`r = 0.02`, zero-mean Gaussian, frozen across the shots of the execution it
-belongs to. The rule fixes how many independent draws each estimator gets, and
-that is what decides which strategies floor.
+r = 0.02, zero-mean Gaussian, in coefficient units. **A draw δ is taken whenever the
+programmed coefficient value changes, and held for every shot until it changes again.**
+Times (τ, segment boundaries) and the inserted gate carry no δ. The reference ∇C_device is
+the shot-free gradient at nominal θ₀ (`build_F6.py:145`, central difference h = 10⁻³).
 
-**Model used: `per_programming`.** Each program execution dials its own
-coefficient and draws its own δ. FD gets 2 per estimate (its two probes), PSR
-2m = 96 (one per branch execution), NSR N (one per execution). Selected by
-`DELTA_MODEL` in `build_F6.py`.
-
-FD is the only estimator that cannot average the draw away, because it programs
-exactly twice per estimate no matter how large N is. That is why **δ floors FD
-and only FD**, which is the figure's claim.
-
-### The alternative, and why it is not used
-
-`per_value` attaches δ to the coefficient requested rather than to the act of
-requesting it, so programs that dial the same value share a draw. It is a
-defensible reading of "setpoint error", but it does not describe this device and
-it breaks both shift rules:
-
-- PSR's 96 branches all dial the source coefficient, so they would share ONE
-  draw and PSR would floor at |f″|r with no averaging at all.
-- NSR's 48 distinct shifted setpoints would each keep their own draw, and
-  nothing in the estimate averages them, so NSR would floor at ≈ Ω̄r|f′|/√3.
-
-Measured under it at this operating point: PSR 0.218, NSR 0.150, against FD's
-0.139 — i.e. both shift rules worse than FD. That is a property of the model,
-not of the strategies, and it is why the figure does not use it.
-
-### Measured floors (RMSE at N = 10⁶, 100 seeds)
-
-| series | floor | % of \|f′\| | set by |
+| estimator | values dialed per estimate | draws | code |
 |---|---|---|---|
-| PSR | 0.0274 | 7.1% | insertion bias 0.0138 ⊕ residual displacement |f″|r/√96 = 0.021 |
-| PSR + gate | 0.0274 | 7.1% | same |
-| NSR M=∞ | 0.0102 | 2.7% | **no floor** — still on N^−0.50 at 10⁶ |
-| NSR M=5 | 0.0134 | 3.5% | truncation 0.0123 (certifiable, Lemma D.5) |
-| FD @ ε*=0.252 | 0.1390 | 36.1% | **δ** — see the decomposition below |
-| FD @ ε=0.05 | 0.2687 | 69.8% | δ/ε at an untuned step |
+| FD | θ₀ + ε/2 and θ₀ − ε/2 | **2** (one per probe, N/2 shots each) | `fd_est`, `build_F6.py:354-356` |
+| PSR | the source coefficient u, for all 2m branches | **1**, shared by all 96 branches | `_psr_setpoints` → `_branch_at`, `build_F6.py:239-248` (branch expectations at θ₀+δ from a 7-point grid over ±3r, `:190-200`) |
+| NSR | u + σh_κ·v, a different (κ, σ) on (almost) every execution | **one per execution** | `_nsr_deltas`, `build_F6.py:264-271` |
 
-## Where FD's floor actually comes from
+Selected by `DELTA_MODEL=per_change` (`build_F6.py:106-109`, the default).
 
-At the tuned ε* = 0.252, decomposed:
+This differs from the handover's P0-0 NSR rule ("one draw per distinct (κ, σ) actually
+executed", floor Ω̄r|f′|/√3). The owner ruled that rule wrong for this device: NSR's
+stochastic sampler re-dials a new value on each execution, so it gets a new draw each time,
+whereas FD holds each probe and PSR holds the source value. The handover's clause "if NSR
+does not floor, δ is being redrawn per execution … an implementation bug" is therefore
+overridden by design, not by accident. Both alternative models remain selectable as
+diagnostics: `per_value` (the handover's rule) and `per_programming` (a draw per execution
+for every estimator, including PSR's branches).
 
-| term | value | note |
-|---|---|---|
-| differential √2·r·\|f′\|/ε | 0.0432 | the 1/ε amplification |
-| common-mode displacement \|f″\|·r/√2 | 0.1434 | **dominant here**; not in B.6.4 |
-| truncation ε²\|f‴\|/24 | 0.0602 | |
-| quadrature sum | 0.161 | measured 0.139 |
+Seeds: each repetition s uses one stream `default_rng(1000 + s)` (`:415`; `500 + s` for the
+inset, `:454`); δ is drawn from it before the shots, so δ and shot noise are independent
+variables but not separately seeded. δ seeds are the same across the six series, i.e.
+series are paired by repetition.
 
-Both of the first two are δ, so δ sets FD's floor. At ε = 0.05 the differential
-term is 0.218 and dominates outright — the amplification is what makes small
-steps unusable, and it is visible as the inset's left arm.
+## Why the operating point moved (1.940 → 1.757)
 
-**B.6.4 is missing a term.** As written it is truncation ⊕ δ/ε and predicts a
-floor of 0.0663 at ε*_analytic = 0.201, against a measured 0.139 at 0.252. Adding
-the common-mode displacement in quadrature gives 0.161, which brackets the
-measurement. At a point this curved (f″ = 10.1) the displacement is the largest
-of the three.
+Under any frozen-draw rule PSR returns the exact gradient at θ₀+δ, so its exposure is
+|f″|·r at first order. At θ₀ = 1.940, f″ = 10.1 and that is 0.203 = 53% of |f′| — PSR floors
+*above* FD, and NSR (with f″ this large, C′ at its shifted setpoints is ~2, not 0.385)
+would floor at 39% under the handover's rule. Nothing about δ fixes that; it is the
+curvature of the point C.3's rule selected. The new rule takes the C″ = 0 crossing inside
+the window that keeps M = 5 (θ₀ = 1.757, |f′| = 1.449), where every estimator's
+displacement is second order and the comparison isolates what each does with the draw.
+Longer T (steeper landscape) was checked and rejected: ε* shrinks only as T^{−2/3} while the
+second-order exposures grow with T; at T = 10 nothing improves.
 
-## δ off (diagnostic, not a paper figure)
+## Measured floors at θ₀ = 1.757 (RMSE at N = 10⁶, 100 seeds, per-change rule)
 
-The pre-δ build of the same script is commit `871e1b5`'s cache: PSR 0.0095,
-NSR 0.0107, PSR+gate 0.0167, FD 0.1519, FD fixed 0.1752 at N = 10⁶ (note that
-build used code-ε, so its FD numbers are at a different physical step — see
-NUMBERS.md on the convention change). All three estimators moved in the
-predicted direction: FD's floor is essentially unchanged (it was already
-δ-limited), while PSR and NSR acquired floors where they previously had none.
+| series | RMSE | % of \|f′\| | set by |
+|---|---|---|---|
+| FD @ ε* = 0.208 | 0.180 | 12.4% | **δ/ε**: √2·r\|f′\|/ε* = 0.197 alone; truncation 0.123 is secondary |
+| FD @ ε = 0.05 fixed | 0.817 | 56% | δ/ε at an untuned step (0.82 predicted) |
+| PSR | 0.028 | 1.9% | second-order displacement (√3/2)\|f‴\|r² = 0.024 |
+| PSR + gate | 0.024 | 1.7% | same; exact gate bias 0.0037 is negligible here |
+| NSR M=∞ | 0.0095 | 0.7% | **no floor** (slope −0.51); residual δ-blur bias r²f‴/2 = 0.014 masked by the 24-mode sampler's −0.012 truncation, see NUMBERS.md |
+| NSR M=5 (truncated, plotted) | 0.0102 | 0.7% | truncation −0.0148 cancelled by δ-blur +0.0137 at this point (net −0.0007) |
+| NSR M=5 (rejection, reported) | 0.0092 | 0.6% | |
+
+First-order PSR displacement |f″|r = 0.0001. The handover's NSR floor formula gives 0.167
+here; it does not apply under the ruling.
+
+## Diagnostics (not paper figures) — same θ₀ = 1.757, seeds, grid; RMSE at N = 10⁶
+
+| series | paper (per-change, r = 0.02) | δ off (`DELTA_R=0`) | handover's per-setpoint rule (`per_value`) |
+|---|---|---|---|
+| FD @ ε* | 0.180 (ε* = 0.208) | 0.058 (ε* retunes to 0.141; truncation only) | 0.180 (identical: same rule for FD) |
+| FD @ ε = 0.05 | 0.817 | 0.027 | 0.817 |
+| PSR | 0.028 | 0.008 (slope −0.50, no floor) | 0.028 (identical: same rule for PSR) |
+| PSR + gate | 0.024 | 0.008 | 0.024 |
+| NSR M=∞ | 0.0095 (slope −0.51) | 0.016 (the 24-mode sampler's own truncation −0.012, no δ-blur to cancel it) | **0.078** (slope −0.20; exact Ω̄-weighted sum predicts 0.079, leading order Ω̄r\|f′\|/√3 = 0.167) |
+| NSR M=5 | 0.010 | 0.018 (truncation 0.0148) | 0.077 |
+
+Reading: δ is three quarters of FD's floor (0.180 → 0.058) and all of PSR's (0.028 → 0.008);
+NSR is the only estimator whose δ exposure depends on the rule — none under per-change,
+5.4% of |f′| under the handover's per-setpoint rule. Caches:
+`figures/F6_floor_amplification_diag_delta_off.json`, `…_diag_per_value.json`. The
+previous paper build (per_programming, θ₀ = 1.940, commit 3e0338c) is kept as
+`figures/F6_diag_per_programming_th1940.json`.

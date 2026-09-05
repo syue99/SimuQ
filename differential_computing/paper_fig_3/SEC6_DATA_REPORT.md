@@ -1,6 +1,7 @@
-# SEC6_DATA_REPORT — data + figure handover (6-Evaluation.tex v11)
+# SEC6_DATA_REPORT — data + figure handover (6-Evaluation.tex v11; F6 → v2 2026-09-04)
 
-2026-08-26. Emulator = QuTiP under the Appendix C.3 device model, measured
+2026-08-26 (F6 section regenerated 2026-09-04 under the P0-0 setpoint rule; see
+`../NUMBERS.md`, `../DELTA_NOISE.md`, `../TEXT_CHANGES.md`). Emulator = QuTiP under the Appendix C.3 device model, measured
 against ∇C_device (the noisy landscape). No rescale / corrected-estimator
 series anywhere. Deliverables: `figs/F6.pdf`, `figs/F_loop.pdf`,
 `figs/F_select.pdf`, `figs/F_scale_app.pdf` (this folder), this report.
@@ -14,79 +15,87 @@ series anywhere. Deliverables: `figs/F6.pdf`, `figs/F_loop.pdf`,
    (n=500 → 15.2 s). Fix the strip or the prose; the measurement stands.
 2. **A1 dependency: no App E number exists for s_max.** Used
    s_max = θ0 (2× coupling headroom: √2 in Rabi with J∝Ω²/Δ), decided
-   with the paper owner 2026-08-26, marked PROVISIONAL like δ. If App E
-   lands a different headroom, F6 and the A1/A2/A4 numbers re-render.
-3. **A4(a): the Lemma D.5 bound is ~30× loose here.** Measured NSR^M_trunc
-   floor 0.0123 vs bound 0.368 — the alternating (−1)^κ tail cancels; the
-   bound is a triangle-inequality worst case. Safe direction (bound ≥
-   measured), but the text should not imply the series floors AT the bound.
+   with the paper owner 2026-08-26, marked PROVISIONAL like δ. v2: θ0 =
+   1.757 was chosen inside the window that keeps M = 5, so A1/A2 stand.
+   If App E lands a different headroom, F6 and the A1/A2/A4 numbers re-render.
+3. **A4(a): the Lemma D.5 bound is ~25× loose here.** Exact truncation
+   bias of NSR M=5 is 0.0148 vs bound 0.368 — the alternating (−1)^κ tail
+   cancels; the bound is a triangle-inequality worst case. v2 adds a twist:
+   under the per-execution setpoint draw NSR estimates the δ-blurred
+   landscape, whose bias r²f‴/2 = +0.0137 cancels the truncation to
+   −0.0007 at this θ0, so the plotted M=5 series shows no floor through
+   10⁶. That is a coincidence of the point, not a property of the cap.
 4. **C4: the TFIM star sits ON the measured crossing of the balanced
    plane** (measured log₁₀ ratio +0.01 ≈ a tie at (P=2, k=1)), not clearly
    inside the PSR region as on the old 15%-NSR plane. If 6.3 prose says
    "the running instance is a PSR case", soften to "on the boundary; its
    global-θ rewrite (also ratio ≈ 0) is likewise a near-tie".
+6. **F6 v2 (2026-09-04): operating point moved 1.940 → 1.757 and the setpoint
+   draw is now on every estimator.** Under a frozen draw PSR's exposure is
+   |f″|r, which at 1.940 (f″ = 10) is 53% of |∇C| and inverts 6.1; the new
+   point is the C″ = 0 crossing in the M = 5 window. Every A-number below
+   changed; the text lines are listed in `../TEXT_CHANGES.md`.
 5. **B: FD-best "enters tolerance" is metric-sensitive.** The median dips
    below 0.03 at isolated steps but never holds it for 5 consecutive
    steps → reported as "never" under the hold-5 definition (the figure's
    terminal markers use hold-5).
 
 --------------------------------------------------------------------
-## A. F6 (figs/F6.pdf)
+## A. F6 (figs/F6.pdf) — v2
 
-Run id: `build_F6.py` @ commit f915c86, cache
+Run id: `build_F6.py` @ the commit carrying this file (2026-09-04), cache
 `figures/F6_floor_amplification.json`; 100 reps/point, seeds
 `default_rng(1000+s)`; N grid 10²–10⁶; T/T₂* = 0.15 (on-figure); 2q TFIM
-H = θ·Z₀Z₁ + 1.0·ΣX, θ₀ = 1.940, T = 5, readout O = Z₀Z₁; estimand
-∇C_device = −0.3850 (the noisy-landscape gradient; the figure axis uses
-the v11 name ∇C_device). Series: PSR, NSR M=∞, PSR+gate (ε_ins: 2q 10⁻³, 1q
-10⁻⁴, coherent-frac 0.5, T4), **NSR M=5 (trunc, plotted)**, FD ε*=0.17
-(retrospective sweep at N=10⁴, frozen), FD ε=0.05 fixed, N^(−1/2)
-reference. Inset: FD V at N=10⁴ with PSR/NSR flats and × at wrong-sign ε
-(as v9).
+H = θ·Z₀Z₁ + 1.0·ΣX, **θ₀ = 1.757** (the C″ = 0 crossing in the M = 5
+window; was 1.940), T = 5, readout O = Z₀Z₁; estimand ∇C_device =
+**−1.4488** (shot-free, δ-free gradient at nominal θ₀). **Setpoint draw
+r = 0.02 on every estimator** under the per-change rule (a draw when the
+programmed value changes: FD 2, PSR 1 shared, NSR one per execution —
+`../DELTA_NOISE.md`). Series: PSR, NSR M=∞, PSR+gate (ε_ins: 2q 10⁻³, 1q
+10⁻⁴, coherent-frac 0.5), **NSR M=5 (trunc, plotted)**, FD ε* = **0.208**
+(tuned at N=10⁴, frozen; paper's θ ± ε/2 convention), FD ε = 0.05 fixed,
+N^(−1/2) reference. Inset: FD V at N=10⁴ with PSR/NSR flats (0.084 / 0.093)
+and × at wrong-sign ε (≥ 20% of seeds: ε ≤ 0.024 and ε ≥ 1.00). No B.6.4
+curve (owner's call; closed form 0.231 vs 0.180 measured).
+
+Derivatives at θ₀: f′ = −1.449, f″ = +0.006, f‴ = +68.3. Tail slopes
+(N ≥ 10³): PSR −0.33 (floors at N ≳ 10⁵), NSR −0.51.
 
 ### A1. M at the device headroom  [\owed{M}]
-- s_max = **1.940** (= θ₀; 2× coupling headroom from √2 Rabi, J∝Ω²/Δ —
-  **PROVISIONAL**, no App E number; see contradiction 2)
-- Ω̄ = 2πK = **10.00** (compiler certificate for θ on this instance,
-  K = 1.5915)
-- M = ⌊(2Ω̄s_max/π − 1)/2⌋ = **5** (largest shift used
-  (M+½)/(2K) = 1.728 ≤ s_max)
-- Time-dilation caveat (recorded per owner discussion): (θ+s)ZZ could
-  also be realized by scaling H down and evolving longer, but dephasing
-  accrues per wall-time, so that trades headroom for a worse effective
-  T/T₂* — at the paper's fixed regime the amplitude cap is the binding
-  constraint. One sentence of 6.1 prose can note this.
+- s_max = **1.757** (= θ₀; **PROVISIONAL**, see contradiction 2)
+- Ω̄ = 2πK = **10.00** (K = 1.5915, θ-independent for this generator)
+- M = ⌊2K·s_max − ½⌋ = **5** (largest shift used 1.728 ≤ s_max)
+- Time-dilation caveat unchanged from v11.
 
 ### A2. p_fail at M=5  [\owed{p}]
-- measured (under the sampler): **0.0255**; bound (D.3/D.4 tail):
-  **0.0368**. Effective shot inflation 1/(1−p_fail) = **1.026**.
+- analytic excluded mass ψ′(M+3/2)/(π²/2) = **0.0337 (3.4%)** — the
+  deployable number; sampler tail (24 modes) 0.0255; bound 0.0368.
+  Shot inflation 1/(1−p_fail) = **1.035**.
 
 ### A3. R = ‖O_P‖
-- **R = 1.0** (readout O = Z₀Z₁, unit spectral norm).
+- **R = 1.0**.
 
-### A4. Floors (RMSE at N=10⁶ in parentheses)
-- PSR+gate: exact insertion bias **0.0138** (RMSE tail 0.0167)
-- NSR^M_trunc: measured **0.0123** (RMSE tail 0.0159); Lemma D.5 bound
-  **0.368** — bound ~30× loose here (alternating tail cancels;
-  contradiction 3)
-- FD ε*: predicted δ/ε floor **0.159** (RMSE tail 0.152)
-- FD fixed ε=0.05: predicted **0.179** (RMSE tail 0.175)
-- **PSR+gate floor < FD ε* floor: CONFIRMED** (0.0138 < 0.159, 11.5×).
+### A4. Floors (RMSE at N=10⁶; % of |∇C|)
+- FD ε* = 0.208: **0.180** (12.4%); shot-free MC prediction 0.197; the
+  δ/ε term √2·r|f′|/ε* = 0.197 is the whole floor, truncation ε²f‴/24 = 0.123
+- FD fixed ε = 0.05: **0.817** (56%); predicted 0.807
+- PSR: **0.028** (1.9%) — second-order setpoint displacement
+  (√3/2)|f‴|r² = 0.024 (mean r²f‴/2 = 0.014); first-order |f″|r = 0.0001
+- PSR+gate: **0.024** (1.7%); exact insertion bias only **0.0037** here
+  (was 0.0138 at θ₀ = 1.940) — the gate is not what floors PSR at this point
+- NSR M=∞: **0.0095** (0.7%), no floor (slope −0.51)
+- NSR M=5 trunc: **0.0102** (0.7%); exact truncation bias 0.0148, cancelled
+  by the δ-blur (contradiction 3); rej variant 0.0092
+- **PSR+gate floor < FD ε* floor: CONFIRMED, 7.5×** (not the "order of
+  magnitude" 6.1 claims; NSR is 19× below FD)
+- δ off (diagnostic, not a figure): FD 0.058 (ε* → 0.141), FD fixed 0.027,
+  PSR 0.008, NSR 0.016 / 0.018 — δ is ¾ of FD's floor and all of PSR's.
+- Handover's per-setpoint NSR rule (diagnostic): NSR floors at 0.078 (5.4%);
+  FD and PSR unchanged.
 
 ### NSR@cap variants (both measured, trunc plotted)
-- (a) NSR^M_trunc: compile-time truncation; sampler renormalised over
-  κ ≤ M **and** the L1 weight scaled by the kept mass, so every kept mode
-  keeps its exact full-series weight. Floors at the tail bias (A4).
-- (b) NSR^M_rej: draws from the full sampler; out-of-range draws are
-  **rejected, never resampled** (consume budget, contribute 0, L1
-  unchanged) — this leaves the kept-mode weights undistorted, which is
-  the content of "unbiased" here: under a hard cap no estimator reaches
-  the tail, so both variants share the same truncated target and the
-  same floor; naive *resampling* would silently renormalise and distort
-  the weights. Measured: rej RMSE tail 0.0162 ≈ trunc 0.0159, at 1.026×
-  the executions per useful shot. If the text intends a stronger sense
-  of "unbiased" for (b), flag to the theory owner — it is not achievable
-  under the cap.
+Unchanged in construction from v11. v2: rej RMSE tail 0.0092 ≈ trunc
+0.0102, at 1.035× the executions per useful shot.
 
 --------------------------------------------------------------------
 ## B. F_loop (figs/F_loop.pdf)

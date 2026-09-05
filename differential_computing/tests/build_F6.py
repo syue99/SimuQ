@@ -37,10 +37,13 @@ from observable_program_generator import observable_program_generator
 from nyquist_shift import tangent_hamiltonian, bandwidth_K
 
 # ── T4 defaults (best-guess; see T4.csv) ──
-G_FIELD, T = 1.0, 5.0               # longer evolution → sharper θ-landscape → higher FD δ/ε floor
+G_FIELD, T = 1.0, 5.0               # T fixed: Ω̄ = 2T sets NSR's setpoint exposure Ω̄·r, so longer T is no lever
 T2 = T / 0.15                       # T/T2* = 0.15 headline
-R_CTRL = 0.02                       # control setpoint error δ (T4 best-guess)
-GRAD_MIN = 0.35                     # θ0 must have a steep gradient; among those, maximize the floor
+R_CTRL = float(os.environ.get("DELTA_R", "0.02"))   # control setpoint error δ (T4 best-guess); DELTA_R=0 for the δ-off diagnostic
+# F6_TAG=<name>: diagnostic run — cache/figure names get a _<name> suffix and the
+# paper_fig outputs are NOT written.  Unset for the paper figure.
+F6_TAG = os.environ.get("F6_TAG", "")
+SUF = ("_" + F6_TAG) if F6_TAG else ""
 # T4's kick gate error is EXCLUDED from F6: it is a PSR-only bias (the kick is a
 # digital op with its own error → biases PSR by ~0.028; NSR/waveform-shift is
 # immune). That is a separate Sec-5.2 gate-infidelity finding (see data note), not
@@ -86,12 +89,24 @@ GATE_1Q_T4 = 1.0e-4                 # 99.99% 1q gate
 #                     that request the same coefficient share a draw.  FD 2,
 #                     PSR 1 (all branches dial the source coefficient), NSR
 #                     one per distinct (kappa, sigma).
-# The two differ only in how much averaging each estimator gets, and that is
-# what decides which floors: under per_value PSR floors at |f''|r with no
-# averaging at all, which puts it ABOVE FD.  Applying one model to PSR and
-# the other to NSR is not a choice, it is a bug.
-DELTA_MODEL = os.environ.get("DELTA_MODEL", "per_programming")
+# The models differ only in how much averaging each estimator gets.  Under
+# per_change (shipped) FD is amplified by 1/ε and cannot average (2 draws), PSR
+# is displaced by its one shared draw (second order at the C''=0 operating
+# point), and NSR averages the draw away because it never holds a value.  The
+# handover's own NSR rule (one draw per distinct (kappa, sigma), floor
+# Ω̄r|f'|/√3) is per_value; the owner ruled it wrong for this device, and it
+# is kept as a diagnostic only, as is per_programming.
+#   per_change      - (SHIPPED; owner's ruling 2026-09-04) a draw is taken
+#                     whenever the programmed VALUE changes and held until it
+#                     changes again.  FD dials two values -> 2 draws; PSR dials
+#                     the source coefficient for every branch -> 1 shared draw;
+#                     NSR's stochastic sampler re-dials a different (kappa,
+#                     sigma) on (essentially) every execution -> a fresh draw
+#                     per execution, which averages away with N.
+DELTA_MODEL = os.environ.get("DELTA_MODEL", "per_change")
+assert DELTA_MODEL in ("per_change", "per_value", "per_programming"), DELTA_MODEL
 PSR_DELTA = "per_branch" if DELTA_MODEL == "per_programming" else "shared"
+NSR_DELTA = "per_value" if DELTA_MODEL == "per_value" else "per_execution"
 
 
 def main():
@@ -107,30 +122,32 @@ def main():
     H, var = Htfim()
     C = lambda th: ex([[H.set_parameterizedHam({"th": float(th)}), T]])
 
-    # θ0: among STEEP points (|∇C_noisy| ≥ GRAD_MIN), pick the one that MAXIMIZES the FD δ/ε
-    # floor RATIO — a sharp+steep operating point where FD fails hard (a low-floor smooth
-    # point understates FD's failure). Floor = shot-free FD RMSE = truncation ⊕ δ-amplification.
+    # θ0 (P0-0 rerun): a STATIONARY point of ∇C_device (C'' = 0), i.e. the
+    # steepest point of the landscape.  Under the frozen-setpoint rule every
+    # estimator is displaced by the draw it shares, and that displacement is
+    # first order in f'' -- so at f'' = 0 it is second order (|f'''| r^2/2) for
+    # PSR, while FD keeps its full δ/ε ⊕ truncation floor and NSR its
+    # Ω̄-weighted sum.  The previous rule (maximize FD's floor ratio) landed
+    # at f'' = 10, where the displacement alone is 53% of |f'| and floors PSR
+    # above FD.  Among the C'' = 0 crossings, take the one whose headroom cap
+    # M = ⌊2K·θ0 − ½⌋ equals M_TEXT, so the paper's M = 5 / p_out = 3.4% stand.
     h = 1e-3
-    def _floor_at(t, g, eps):
-        sec = (C(t + eps) - C(t - eps)) / (2 * eps)
-        cp = (C(t + eps + h) - C(t + eps - h)) / (2 * h)
-        cm = (C(t - eps + h) - C(t - eps - h)) / (2 * h)
-        return np.sqrt((sec - g) ** 2 + (np.sqrt(cp ** 2 + cm ** 2) * R_CTRL / (2 * eps)) ** 2)
-    scan = np.linspace(0.7, 2.5, 46)
-    best_t = None
-    for t in scan:
-        g = (C(t + h) - C(t - h)) / (2 * h)
-        if abs(g) < GRAD_MIN:
-            continue
-        fl = min(_floor_at(t, g, e) for e in np.geomspace(0.04, 0.8, 12))
-        if best_t is None or fl / abs(g) > best_t[0]:
-            best_t = (fl / abs(g), float(t))
-    th0 = best_t[1]
+    M_TEXT = 5
+    _, A0 = tangent_hamiltonian(H, var, 1.9); K0 = bandwidth_K(A0, T)   # K is θ-independent here
+    win = ((M_TEXT + 0.5) / (2 * K0), (M_TEXT + 1.5) / (2 * K0))
+    hh = 0.02
+    C2f = lambda t: (C(t + hh) - 2 * C(t) + C(t - hh)) / hh ** 2
+    from scipy.optimize import brentq
+    tt = np.linspace(win[0] + 0.01, win[1] - 0.01, 32); c2 = np.array([C2f(t) for t in tt])
+    cross = [brentq(C2f, tt[i], tt[i + 1]) for i in range(len(tt) - 1) if c2[i] * c2[i + 1] < 0]
+    assert cross, "no C''=0 crossing inside the M=%d window %s" % (M_TEXT, win)
+    th0 = float(max(cross, key=lambda t: abs((C(t + h) - C(t - h)) / (2 * h))))
     grad_true = float((C(th0 + h) - C(th0 - h)) / (2 * h))       # TARGET ∇C_noisy (exact)
     C2 = float((C(th0 + 1e-2) - 2 * C(th0) + C(th0 - 1e-2)) / 1e-4)
     _, A = tangent_hamiltonian(H, var, th0); K = bandwidth_K(A, T)
     print(f"TFIM θ0={th0:.3f}  ∇C_noisy={grad_true:+.4f}  C''={C2:+.3f}  K={K:.3f}  "
-          f"floor/|∇C|={best_t[0]*100:.0f}%  (steep+sharp point, max FD floor)")
+          f"(C''=0 crossing in the M={M_TEXT} window [{win[0]:.3f}, {win[1]:.3f}); "
+          f"crossings {[round(c, 3) for c in cross]})")
 
     # grid for landscape samples (FD & NSR shifts)
     s_max = 24.5 / (2 * K)
@@ -250,7 +267,7 @@ def main():
         draws average away over the N executions, so NSR carries no setpoint
         floor; under per_value they do not, and it floors at the Omega-weighted
         sum over the sampler's shifts."""
-        if DELTA_MODEL == "per_programming":
+        if NSR_DELTA == "per_execution":
             return rng.normal(0, R_CTRL, size=len(n))
         tab = rng.normal(0, R_CTRL, size=2 * (nmodes or MAXN))
         idx = np.minimum(n, (nmodes or MAXN) - 1)
@@ -499,7 +516,7 @@ def main():
                  "(δ=%.2f, provisional)" % R_CTRL, fontsize=9)
     fig.tight_layout(rect=[0, 0, 1, 0.94])
     for e in ("pdf", "png"):
-        fig.savefig(os.path.join(FIGDIR, f"F6_floor_amplification.{e}"), bbox_inches="tight", pad_inches=0.02)
+        fig.savefig(os.path.join(FIGDIR, f"F6_floor_amplification{SUF}.{e}"), bbox_inches="tight", pad_inches=0.02)
     plt.close(fig)
 
     # ── SEC6 handover A: single-column F6 — main RMSE-vs-N + FD-V inset ──
@@ -546,9 +563,11 @@ def main():
     figS.tight_layout(pad=0.4)
     OUT2 = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "paper_fig_2"))
     os.makedirs(OUT2, exist_ok=True)
-    for out in (OUT3, OUT2):
+    for out in ((OUT3, OUT2) if not F6_TAG else ()):
         figS.savefig(os.path.join(out, "F6.pdf"), bbox_inches="tight", pad_inches=0.02)
         figS.savefig(os.path.join(out, "F6.png"), bbox_inches="tight", pad_inches=0.02)
+    if F6_TAG:
+        figS.savefig(os.path.join(FIGDIR, f"F6{SUF}.png"), bbox_inches="tight", pad_inches=0.02)
     plt.close(figS)
 
     # A4 floors + the text's ordering claim
@@ -562,7 +581,7 @@ def main():
     print(f"A4 claim PSR+gate floor < FD ε* floor: "
           f"{'CONFIRMED' if psr_gate_bias < floor_star else 'CONTRADICTED'}")
 
-    json.dump(dict(delta_model=DELTA_MODEL, psr_delta_rule=PSR_DELTA, th0=th0, grad_true=grad_true, K=K, eps_star=eps_star, T_over_T2=0.15, delta=R_CTRL,
+    json.dump(dict(delta_model=DELTA_MODEL, psr_delta_rule=PSR_DELTA, nsr_delta_rule=NSR_DELTA, th0_rule="C2=0 crossing in M=%d window" % M_TEXT, th0=th0, grad_true=grad_true, K=K, eps_star=eps_star, T_over_T2=0.15, delta=R_CTRL,
                    eps_convention='paper: probes theta+-eps/2, divide by eps',
                    f1=float(f1), f2=float(f2), f3=float(f3), f3_check=float(f3_check),
                    eps_star_analytic=float(eps_star_analytic),
@@ -590,7 +609,7 @@ def main():
                    psr_band=[psrL[1].tolist(), psrL[2].tolist()],   # bootstrap 25/75 (D3/G4a)
                    nsr_band=[nsrL[1].tolist(), nsrL[2].tolist()],
                    fd_band=[fdL[1].tolist(), fdL[2].tolist()]),
-              open(os.path.join(FIGDIR, "F6_floor_amplification.json"), "w"), indent=2, default=float)
+              open(os.path.join(FIGDIR, f"F6_floor_amplification{SUF}.json"), "w"), indent=2, default=float)
     win_txt = f"[{win_lo:.3f},{win_hi:.3f}]" if win_lo else "EMPTY"
     max_wrong = float(np.max(fd_wrong))
     # E/F10: caption ≈80 words — instrument+regime+estimand, two-panel claim, short exclusion
@@ -673,7 +692,7 @@ def main():
         f"budgets are small. Fig 1 is T/T2*=0.5, F6 is 0.15 (C4) — not a contradiction. "
         f"PROVENANCE (D1): δ=0.02 and gate rates are T4/Q1-pending — re-render if Fred's Q1 changes "
         f"them (the floor magnitude depends on δ).")
-    with open(os.path.join(FIGDIR, "F6_floor_amplification_caption.txt"), "w") as f:
+    with open(os.path.join(FIGDIR, f"F6_floor_amplification{SUF}_caption.txt"), "w") as f:
         f.write(caption + "\n\n" + data_note + "\n")
     print(f"wrote F6_floor_amplification.pdf/.png/.json + _caption.txt")
     print("\nCAPTION (E):\n  " + caption)
