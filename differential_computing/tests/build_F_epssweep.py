@@ -10,7 +10,7 @@ Per panel (T = 1, 2.5, 5 µs; T/T₂* = 0.15 held; same 2q TFIM, same device mod
         2026-09-05).  The landscape itself is drawn above each sweep; T and θ0 are not
         printed on the figure (caption / data note only).
   FD    RMSE(ε)/|∇C| with the paper's probes θ ± ε/2 each carrying its own setpoint draw
-        (per-change rule, 2 draws per estimate), 2000 draws per step, 39 steps in [0.02, 3.0] (dense near 0, linear beyond).
+        (per-change rule, 2 draws per estimate), 2000 draws per step, 14 steps in [0.03, 3.0].
         × = steps where ≥ 20% of draws give the wrong sign.  Shaded = usable window
         RMSE ≤ WIN of |∇C|.  ε* = argmin.
   PSR   shot-free floor = the shared-draw displacement |f''|·r (zero only at C'' = 0).
@@ -41,15 +41,15 @@ from noise_model import NoiseModel
 R_CTRL = 0.02
 REGIME = 0.15
 TS = [1.0, 2.5, 5.0]
-EPS = np.concatenate([np.geomspace(0.02, 0.3, 12), np.linspace(0.4, 3.0, 27)])   # dense near 0, linear beyond (linear axis)
+EPS = np.array([0.03, 0.05, 0.08, 0.12, 0.18, 0.25, 0.35, 0.5, 0.7, 1.0, 1.4, 1.9, 2.4, 3.0])   # sparse: one scatter group per step
 NDRAW = 2000
-WIN = 0.30                                   # usable-window threshold (fraction of |∇C|)
+WIN = 0.10                                   # usable-window threshold (fraction of |∇C|)
 NSHOW = 40                                   # realizations drawn per step (the cloud)
 NPSR = 400                                   # PSR realizations (one draw each)
 WRONG = 0.20                                 # × marker threshold (fraction of draws)
 LAND_HALF = 1.6                              # landscape drawn over θ0 ± LAND_HALF (same for all panels)
 NSAMP = 5                                    # sampled single estimates drawn per step
-XMAX, YMAX = 3.05, 1.0                       # linear axes of the bottom row
+XMAX, YMAX = 3.1, 0.30                       # linear axes of the bottom row (zoomed)
 FIGDIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "figures"))
 OUT2 = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "paper_fig_2"))
 OUT3 = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "paper_fig_3", "figs"))
@@ -178,14 +178,17 @@ def render(d):
         rng_j = np.random.default_rng(3)
         for r in p["sweep"]:
             sm = np.abs(np.array(r["samples"][:NSAMP]))
-            ax.plot(np.full(len(sm), r["eps"]), np.minimum(sm, YMAX * 0.98), "o", color=C_FD,
-                    ms=2.0, alpha=0.55, mec="none")
-        ax.plot(e, rr, "-", color=C_FD, lw=1.3, label="FD (RMSE; dots: single estimates)")
+            inside = sm <= YMAX
+            ax.plot(np.full(int(inside.sum()), r["eps"]), sm[inside], "o", color=C_FD,
+                    ms=2.4, alpha=0.6, mec="none")
+            if (~inside).any():                      # off-scale draws: a marker at the top edge
+                ax.plot([r["eps"]], [YMAX * 0.985], "^", color=C_FD, ms=3.2, alpha=0.8, mec="none")
+        ax.plot(e, np.minimum(rr, YMAX * 1.02), "-", color=C_FD, lw=1.3, label="FD (RMSE; dots: single estimates)")
         ax.axvline(p["eps_star"], color=C_FD, lw=0.6, ls=":")
         ax.axhline(d["win"], color="#888888", lw=0.7, ls="--")
         ax.axhline(p["psr_rms_rel"], color=C_PSR, lw=1.5, label=r"PSR (one shared draw: $\sim|f''|\,r$)")
         ax.axhline(0.0, color=C_NSR, lw=1.5, label="NSR (no floor)")
-        ax.text(p["eps_star"] + 0.05, YMAX * 0.62, rf"$\varepsilon^*={p['eps_star']:.2f}$", color=C_FD,
+        ax.text(p["eps_star"] + 0.05, YMAX * 0.97, rf"$\varepsilon^*={p['eps_star']:.2f}$", color=C_FD,
                 fontsize=6, va="top")
         ax.set_xlim(0.0, XMAX); ax.set_ylim(-0.02, YMAX)
         ax.set_xlabel(r"FD step $\varepsilon$", fontsize=7.5, labelpad=1)
@@ -197,8 +200,8 @@ def render(d):
             ax.legend(fontsize=5.6, loc="upper right", frameon=True, framealpha=0.85,
                       handlelength=1.6, borderpad=0.3, labelspacing=0.3)
     axs[1, 0].set_ylabel(r"$|$error$|\,/\,|\nabla C|$  ($N\to\infty$, $r=%g$)" % d["r"], fontsize=7.5)
-    axs[1, 1].text(0.98, 0.95, rf"shaded: usable window, RMSE $\leq$ {int(100 * d['win'])}%", transform=axs[1, 1].transAxes,
-                   fontsize=5.8, ha="right", va="top", color="#52514e")
+    axs[1, 2].text(0.98, 0.42, rf"shaded: usable window, RMSE $\leq$ {int(100 * d['win'])}%" + "\n(none here)",
+                   transform=axs[1, 2].transAxes, fontsize=5.8, ha="right", va="top", color="#52514e")
     from matplotlib.lines import Line2D
     axs[0, 2].legend(handles=[Line2D([], [], color=C_PSR, lw=2.2, label="shift-rule tangent"),
                               Line2D([], [], color=C_FD, lw=1.1, marker="o", ms=2.6, label=r"FD secant at $\varepsilon^*$")],

@@ -312,25 +312,24 @@ fixed T/T₂* = 0.15; same 2q TFIM, same device model), each at a **generic** op
 displacement |f″|·r/|∇C| lies in 2–5% and whose sharpness |f‴|/|f′| is typical of its
 landscape (middle quintile), so PSR's floor is of the same order in every panel and only
 the step scale moves. Top row: the landscape, the shift-rule tangent, FD's secant at ε*,
-the usable window (RMSE ≤ 30%) shaded; no T or θ₀ on the figure. Bottom row, **linear
-axes, |error|/|∇C|, shot-free (N → ∞)**: FD's RMSE trend over 39 steps in [0.02, 3.0]
-(dense near 0, linear beyond) with 5 sampled single-estimate errors per step (two setpoint
+the usable window (RMSE ≤ 10%) shaded; no T or θ₀ on the figure. Bottom row, **linear
+axes, |error|/|∇C| zoomed to 0–0.3, shot-free (N → ∞)**: FD's RMSE trend over 14 steps in
+[0.03, 3.0] with 5 sampled single-estimate errors per step (off-scale draws as ▲ at the top) (two setpoint
 draws each, θ ± ε/2, r = 0.02); PSR as one flat line at its RMS shared-draw error (the exact
 gradient at θ₀+δ, 400 draws); NSR at zero. Cache `figures/F_epssweep_data.json`; figure
 `F_epssweep.{pdf,png}` in `figures/`, `paper_fig_2/`, `paper_fig_3/figs/`.
 
-| panel | T / T₂* (µs) | θ₀ | f′ | f″ | f‴ | \|f‴\|/\|f′\| | ε* (B.6.4) | FD floor (B.6.4) | usable window | PSR line (RMS) | NSR |
+| panel | T / T₂* (µs) | θ₀ | f′ | f″ | f‴ | \|f‴\|/\|f′\| | ε* (B.6.4) | FD floor (B.6.4) | usable window (RMSE ≤ 10%) | PSR line (RMS) | NSR |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| (a) healthy | 1 / 6.7 | 1.760 | +0.370 | -0.45 | -0.6 | 2 | 0.80 (0.66) | 4.7% (5.2%) | [0.11, 2.70] | 2.5% | none |
-| (b) intermediate | 2.5 / 16.7 | 1.192 | +0.766 | -1.39 | -5.9 | 8 | 0.40 (0.40) | 8.2% (8.7%) | [0.11, 1.00] | 3.6% | none |
-| (c) ill | 5 / 33.3 | 1.712 | -1.380 | -3.06 | +66.3 | 48 | 0.23 (0.22) | 14.6% (16.1%) | [0.11, 0.40] | 4.7% | none |
+| (a) healthy | 1 / 6.7 | 1.760 | +0.370 | -0.45 | -0.6 | 2 | 0.70 (0.66) | 4.6% (5.2%) | [0.35, 1.40] | 2.5% | none |
+| (b) intermediate | 2.5 / 16.7 | 1.192 | +0.766 | -1.39 | -5.9 | 8 | 0.35 (0.40) | 8.4% (8.7%) | [0.35, 0.50] | 3.6% | none |
+| (c) ill | 5 / 33.3 | 1.712 | -1.380 | -3.06 | +66.3 | 48 | 0.18 (0.22) | 14.6% (16.1%) | none | 4.8% | none |
 
-Reading: the window's **lower** edge is the same in all three panels (ε ≈ 0.1 = √2·r/0.3,
-set by r alone: the 1/ε amplification of δ); the **upper** edge closes with sharpness (2.7 →
-1.0 → 0.4: the truncation bias) and the floor rises 4.7% → 8.2% → 14.6%. In the healthy
-landscape FD is flat and usable out to ε ≈ 2.7; in the ill one everything beyond ε ≈ 0.9 is
-off-scale. B.6.4 reproduces the trend to ≤ 12%. PSR's line is 2.5 / 3.6 / 4.4%, below FD's
-best step in every panel; NSR has no floor.
+Reading (10% threshold): the healthy landscape is usable for ε ∈ [0.35, 1.4] with the best
+step at 4.6%; the intermediate one only in the sliver [0.35, 0.5] with 8.4% at best; the ill
+one has **no step** that reaches 10% (best 14.6% at ε = 0.18, and everything beyond ε ≈ 0.9 is
+off-scale). Below ε ≈ 0.1 the setpoint error is amplified by 1/ε in every panel. PSR's line
+is 2.5 / 3.6 / 4.4%, below FD's best step in every panel; NSR has no floor.
 
 Deviations from the handover's P1-1 recipe (owner's rulings): landscapes vary (via T at
 fixed T/T₂*) instead of three θ₀ at one T; shot-free instead of N = 10⁴; generic θ₀ with

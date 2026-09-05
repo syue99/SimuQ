@@ -212,19 +212,20 @@ is the lab's own apparatus, anonymity may require a schematic instead.
 > **What a healthy and an ill landscape look like to a finite difference.** Top: the device
 > landscape C_device(θ) around the operating point (black), the shift-rule tangent (blue),
 > the finite-difference secant at its best step ε* (orange) and the usable step window
-> (shaded, RMSE ≤ 30% of |∇C|). Bottom: the error of a single estimate as N → ∞ with the
+> (shaded, RMSE ≤ 10% of |∇C|). Bottom: the error of a single estimate as N → ∞ with the
 > setpoint error r = 0.02 — for FD the RMSE over the step ε (line) and five sampled
 > estimates per step (dots); for PSR one flat line, its shared-draw error ≈ |f″|·r; NSR has
 > none. The three landscapes differ in sharpness (bandwidth Ω̄ = 2, 5, 10); the operating
 > points are generic, chosen so that |f″|·r is of the same order (2.5–4.4% of |∇C|). The
-> window's lower edge, ε ≈ √2·r/0.3 ≈ 0.1, is the same everywhere: below it the setpoint
-> error is amplified by 1/ε. Its upper edge is the truncation bias and closes as the
-> landscape sharpens (2.7, 1.0, 0.4): on the healthy landscape almost any step works, on the
-> ill one only a narrow notch does, and even there the best step leaves 15% error.
+> small-ε rise is the setpoint error amplified by 1/ε, the same in every panel; the
+> large-ε rise is the truncation bias and closes as the landscape sharpens. At 10% the
+> healthy landscape is usable for ε ∈ [0.35, 1.4], the intermediate one only in [0.35, 0.5],
+> and the ill one has no usable step: its best step leaves 15% error and beyond ε ≈ 0.9 the
+> estimate is off-scale.
 
 Suggested conclusion sentence for App. C.3: "Fig. 8's operating point is not a singleton:
 on every landscape the FD window is bounded below by r and above by the landscape's
-sharpness, and even its best step leaves 5–15% error, while the shift rules need no step."
+sharpness, and even its best step leaves 5–15% error, while the shift rules need no step and stay at a few percent."
 
 C.3's "was selected by scanning … for the point maximizing FD's predicted floor" should
 describe the rules actually used (Fig 8: the C″ = 0 point in the M = 5 window; this
