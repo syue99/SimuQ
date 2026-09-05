@@ -198,10 +198,12 @@ at n = 1000 as **0.191 ms** so 175 / 0.191 = 916 matches (or quote "≈ 9×10²"
 PSR's log-log slope over the five points is 1.24; Table 6 says 1.3 — say 1.2, or state the
 fit range (n ≥ 100 gives 1.43). Platform footnote string is real; keep.
 
-## Figure 6 (P0-7)
-Default applied per handover: drop the instance strip (it is unreadable at column width;
-Figs 7 and 13 carry the instance). If Fred prefers the strip, it needs ≥ 7 pt in a
-two-column float — his TikZ, not a builder here.
+## Figure 6 (P0-7) — `F_lowering`
+Redrawn (two-column, ≥ 7 pt, no internal names); the instance strip is dropped per the
+handover default, so the caption should point to Figs 7 and 13 for the running instance.
+The old figure's section codes (S.1, S.3–S.5) are not on the new one: put the section
+references for stages A–E in the caption. If Fred wants the strip back, it needs its own
+row at ≥ 7 pt (a builder change, no data).
 
 ## Figure 11 (P1-3)
 Needs "reproduced from [bib] (CC BY 4.0)" in the figure file once the entry exists; if it

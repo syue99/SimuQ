@@ -295,9 +295,15 @@ means many branches per cycle, or the label is wrong).
 Table 6 fix so the annotation and the table agree at displayed precision: print NSR at
 n = 1000 as **0.191 ms** (then 175 / 0.191 = 916) — or quote the ratio as "≈ 9×10²".
 
-## Figure 6 (lowering stack) — no builder in this repo
-The figure is authored in the paper source (TikZ/tex). Handover default applied: **drop the
-instance strip**, let Figs 7 and 13 carry the instance; Fred confirms.
+## Figure 6 (lowering stack) — `tests/build_F_lowering.py`, 2026-09-05
+Redrawn from `figures/compiler.png` (the hand-made version). Handover P0-7 applied with its
+default: the **instance strip is dropped** (Figs 7 and 13 carry the running instance); every
+label is ≥ 7 pt in a two-column float; the internal names on the old figure (function,
+config and file names, section codes, the `H₀(4404)` count) are gone. Structure kept: five
+stages A–E, colour = this paper / reused (SimuQ solver; scheduler design) / artifact, the
+emulator under the machine-native segments, and the "existing analog toolchains end here"
+boundary before the scheduler. Output `F_lowering.{pdf,png}` in `figures/`, `paper_fig_2/`,
+`paper_fig_3/figs/`. Section references belong in the caption.
 
 ## Figure 11 (P1-3) — attribution
 Not a plot task. The figure file needs the "reproduced from [ref] (CC BY 4.0)" text once

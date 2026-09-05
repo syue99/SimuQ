@@ -308,6 +308,7 @@ The F6 legend is 5.8 pt (below the ground-rule 7 pt minimum, per owner).
 - [x] figs/F_select.pdf (+png), figs/F_regimes.pdf (+png) — v2 log-ratio plane
 - [x] figs/fig1_intro_trap.pdf (+png), figs/F_cycle.pdf (+png), figs/F_waveform.pdf (+png)
 - [x] figures/branch_anatomy.pdf (+png) — v2 transit-lane compile
+- [x] figs/F_lowering.pdf (+png) — Fig 6 redrawn (strip dropped, ≥ 7 pt, no internal names)
 - [x] figs/F_scale_app.pdf (+png), figs/compile_curves.pdf (+png) — unchanged
 - [x] SEC6_DATA_REPORT.md (this file); ../NUMBERS.md, ../TEXT_CHANGES.md,
       ../DELTA_NOISE.md, ../SELECTOR_FACTOR2.md
