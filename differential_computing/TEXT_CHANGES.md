@@ -205,7 +205,8 @@ its terms and provenance, the (κ, σ) branch and its weight, the frozen-geometr
 λ = c(x+s)/c(x), the machine-native segment, and the channels it keys. The caption should
 say the strip uses Fig 7's notation and that Figs 7/13 show the same branch compiled. The
 old figure's section codes (S.1, S.3–S.5) are not on the new one: put the section references
-for stages A–E in the caption.
+for stages A–E in the caption, and say there that the scheduler's design is reused from an
+existing pulse toolchain (the legend now only says "reused (SimuQ)").
 
 ## Figure 11 (P1-3)
 Needs "reproduced from [bib] (CC BY 4.0)" in the figure file once the entry exists; if it

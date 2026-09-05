@@ -42,15 +42,15 @@ def badge(ax, x, y, letter, color):
 
 def main():
     plt.rcParams.update({"font.size": 7, "font.family": "sans-serif"})
-    fig, ax = plt.subplots(figsize=(7.0, 2.45), dpi=300)
-    ax.set_xlim(0, 14.6); ax.set_ylim(1.25, 5.95); ax.axis("off")
+    fig, ax = plt.subplots(figsize=(7.0, 2.2), dpi=300)
+    ax.set_xlim(0, 14.6); ax.set_ylim(1.25, 5.2); ax.axis("off")
 
     # ── legend row ──
     for x, edge, fill, lab in [(0.3, C_NEW, C_NEW_FILL, "this paper"),
-                               (2.3, C_OLD, C_OLD_FILL, "reused (SimuQ solver; scheduler design)"),
-                               (7.4, C_ART, C_ART_FILL, "artifact / input")]:
-        box(ax, x, 5.5, 0.42, 0.28, edge, fill, r=0.05)
-        ax.text(x + 0.55, 5.64, lab, va="center", fontsize=7, color=INK)
+                               (2.15, C_OLD, C_OLD_FILL, "reused (SimuQ)"),
+                               (4.65, C_ART, C_ART_FILL, "artifact")]:
+        box(ax, x, 4.82, 0.42, 0.28, edge, fill, r=0.05)
+        ax.text(x + 0.55, 4.96, lab, va="center", fontsize=7, color=INK)
 
     # ── five stages ──
     Y, H = 2.6, 2.05
@@ -65,13 +65,12 @@ def main():
          "multiplexing,\ntransport plans,\ninsertions", "this paper"),
     ]
     for x, w, L, edge, fill, title, body, tag in stages:
-        hh = 1.0 if L == "D" else H                 # D is only a title; the emulator sits under it
+        hh = 1.2 if L == "D" else H                 # D is only a title; the emulator sits under it
         box(ax, x, Y + H - hh, w, hh, edge, fill)
-        badge(ax, x + 0.24, Y + H - 0.26, L, edge)
+        badge(ax, x + 0.24, Y + H - 0.22 if L == "D" else Y + H - 0.26, L, edge)
         if L == "D":
-            ax.text(x + 0.46, Y + H - 0.30, title, ha="left", va="center", fontsize=7.2, weight="bold",
+            ax.text(x + w / 2 + 0.1, Y + H - 0.62, title, ha="center", va="center", fontsize=7, weight="bold",
                     color=INK, zorder=6, linespacing=1.05)
-            ax.text(x + w / 2, Y + H - hh + 0.17, "", zorder=6)
         else:
             ax.text(x + w / 2 + 0.14, Y + H - 0.30, title, ha="center", va="center", fontsize=7.5,
                     weight="bold", color=INK, zorder=6, linespacing=1.05)
@@ -87,12 +86,12 @@ def main():
         ax.text(cx + cw / 2, yy + 0.24, txt, ha="center", va="center", fontsize=7, color=INK, zorder=6,
                 linespacing=1.05)
     # D: the emulator below it (this paper)
-    ex_, ew = 9.25, 1.9
-    box(ax, ex_, Y, ew, 0.78, C_NEW, C_NEW_FILL)
-    ax.text(ex_ + ew / 2, Y + 0.57, "Emulator", ha="center", va="center", fontsize=7.5, weight="bold", color=INK, zorder=6)
-    ax.text(ex_ + ew / 2, Y + 0.24, "expectation values,\ndevice noise model", ha="center", va="center",
-            fontsize=7, color=INK, zorder=6, linespacing=1.05)
-    arrow(ax, ex_ + ew / 2, Y + H - 1.0, ex_ + ew / 2, Y + 0.8)
+    ex_, ew = 9.1, 2.2
+    box(ax, ex_, Y, ew, 0.72, C_NEW, C_NEW_FILL)
+    ax.text(ex_ + ew / 2, Y + 0.52, "Emulator", ha="center", va="center", fontsize=7.5, weight="bold", color=INK, zorder=6)
+    ax.text(ex_ + ew / 2, Y + 0.2, "expected values,\nnoise model", ha="center", va="center",
+            fontsize=7, color=INK, zorder=6, linespacing=1.0)
+    arrow(ax, ex_ + ew / 2, Y + H - 1.2, ex_ + ew / 2, Y + 0.74)
 
     # ── flow arrows and end labels ──
     ym = Y + H - 0.5                             # flow arrows at the height of D's short box
@@ -106,9 +105,9 @@ def main():
 
     # boundary of existing analog toolchains
     xb = 11.48
-    ax.plot([xb, xb], [1.3, 5.4], color="#999999", lw=0.9, ls=(0, (3, 2)), zorder=1)
-    ax.text(xb - 0.1, 5.35, "existing analog\ntoolchains end here", ha="right", va="top", fontsize=7,
-            color=SEC, linespacing=1.05)
+    ax.plot([xb, xb], [1.3, 5.15], color="#999999", lw=0.9, ls=(0, (3, 2)), zorder=1)
+    ax.text(xb - 0.1, 4.96, "existing analog toolchains end here", ha="right", va="center", fontsize=7,
+            color=SEC)
 
     # ── the running NSR branch through the five stages (App F instance, Fig 13's compile) ──
     ax.text(1.15, Y - 0.06, "the running NSR branch at each stage (ledger vocabulary of Fig. 7):", ha="left", va="top",
