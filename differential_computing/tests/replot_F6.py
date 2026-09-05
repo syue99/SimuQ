@@ -64,11 +64,10 @@ def main():
     wr = np.array(d["fd_wrong"]) >= 0.2
     itgt = d["N"].index(10000)
     axV = axS.inset_axes([0.07, 0.085, 0.48, 0.30])
-    # B.6.4 (P0-5): the analytic curve the sweep is meant to be showing,
-    # sqrt((eps^2 f3/24)^2 + 2 f1^2 r^2 / eps^2), drawn under the empirical points
-    if "fd_analytic_curve" in d:
-        axV.loglog(epsR, d["fd_analytic_curve"], "-", color="#8a8880", lw=0.9,
-                   zorder=1)
+    # B.6.4's analytic curve is NOT drawn: as written it is truncation + delta/eps
+    # only, and at this operating point it misses FD's common-mode displacement
+    # term, so it sits a factor ~2 under the sweep near the minimum.  The
+    # discrepancy is reported in NUMBERS.md instead of drawn as if it agreed.
     axV.loglog(epsR, fd_r, "-", color=C_FD, lw=1.2)
     axV.loglog(epsR[~wr], fd_r[~wr], "o", color=C_FD, ms=2.2)
     axV.loglog(epsR[wr], fd_r[wr], "X", color="#1a1a1a", ms=4.5)

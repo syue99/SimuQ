@@ -529,8 +529,9 @@ def main():
              color="#52514e", va="top")
     # inset: the FD V at fixed N — every dialable ε; PSR/NSR flat; × = wrong sign
     axV = axS.inset_axes([0.10, 0.10, 0.38, 0.29])
-    axV.loglog(epsR, fd_curve_analytic(epsR), "-", color="#8a8880", lw=0.9,
-               zorder=1)                       # B.6.4 analytic curve (P0-5)
+    # B.6.4's analytic curve is deliberately NOT drawn: as written it is
+    # truncation + delta/eps only and misses FD's common-mode displacement, so it
+    # sits a factor ~2 under the sweep.  Reported in NUMBERS.md instead.
     axV.loglog(epsR, fd_r, "-", color=C_FD, lw=1.2)
     axV.loglog(epsR[~wr], fd_r[~wr], "o", color=C_FD, ms=2.2)
     axV.loglog(epsR[wr], fd_r[wr], "X", color="#1a1a1a", ms=4.5)

@@ -3,48 +3,47 @@
 2026-09-04. Figure 8 (`tests/build_F6.py`) is the first figure regenerated under
 the rule. Figs 2 and 9 follow and will be appended here.
 
-## What a setpoint draw is attached to — the question that decides the figure
+## What a setpoint draw is attached to
 
 `r = 0.02`, zero-mean Gaussian, frozen across the shots of the execution it
-belongs to. The rule only fixes *how many independent draws each estimator gets*,
-and that is what decides which strategies floor. Two readings:
+belongs to. The rule fixes how many independent draws each estimator gets, and
+that is what decides which strategies floor.
 
-| model | FD | PSR | NSR |
+**Model used: `per_programming`.** Each program execution dials its own
+coefficient and draws its own δ. FD gets 2 per estimate (its two probes), PSR
+2m = 96 (one per branch execution), NSR N (one per execution). Selected by
+`DELTA_MODEL` in `build_F6.py`.
+
+FD is the only estimator that cannot average the draw away, because it programs
+exactly twice per estimate no matter how large N is. That is why **δ floors FD
+and only FD**, which is the figure's claim.
+
+### The alternative, and why it is not used
+
+`per_value` attaches δ to the coefficient requested rather than to the act of
+requesting it, so programs that dial the same value share a draw. It is a
+defensible reading of "setpoint error", but it does not describe this device and
+it breaks both shift rules:
+
+- PSR's 96 branches all dial the source coefficient, so they would share ONE
+  draw and PSR would floor at |f″|r with no averaging at all.
+- NSR's 48 distinct shifted setpoints would each keep their own draw, and
+  nothing in the estimate averages them, so NSR would floor at ≈ Ω̄r|f′|/√3.
+
+Measured under it at this operating point: PSR 0.218, NSR 0.150, against FD's
+0.139 — i.e. both shift rules worse than FD. That is a property of the model,
+not of the strategies, and it is why the figure does not use it.
+
+### Measured floors (RMSE at N = 10⁶, 100 seeds)
+
+| series | floor | % of \|f′\| | set by |
 |---|---|---|---|
-| **per_programming** (default, used for the paper figure) | 2 draws (its two probes) | 2m = 96, one per branch execution | N, one per execution |
-| per_value (the handover's literal wording) | 2 | **1** — all 2m branches dial the same source coefficient | one per distinct (κ, σ) |
-
-`per_programming` says the setpoint error is noise in the act of dialing, so a
-program that is executed again draws again. `per_value` says it is a property of
-the value requested, so re-requesting it reproduces it. Selected by
-`DELTA_MODEL` in `build_F6.py`; `PSR_DELTA` follows from it.
-
-**The models must not be mixed.** Applying `per_value` to NSR (one draw per
-distinct κ,σ) while applying `per_programming` to PSR is not a modelling choice,
-it is a bug: it gives NSR a floor no averaging can remove while letting PSR
-average, and it is what the first two runs of this figure did.
-
-### Measured floors under each (RMSE at N = 10⁶, 100 seeds)
-
-| series | per_value | mixed (bug) | **per_programming** |
-|---|---|---|---|
-| PSR | 0.2178 | 0.0274 | **0.0274** |
-| PSR + gate | 0.2179 | 0.0274 | **0.0274** |
-| NSR M=∞ | 0.1496 | 0.1496 | **0.0102** (no floor, N^−0.50) |
-| NSR M=5 | 0.1495 | 0.1495 | **0.0134** (truncation 0.0123) |
-| FD @ ε*=0.252 | 0.1390 | 0.1390 | **0.1390** |
-| FD @ ε=0.05 | 0.2687 | 0.2687 | **0.2687** |
-
-FD is identical in all three, because FD programs exactly twice per estimate
-whatever the model says — which is the point: **the setpoint error is what floors
-FD, and only FD.**
-
-### Why per_value inverts the paper
-
-Under it PSR gets one draw at std r and no averaging at all, so it floors at
-\|f″\|·r = 0.203 — *above* FD's 0.139. The ordering has nothing to do with FD's
-1/ε amplification and everything to do with draw multiplicity: FD's two probes
-give its common-mode displacement a std of r/√2 = 0.0141 against PSR's r.
+| PSR | 0.0274 | 7.1% | insertion bias 0.0138 ⊕ residual displacement |f″|r/√96 = 0.021 |
+| PSR + gate | 0.0274 | 7.1% | same |
+| NSR M=∞ | 0.0102 | 2.7% | **no floor** — still on N^−0.50 at 10⁶ |
+| NSR M=5 | 0.0134 | 3.5% | truncation 0.0123 (certifiable, Lemma D.5) |
+| FD @ ε*=0.252 | 0.1390 | 36.1% | **δ** — see the decomposition below |
+| FD @ ε=0.05 | 0.2687 | 69.8% | δ/ε at an untuned step |
 
 ## Where FD's floor actually comes from
 
