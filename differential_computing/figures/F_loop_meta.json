@@ -2,11 +2,11 @@
   "order": [
     "PSR",
     "NSR",
-    "FD \u03b5=0.15 (best \u03b5 \u2014 needs \u03b8*)",
-    "FD \u03b5=0.7 (too large: fails)",
-    "FD \u03b5=0.04 (too small: unreliable)"
+    "FD \u03b5=0.1 (best \u03b5 \u2014 needs \u03b8*)",
+    "FD \u03b5=0.5 (too large: fails)",
+    "FD \u03b5=0.05 (too small: unreliable)"
   ],
-  "ob_eps": 0.15,
+  "ob_eps": 0.1,
   "methods": {
     "PSR": {
       "c": "#0072B2",
@@ -18,20 +18,20 @@
       "mk": "s",
       "eps": null
     },
-    "FD \u03b5=0.15 (best \u03b5 \u2014 needs \u03b8*)": {
+    "FD \u03b5=0.1 (best \u03b5 \u2014 needs \u03b8*)": {
       "c": "#E69F00",
       "mk": "^",
-      "eps": 0.15
+      "eps": 0.1
     },
-    "FD \u03b5=0.7 (too large: fails)": {
+    "FD \u03b5=0.5 (too large: fails)": {
       "c": "#d62728",
       "mk": "D",
-      "eps": 0.7
+      "eps": 0.5
     },
-    "FD \u03b5=0.04 (too small: unreliable)": {
+    "FD \u03b5=0.05 (too small: unreliable)": {
       "c": "#7b3fa0",
       "mk": "v",
-      "eps": 0.04
+      "eps": 0.05
     }
   }
 }

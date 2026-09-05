@@ -39,14 +39,18 @@ import build_Floop_direction as bd
 from noisy_qutip import NoisyQuTiPRunner
 from noise_model import NoiseModel
 
-# Shorter evolution than the direction map: ⟨O⟩ curvature scales ≈T² and at T=1.5 the landscape is
-# too stiff for a stable GD demo. T≈0.8 gives a gentle, well-behaved valley. T/T2*=0.15 held by
-# scaling T2, so the noise regime is unchanged.
-bd.T = float(os.environ.get("TEVOL", "0.8"))
+# Evolution time sets the landscape's sharpness (⟨O⟩ curvature ≈ T²).  T = 0.8 was the
+# 2026-08 choice ("gentle valley"); under the P0-0 setpoint rule and with the estimator
+# bugs fixed, every method plateaued there at ≈0.04 (shot-noise jitter) and no ε
+# separated FD from the shift rules.  The 2026-09-04 scan of T ∈ {0.8..3.0} (audit of
+# per-step gradient error at θ*, B = 6000) gives at T = 2.5: PSR/NSR ≈ 0.02, FD's best
+# step 0.05, i.e. the shift rules hold the 0.03 tolerance and FD does not at any ε.
+# T/T2* = 0.15 held by scaling T2, so the noise regime is unchanged.
+bd.T = float(os.environ.get("TEVOL", "2.5"))            # 2026-09-04: 0.8 → 2.5 (landscape scan; T/T2* held at 0.15)
 bd.T2 = bd.T / 0.15
 bd.RUNNER = NoisyQuTiPRunner(2, noise=NoiseModel(n_qubits=2, T2=bd.T2))
 bd.PROBS = bd.RUNNER.make_probs_fn(bd.PSI0)
-bd.B_BUDGET = int(os.environ.get("B_BUDGET", "3000"))      # FINITE shots per gradient
+bd.B_BUDGET = int(os.environ.get("B_BUDGET", "6000"))      # FINITE executions per gradient (paper: 6000)
 bd.DELTA = float(os.environ.get("DELTA", "0.02"))          # amplitude-resolution jitter (zero-mean)
 bd.M_PSR = int(os.environ.get("M_PSR", "32"))              # converge PSR's τ-integral for both gens
 
@@ -54,13 +58,20 @@ ZZV = np.array([1.0, -1.0, -1.0, 1.0])                     # ⟨Z0Z1⟩ outcome 
 ZSV = np.array([2.0, 0.0, 0.0, -2.0])                      # ⟨Z0+Z1⟩ outcome vector (Z-diagonal)
 
 DOM = (0.2, 1.4)
-W = float(os.environ.get("W", "0.04"))                    # residual weight ⇒ conditioning κ~1/w
-ITERS = int(os.environ.get("FLOOP_ITERS", 90))
+W = float(os.environ.get("W", "0.25"))                    # residual weight ⇒ conditioning κ~1/w (paper: 0.25)
+ITERS = int(os.environ.get("FLOOP_ITERS", 100))          # paper: 100 steps (50 drawn)
 SEEDS = int(os.environ.get("FLOOP_SEEDS", 20))            # L4 [B]: ≥20 seeds with an IQR band
 ETA_ENV = os.environ.get("FLOOP_ETA")                     # auto (1.4/μ_stiff) unless overridden
-FD_WRONG = float(os.environ.get("FD_WRONG", "0.7"))       # too-large ε (truncation-dominated: fails)
-FD_TOO_SMALL = float(os.environ.get("FD_SMALL", "0.04"))  # too-small ε (δ/ε noise: unreliable, wide IQR)
-FD_ORACLE_GRID = [0.15, 0.2, 0.25, 0.3, 0.35]             # a-priori-unknowable "best" ε (needs θ*)
+# FD steps in the PAPER convention (probes θ ± ε/2, divide by ε).  The builder used
+# θ ± ε ÷ 2ε before 2026-09-04; the physical probes below are the same as the old
+# 0.7 / 0.04 / [0.15..0.35], relabelled.
+FD_WRONG = float(os.environ.get("FD_WRONG", "0.5"))       # too-large ε (truncation-dominated: fails)
+FD_TOO_SMALL = float(os.environ.get("FD_SMALL", "0.05"))  # too-small ε = 2.5δ (δ/ε noise: unreliable, wide IQR)
+FD_ORACLE_GRID = [0.1, 0.15, 0.2, 0.3, 0.5]                # a-priori-unknowable "best" ε (needs θ*)
+# FLOOP_TAG=<name>: pilot/diagnostic run — caches and figures get a _<name> suffix
+# and the paper_fig outputs are NOT written.
+FLOOP_TAG = os.environ.get("FLOOP_TAG", "")
+SUF = ("_" + FLOOP_TAG) if FLOOP_TAG else ""
 FIGDIR = bd.FIGDIR
 C_PSR, C_NSR, C_FDO, C_FDW, C_FDS = "#0072B2", "#009E73", "#E69F00", "#d62728", "#7b3fa0"
 
@@ -68,7 +79,12 @@ _OCa, _OCb = {}, {}
 
 
 def probs_at(th):
-    return bd.probs_at(np.clip(th, DOM[0], DOM[1]))
+    """Outcome probabilities of a PROGRAM at coefficient vector th.  Not clipped: the
+    box DOM constrains the optimizer's iterate (clipd), not what a program may dial —
+    NSR's Nyquist shifts (±0.98, ±2.9, … in θ1 at T = 0.8) and FD's wide probes
+    leave the box by construction.  (Before 2026-09-04 this clipped, which silently
+    evaluated most NSR shifts at the box edge.)"""
+    return bd.probs_at(np.asarray(th, float))
 
 
 def Oa_ex(th):
@@ -131,77 +147,162 @@ def hess_C(th, h=2e-2):
     return np.array([[Hxx, Hxy], [Hxy, Hyy]])
 
 
+# ── P0-0 setpoint draw, per-change rule (owner's ruling 2026-09-04) ──────────────────────────────
+class Dial:
+    """One setpoint draw per coefficient, r = bd.DELTA, taken when the programmed VALUE of that
+    coefficient changes and held until it changes again.  A fresh Dial per gradient estimate
+    (one optimizer step), so every draw is redrawn between steps.  FD's four probe programs
+    each redraw the coefficient they move; PSR's residual measurement and all its branches dial
+    the same vector, so one draw serves the whole estimate; NSR's shifted coefficient changes
+    on (almost) every execution and is drawn per execution in _obs_grads_nsr."""
+
+    def __init__(self, rng, r):
+        self.rng, self.r = rng, float(r)
+        self.last = np.full(2, np.nan)
+        self.d = np.zeros(2)
+
+    def __call__(self, th):
+        th = np.asarray(th, float)
+        ch = ~np.isclose(th, self.last, rtol=0.0, atol=1e-12)
+        if self.r > 0 and ch.any():
+            self.d[ch] = self.rng.normal(0.0, self.r, int(ch.sum()))
+        self.last = th.copy()
+        return th + self.d
+
+    def forget(self, ell):                  # the next program re-dials coefficient ell
+        self.last[ell] = np.nan
+
+
 # ── estimators ────────────────────────────────────────────────────────────────────────────────────
 def fd_grad_C(th, eps, rng):
     """Honest black-box central difference OF THE OBJECTIVE C. Truncation (ε²/6·C‴, deterministic) +
     δ/ε (resolution jitter, zero-mean per programming). Does NOT self-correct at θ* (C‴(θ*)≠0)."""
     g = np.zeros(2); nper = max(1, bd.B_BUDGET // 4)
-    t = clipd(th)
+    t = clipd(th); dial = Dial(rng, bd.DELTA)
 
     def Cshot(x):
-        oa, ob = shot_both(probs_at(x), nper, rng)
+        oa, ob = shot_both(probs_at(dial(x)), nper, rng)      # program x lands at x + δ
         return (oa - A_STAR) ** 2 + W * (ob - B_STAR) ** 2
-    for ell in range(2):
-        ep = t.copy(); ep[ell] += eps + rng.normal(0, bd.DELTA)
-        em = t.copy(); em[ell] += -eps + rng.normal(0, bd.DELTA)
-        g[ell] = (Cshot(ep) - Cshot(em)) / (2 * eps)
+    for ell in range(2):                                      # paper convention: θ ± ε/2, ÷ ε
+        ep = t.copy(); ep[ell] += 0.5 * eps
+        em = t.copy(); em[ell] -= 0.5 * eps
+        g[ell] = (Cshot(ep) - Cshot(em)) / eps
     return g
 
 
-def _obs_grads_psr(th, rng, nper):
+def _psr_programs(ell, th):
+    """All PSR branch programs for coefficient ell at coefficient vector th: one program set per
+    Pauli term of the coefficient (θ2 multiplies X0 + X1 → two sets), each M_PSR τ-samples ×
+    (−, +) branches.  Before 2026-09-04 only the first set was used, which halved ∂/∂θ2."""
+    Hp = bd.Hp_for(ell, th)
+    orig = np.random.rand
+    np.random.rand = lambda k: (np.arange(k) + 0.5) / k
+    try:
+        return bd.observable_program_generator(Hp, bd.T, n_sample=bd.M_PSR, n_repetition=1,
+                                               diff_var=bd.NAMES[ell], value=float(th[ell]))
+    finally:
+        np.random.rand = orig
+
+
+def _obs_grads_psr(th, rng, nshot_half, dial=None, exact=False):
+    """PSR observable gradients at the DIALED point (every branch programs the same source
+    coefficients, so the whole estimate shares one setpoint draw).  nshot_half executions per
+    coefficient, split evenly over that coefficient's actual branch count."""
     ga, gb = np.zeros(2), np.zeros(2)
+    tr = dial(th) if dial is not None else np.asarray(th, float)
     for ell in range(2):
-        Hp = bd.Hp_for(ell, th)
-        orig = np.random.rand
-        np.random.rand = lambda k: (np.arange(k) + 0.5) / k
-        try:
-            pr = bd.observable_program_generator(Hp, bd.T, n_sample=bd.M_PSR, n_repetition=1,
-                                                 diff_var=bd.NAMES[ell], value=float(th[ell]))
-        finally:
-            np.random.rand = orig
-        H_tot, ug, _ = pr[0]; nb = len(H_tot) // 2
-        sa = sb = 0.0
-        for i in range(nb):
-            ma_a, ma_b = shot_both(bd.PROBS(H_tot[2 * i]), nper, rng)
-            pa_a, pa_b = shot_both(bd.PROBS(H_tot[2 * i + 1]), nper, rng)
-            sa += ma_a - pa_a; sb += ma_b - pa_b
-        ga[ell] = (bd.T / nb) * float(ug) * sa
-        gb[ell] = (bd.T / nb) * float(ug) * sb
+        pr = _psr_programs(ell, tr)
+        nb_tot = sum(len(H_tot) // 2 for H_tot, _, _ in pr)
+        nper = int(max(1, round(nshot_half / (2 * nb_tot))))
+        for H_tot, ug, _ in pr:                           # weight T/M per τ-sample, per term
+            nb = len(H_tot) // 2
+            sa = sb = 0.0
+            for i in range(nb):
+                pm, pp = bd.PROBS(H_tot[2 * i]), bd.PROBS(H_tot[2 * i + 1])
+                if exact:
+                    ma_a, ma_b = float(ZZV @ pm), float(ZSV @ pm)
+                    pa_a, pa_b = float(ZZV @ pp), float(ZSV @ pp)
+                else:
+                    ma_a, ma_b = shot_both(pm, nper, rng)
+                    pa_a, pa_b = shot_both(pp, nper, rng)
+                sa += ma_a - pa_a; sb += ma_b - pa_b
+            ga[ell] += (bd.T / bd.M_PSR) * float(ug) * sa
+            gb[ell] += (bd.T / bd.M_PSR) * float(ug) * sb
     return ga, gb
 
 
-def _obs_grads_nsr(th, rng, nshot):
+NSR_STENCIL_H = 0.04                    # = 2r: quadratic-in-δ realization of a shifted program
+
+
+def _obs_grads_nsr(th, rng, nshot, dial=None, exact=False):
+    """NSR observable gradients.  Shifted programs are never clipped (M = ∞).  Setpoint rule:
+    the shifted coefficient changes value on (almost) every execution, so it takes a fresh
+    draw whenever the drawn (κ, σ) differs from the previous execution's; the other
+    coefficient is held at the value (and draw) the estimate started with.  The per-execution
+    draw is realized by a 3-point stencil at each shift (probs at s, s ± NSR_STENCIL_H,
+    quadratic in δ — exact to O(δ³))."""
     ga, gb = np.zeros(2), np.zeros(2)
+    r = bd.DELTA if dial is not None else 0.0
     for ell in range(2):
+        base = dial(th) if dial is not None else np.asarray(th, float)
+        base = base.copy(); base[ell] = float(th[ell])         # the shifted coefficient's own δ is per execution
         Hp = bd.Hp_for(ell, th)
         _, A = bd.tangent_hamiltonian(Hp, bd.NAMES[ell], float(th[ell]))
         K = bd.bandwidth_K(A, bd.T); L1 = 2 * np.pi * K
-        cache = {}
+        P0, P1, P2 = {}, {}, {}
         for sg in (-1.0, 1.0):
             for n in range(bd.MAXN):
                 s = sg * (n + 0.5) / (2 * K)
-                tt = th.copy(); tt[ell] += s
-                cache[(n, sg)] = probs_at(tt)
+                tt = base.copy(); tt[ell] += s
+                p0 = probs_at(tt)
+                if r > 0:
+                    tp = tt.copy(); tp[ell] += NSR_STENCIL_H; tm = tt.copy(); tm[ell] -= NSR_STENCIL_H
+                    pp, pm = probs_at(tp), probs_at(tm)
+                    P1[(n, sg)] = (pp - pm) / (2 * NSR_STENCIL_H)
+                    P2[(n, sg)] = (pp - 2 * p0 + pm) / (2 * NSR_STENCIL_H ** 2)
+                P0[(n, sg)] = p0
+        if exact:
+            ga[ell] = float(sum(bd.pw[n] * L1 * ((-1.0) ** n) * sg * float(ZZV @ P0[(n, sg)])
+                                for sg in (-1.0, 1.0) for n in range(bd.MAXN)) / 2.0)
+            gb[ell] = float(sum(bd.pw[n] * L1 * ((-1.0) ** n) * sg * float(ZSV @ P0[(n, sg)])
+                                for sg in (-1.0, 1.0) for n in range(bd.MAXN)) / 2.0)
+            continue
         nd = rng.choice(bd.ns, size=nshot, p=bd.pw); sig = rng.choice([-1.0, 1.0], size=nshot)
+        if r > 0:
+            dl = rng.normal(0.0, r, nshot)
+            same = np.zeros(nshot, bool); same[1:] = (nd[1:] == nd[:-1]) & (sig[1:] == sig[:-1])
+            for k in range(1, nshot):                          # value unchanged → draw held
+                if same[k]:
+                    dl[k] = dl[k - 1]
+        else:
+            dl = np.zeros(nshot)
         va = np.empty(nshot); vb = np.empty(nshot)
         for k, (a, b) in enumerate(zip(nd, sig)):
-            va[k], vb[k] = shot_both(cache[(int(a), b)], 1, rng)
+            key = (int(a), b)
+            if r > 0:
+                p = P0[key] + dl[k] * P1[key] + dl[k] ** 2 * P2[key]
+                p = np.clip(p, 0.0, None); p = p / p.sum()
+            else:
+                p = P0[key]
+            va[k], vb[k] = shot_both(p, 1, rng)
         ga[ell] = float(np.mean(L1 * ((-1.0) ** nd) * sig * va))
         gb[ell] = float(np.mean(L1 * ((-1.0) ** nd) * sig * vb))
+        if dial is not None:
+            dial.forget(ell)                                   # ell returns to its source value next
     return ga, gb
 
 
 def iqs_grad(kind, th, rng):
     """Analytic IQS gradient 2·r_a·∇O_a + 2w·r_b·∇O_b, residuals measured at θ (unbiased)."""
-    t = clipd(th)
+    t = clipd(th); dial = Dial(rng, bd.DELTA)
     n_res = max(50, bd.B_BUDGET // 5)
-    ra_s, rb_s = shot_both(probs_at(t), n_res, rng)
+    ra_s, rb_s = shot_both(probs_at(dial(t)), n_res, rng)     # residuals: the program dials t
     ra, rb = ra_s - A_STAR, rb_s - B_STAR
     ngrad = max(1, (bd.B_BUDGET - 2 * n_res))
     if kind == "PSR":
-        ga, gb = _obs_grads_psr(t, rng, int(max(1, round((ngrad / 2) / (2 * bd.M_PSR)))))
+        ga, gb = _obs_grads_psr(t, rng, ngrad / 2, dial)
     else:
-        ga, gb = _obs_grads_nsr(t, rng, int(max(1, round(ngrad / 2))))
+        ga, gb = _obs_grads_nsr(t, rng, int(max(1, round(ngrad / 2))), dial)
     return 2 * ra * ga + 2 * W * rb * gb
 
 
@@ -225,7 +326,7 @@ THETA_STARTPT = None
 
 def setup():
     global A_STAR, B_STAR, THETA_STAR, ETA, THETA_STARTPT
-    env_ts = os.environ.get("TSTAR")
+    env_ts = os.environ.get("TSTAR", "1,1")               # paper: θ* = (1, 1)
     if env_ts:
         THETA_STAR = np.array([float(x) for x in env_ts.split(",")])
     else:                                # pick interior θ★ with ∇Oa ⟂ ∇Ob (identifiable) and room
@@ -283,12 +384,28 @@ def main():
                    / (2 * hh ** 3)))
     delta = bd.DELTA
     def pred_offset(eps):
-        return (delta / eps + (eps ** 2 / 6) * C3) / muC
-    print(f"|C‴|(soft)={C3:.2f}  δ={delta}  pred oracle offset≈{pred_offset(0.25):.3f}", flush=True)
+        return (2 * delta / eps + (eps ** 2 / 24) * C3) / muC     # paper ε: probes ± ε/2
+    print(f"|C‴|(soft)={C3:.2f}  δ={delta}  pred oracle offset≈{pred_offset(0.5):.3f}", flush=True)
+    # estimator audit (shot-free, δ-free): both shift rules must reproduce ∇⟨O⟩ for BOTH
+    # coefficients — this is what catches the two-term PSR and the clipped-NSR bugs.
+    for lab in ("PSR", "NSR"):
+        fn = _obs_grads_psr if lab == "PSR" else _obs_grads_nsr
+        for pt in (THETA_STARTPT, THETA_STAR):
+            ga_x, gb_x = _gradf(Oa_ex, pt), _gradf(Ob_ex, pt)
+            ga_e, gb_e = fn(pt, None, 0, None, exact=True)
+            err = max(np.linalg.norm(ga_e - ga_x) / np.linalg.norm(ga_x),
+                      np.linalg.norm(gb_e - gb_x) / np.linalg.norm(gb_x))
+            print(f"  audit {lab} exact at {np.round(pt,3)}: rel|Δ∇O|={100*err:.2f}%  "
+                  f"(∇Oa {np.round(ga_e,3)} vs {np.round(ga_x,3)}; ∇Ob {np.round(gb_e,3)} vs {np.round(gb_x,3)})",
+                  flush=True)
+            # PSR is exact to the τ-quadrature (0.1%); NSR carries the MAXN=14-mode series
+            # truncation (~1.5%).  Anything larger is a bug (the two-term PSR bug was 50%,
+            # the clipped-NSR bug 30-100%).
+            assert err < 0.03, f"{lab} observable gradient off by {100*err:.1f}%"
 
     # cache the (expensive) trajectories so plot tweaks never re-run the sim (REPLOT=1 reloads)
-    CACHE_NPZ = os.path.join(FIGDIR, "F_loop_curves.npz")
-    CACHE_JSON = os.path.join(FIGDIR, "F_loop_meta.json")
+    CACHE_NPZ = os.path.join(FIGDIR, f"F_loop_curves{SUF}.npz")
+    CACHE_JSON = os.path.join(FIGDIR, f"F_loop_meta{SUF}.json")
     if os.environ.get("REPLOT") and os.path.exists(CACHE_NPZ) and os.path.exists(CACHE_JSON):
         meta = json.load(open(CACHE_JSON)); npz = np.load(CACHE_NPZ)
         order = meta["order"]; ob = (0.0, meta["ob_eps"], None); results = {}
@@ -352,7 +469,7 @@ def main():
     # 5 consecutive steps (a single crossing is ambiguous: a series can dip and
     # bounce back out); frac50 = fraction of seeds inside tolerance at step 50
     # (the number behind "reliably" — a claim about the band, not the median).
-    NS = 50
+    NS = min(50, ITERS)
 
     def first_held5(med, k=5):
         for t in range(NS + 1 - k + 1):
@@ -372,7 +489,7 @@ def main():
     # frame on the REACHING bundle (θ*, start, and the endpoints that converge) so the final
     # trajectory is legible; let the failing too-large ε run off-frame (annotated as diverging).
     reach = [l for l in order if "too large" not in l]
-    ends = np.array([np.median(results[l]["trajs"], 0)[50] for l in reach])
+    ends = np.array([np.median(results[l]["trajs"], 0)[min(50, ITERS)] for l in reach])
     pts = np.vstack([ends, THETA_STAR, THETA_STARTPT])
     ctr = 0.5 * (THETA_STAR + THETA_STARTPT)
     half = 1.25 * np.max(np.abs(pts - ctr), axis=0) + 0.05
@@ -388,7 +505,7 @@ def main():
     cb = fig.colorbar(cf, ax=axL, fraction=0.046, pad=0.02)
     cb.set_label(r"$C(\theta)=(\langle Z_0Z_1\rangle-a^*)^2+w(\langle Z_0{+}Z_1\rangle-b^*)^2$",
                  fontsize=7)
-    PLOT_STEPS = 50
+    PLOT_STEPS = min(50, ITERS)
     for lab in order:
         med = np.median(results[lab]["trajs"], 0)[:PLOT_STEPS + 1]
         sub = med[::5]                                   # points at steps 0,5,10,...,50
@@ -416,7 +533,7 @@ def main():
                   r"fails, small-$\varepsilon$ is unreliable", fontsize=7.0)
     axL.legend(fontsize=6.4, loc="best", framealpha=0.85)
 
-    NS = 50
+    NS = min(50, ITERS)
     for lab in order:
         med, p25, p75 = (a[:NS + 1] for a in dc[lab])
         xs = np.arange(NS + 1)
@@ -442,8 +559,9 @@ def main():
                  % (SEEDS, W, muC), fontsize=7.0)
     fig.tight_layout(rect=[0, 0, 1, 0.92])
     for e in ("pdf", "png"):
-        fig.savefig(os.path.join(FIGDIR, f"F_loop_trajectory.{e}"), bbox_inches="tight", pad_inches=0.03)
-        fig.savefig(os.path.join(OUT, f"F_loop_full.{e}"), bbox_inches="tight", pad_inches=0.03)
+        fig.savefig(os.path.join(FIGDIR, f"F_loop_trajectory{SUF}.{e}"), bbox_inches="tight", pad_inches=0.03)
+        if not FLOOP_TAG:
+            fig.savefig(os.path.join(OUT, f"F_loop_full.{e}"), bbox_inches="tight", pad_inches=0.03)
     plt.close(fig)
 
     # ── FLOOP_REPLOT (2026-08-21): single-column panel — convergence trace with the
@@ -487,7 +605,7 @@ def main():
     ax.text(0.02, 0.985, r"$T/T_2^*=0.15$", transform=ax.transAxes, fontsize=6.5,
             color="#52514e", va="top")
     ax.set_xlabel("optimization step", fontsize=7.5)
-    ax.set_ylabel(r"$\|\theta_t-\theta^*\|$  (median $\pm$ IQR)", fontsize=7.5)
+    ax.set_ylabel(r"$\|\theta_t-\theta^*\|$  (median and IQR)", fontsize=7.5)
     ax.tick_params(labelsize=6.5)
     ax.grid(True, which="both", alpha=0.15)
     ax.legend(fontsize=5.6, ncol=2, loc="lower left", bbox_to_anchor=(0.01, 0.015),
@@ -498,7 +616,13 @@ def main():
     # colorbar/ticks/labels/legend; thin frame. Placed in the empty band between
     # the flat red series (~0.57) and the purple band top (~0.13 in this window).
     axI = ax.inset_axes([27.5, 0.135, 22.0, 0.325], transform=ax.transData)
-    IX, IY = (0.78, 1.05), (0.95, 1.28)     # trajectories' actual extent
+    # trajectories' actual extent (median paths of every series except the too-large
+    # arm, which runs off the frame by design), plus θ* and the start, with a margin
+    _pts = np.vstack([np.median(results[lab]["trajs"], 0)[:NS + 1] for lab in order
+                      if "too large" not in lab] + [THETA_STAR[None, :], THETA_STARTPT[None, :]])
+    _mg = 0.04
+    IX = (float(_pts[:, 0].min() - _mg), float(_pts[:, 0].max() + _mg))
+    IY = (float(_pts[:, 1].min() - _mg), float(_pts[:, 1].max() + _mg))
     gxi = np.linspace(*IX, 75)
     gyi = np.linspace(*IY, 75)
     Zci = np.array([[Cval(np.array([a, b])) for a in gxi] for b in gyi])
@@ -521,9 +645,13 @@ def main():
         sp.set_linewidth(0.7)
         sp.set_color("#444444")
     figS.tight_layout(pad=0.4)
+    OUT3 = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "paper_fig_3", "figs"))
     for e in ("pdf", "png"):
-        figS.savefig(os.path.join(OUT, f"F_loop.{e}"), bbox_inches="tight",
-                     pad_inches=0.02)
+        if FLOOP_TAG:
+            figS.savefig(os.path.join(FIGDIR, f"F_loop{SUF}.{e}"), bbox_inches="tight", pad_inches=0.02)
+            continue
+        for out in (OUT, OUT3):
+            figS.savefig(os.path.join(out, f"F_loop.{e}"), bbox_inches="tight", pad_inches=0.02)
     plt.close(figS)
 
     Cstar = Cval(THETA_STAR)
@@ -535,7 +663,7 @@ def main():
     json.dump({"theta_star": THETA_STAR.tolist(), "a_star": A_STAR, "b_star": B_STAR, "w": W,
                "start": THETA_STARTPT.tolist(), "mu_soft": muC, "C3_soft": C3, "delta": delta,
                "oracle_eps": ob[1], "B": B, "tolerance": THRESH, "seeds": SEEDS, "C_star": Cstar,
-               "summary": summ}, open(os.path.join(FIGDIR, "F_loop_trajectory.json"), "w"),
+               "summary": summ}, open(os.path.join(FIGDIR, f"F_loop_trajectory{SUF}.json"), "w"),
               indent=2, default=float)
     # FLOOP_REPLOT §4 — the caption now also carries everything that was in the
     # in-figure title of the old two-panel render (which ships as F_loop_full).
@@ -588,7 +716,7 @@ def main():
         "measured offset below; we report disagreement, we do not scale to fit. Scope: FD is unreliable, "
         "not always worse — a biased estimator can point better at a particular operating point (so can "
         "a random direction); the sound strategies converge without that luck.")
-    with open(os.path.join(OUT, "F_loop_caption.txt"), "w") as f:
+    with open(os.path.join(OUT if not FLOOP_TAG else FIGDIR, f"F_loop_caption{SUF}.txt"), "w") as f:
         f.write(cap_new + "\n\n" + cap +
                 "\n\nPREDICTED vs MEASURED offset (b(ε)/μ_soft vs final ‖θ−θ*‖):\n")
         for lab, eps, c, mk, tr in fd_series:
@@ -598,7 +726,7 @@ def main():
     # cross-check against F6's δ/ε floor. All computed from the cached arrays.
     obe = ob[1]
     trunc_only = (obe ** 2 / 6) * C3 / muC
-    with open(os.path.join(OUT, "F_loop_note.md"), "w") as f:
+    with open(os.path.join(OUT if not FLOOP_TAG else FIGDIR, f"F_loop_note{SUF}.md"), "w") as f:
         f.write("# F_loop data note (FLOOP_REPLOT §5 — no re-run)\n\n"
                 "## Fraction of seeds inside tolerance at step 50\n\n"
                 "\"Reliably\" is a claim about the band, not the median; this is the "

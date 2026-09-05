@@ -3,61 +3,61 @@
     1.0,
     1.0
   ],
-  "a_star": 0.22056957269656619,
-  "b_star": 0.3882380365007992,
+  "a_star": 0.5973969945799414,
+  "b_star": -1.3314337640956235,
   "w": 0.25,
   "start": [
-    0.8019362586952951,
-    1.2511628045320065
+    1.0100231747373598,
+    0.6802946106675954
   ],
-  "mu_soft": 0.30982709734470815,
-  "C3_soft": 1.2400751658565066,
+  "mu_soft": 0.5387077976315714,
+  "C3_soft": 18.09216837294782,
   "delta": 0.02,
-  "oracle_eps": 0.15,
+  "oracle_eps": 0.1,
   "B": 6000,
   "tolerance": 0.03,
   "seeds": 20,
   "C_star": 0.0,
   "summary": {
     "PSR": {
-      "final_err": 0.02200875052512211,
-      "held_step": 10,
+      "final_err": 0.024978403726806053,
+      "held_step": 22,
       "term5_step": 10,
-      "frac_in_tol_at50": 0.8,
-      "C_final": 0.0002682300501386854,
+      "frac_in_tol_at50": 0.65,
+      "C_final": 0.006166330829493532,
       "predicted_offset": null
     },
     "NSR": {
-      "final_err": 0.029104602217871256,
-      "held_step": 34,
-      "term5_step": 34,
-      "frac_in_tol_at50": 0.8,
-      "C_final": 0.0006499794058505453,
+      "final_err": 0.02869819856869362,
+      "held_step": 49,
+      "term5_step": null,
+      "frac_in_tol_at50": 0.55,
+      "C_final": 0.00353204153992476,
       "predicted_offset": null
     },
-    "FD \u03b5=0.15 (best \u03b5 \u2014 needs \u03b8*)": {
-      "final_err": 0.043702702330766244,
+    "FD \u03b5=0.1 (best \u03b5 \u2014 needs \u03b8*)": {
+      "final_err": 0.03436622318299225,
       "held_step": null,
       "term5_step": null,
-      "frac_in_tol_at50": 0.35,
-      "C_final": 0.0013041232004925066,
-      "predicted_offset": 0.44535683414345484
+      "frac_in_tol_at50": 0.45,
+      "C_final": 0.0021567452060013053,
+      "predicted_offset": 0.7565110534513713
     },
-    "FD \u03b5=0.7 (too large: fails)": {
-      "final_err": 0.5656854249492379,
+    "FD \u03b5=0.5 (too large: fails)": {
+      "final_err": 0.09762125534641275,
       "held_step": null,
       "term5_step": null,
       "frac_in_tol_at50": 0.0,
-      "C_final": 0.23763482239273376,
-      "predicted_offset": 0.4190861125312769
+      "C_final": 0.06052648857694716,
+      "predicted_offset": 0.4983408229813846
     },
-    "FD \u03b5=0.04 (too small: unreliable)": {
-      "final_err": 0.03828421429114446,
+    "FD \u03b5=0.05 (too small: unreliable)": {
+      "final_err": 0.05468305593824743,
       "held_step": null,
       "term5_step": null,
-      "frac_in_tol_at50": 0.25,
-      "C_final": 0.000773786953306474,
-      "predicted_offset": 1.6148706520470546
+      "frac_in_tol_at50": 0.15,
+      "C_final": 0.005222407503165339,
+      "predicted_offset": 1.4885334951483298
     }
   }
 }
