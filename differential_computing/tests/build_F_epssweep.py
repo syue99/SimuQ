@@ -200,7 +200,7 @@ def render(d):
             ax.legend(fontsize=5.6, loc="upper right", frameon=True, framealpha=0.85,
                       handlelength=1.6, borderpad=0.3, labelspacing=0.3)
     axs[1, 0].set_ylabel(r"$|$error$|\,/\,|\nabla C|$  ($N\to\infty$, $r=%g$)" % d["r"], fontsize=7.5)
-    axs[1, 2].text(0.98, 0.42, rf"shaded: usable window, RMSE $\leq$ {int(100 * d['win'])}%" + "\n(none here)",
+    axs[1, 2].text(0.98, 0.80, rf"shaded: usable window, RMSE $\leq$ {int(100 * d['win'])}%" + "\n(none here)",
                    transform=axs[1, 2].transAxes, fontsize=5.8, ha="right", va="top", color="#52514e")
     from matplotlib.lines import Line2D
     axs[0, 2].legend(handles=[Line2D([], [], color=C_PSR, lw=2.2, label="shift-rule tangent"),
