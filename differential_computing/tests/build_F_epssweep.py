@@ -41,15 +41,19 @@ from noise_model import NoiseModel
 R_CTRL = 0.02
 REGIME = 0.15
 TS = [1.0, 2.5, 5.0]
-EPS = np.array([0.03, 0.05, 0.08, 0.12, 0.18, 0.25, 0.35, 0.5, 0.7, 1.0, 1.4, 1.9, 2.4, 3.0])   # sparse: one scatter group per step
+# sparse, per-landscape step grids (owner: zoom each panel to its own relevant ε range)
+EPS_BY_T = {1.0: [0.05, 0.1, 0.2, 0.4, 0.7, 1.0, 1.5, 2.0, 2.5, 3.0],
+            2.5: [0.03, 0.06, 0.1, 0.2, 0.3, 0.45, 0.6, 0.8, 1.0, 1.2],
+            5.0: [0.02, 0.04, 0.07, 0.1, 0.15, 0.2, 0.28, 0.36, 0.45, 0.55]}
+EPS = np.array(EPS_BY_T[5.0])
 NDRAW = 2000
 WIN = 0.10                                   # usable-window threshold (fraction of |∇C|)
 NSHOW = 40                                   # realizations drawn per step (the cloud)
-NPSR = 400                                   # PSR realizations (one draw each)
+NPSR = 2000                                  # PSR realizations (one draw each)
 WRONG = 0.20                                 # × marker threshold (fraction of draws)
 LAND_HALF = 1.6                              # landscape drawn over θ0 ± LAND_HALF (same for all panels)
 NSAMP = 5                                    # sampled single estimates drawn per step
-XMAX, YMAX = 3.1, 0.30                       # linear axes of the bottom row (zoomed)
+YMIN, YMAX = 3e-3, 3.0                       # |error| axis (log) of the bottom row
 FIGDIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "figures"))
 OUT2 = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "paper_fig_2"))
 OUT3 = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "paper_fig_3", "figs"))
@@ -105,43 +109,50 @@ def panel(T, rng):
     i0 = int(np.argmin(np.abs(g - th0)))
     f1, f2, f3 = float(d1[i0]), float(d2[i0]), float(d3[i0])
     rows = []
-    for e in EPS:
+    for e in np.array(EPS_BY_T[T]):
         dp, dm = rng.normal(0, R_CTRL, NDRAW), rng.normal(0, R_CTRL, NDRAW)
         est = (Cint(th0 + e / 2 + dp) - Cint(th0 - e / 2 + dm)) / e
         rows.append(dict(eps=float(e), rmse_rel=float(np.sqrt(np.mean((est - f1) ** 2)) / abs(f1)),
                          bias_rel=float((np.mean(est) - f1) / abs(f1)),
+                         std_rel=float(np.std(est) / abs(f1)),
+                         abs_p16=float(np.percentile(np.abs(est - f1), 16) / abs(f1)),
+                         abs_p50=float(np.percentile(np.abs(est - f1), 50) / abs(f1)),
+                         abs_p84=float(np.percentile(np.abs(est - f1), 84) / abs(f1)),
                          wrong=float(np.mean(np.sign(est) != np.sign(f1))),
                          samples=[float(v) for v in ((est[:NSHOW] - f1) / abs(f1))]))
     # PSR: one shared draw per estimate -> the exact gradient at θ0+δ (same δ statistics)
     dl = rng.normal(0, R_CTRL, NPSR)
     psr_err = (np.interp(th0 + dl, g, d1) - f1) / abs(f1)
-    rr = np.array([r["rmse_rel"] for r in rows])
+    rr = np.array([r["rmse_rel"] for r in rows]); ee = np.array([r["eps"] for r in rows])
     ok = rr <= WIN
-    win = (float(EPS[ok].min()), float(EPS[ok].max())) if ok.any() else None
+    win = (float(ee[ok].min()), float(ee[ok].max())) if ok.any() else None
     xs = np.linspace(-LAND_HALF, LAND_HALF, 361)
     return dict(T=T, T2=T / REGIME, theta0=th0, f1=f1, f2=f2, f3=f3,
                 land_x=[float(x) for x in xs], land_y=[float(Cint(th0 + x)) for x in xs],
                 C0=float(Cint(th0)),
-                eps_star=float(EPS[int(np.argmin(rr))]), floor_rel=float(rr.min()),
+                eps_star=float(ee[int(np.argmin(rr))]), floor_rel=float(rr.min()),
                 floor_pred_rel=fl_pred,
                 eps_star_b64=float((24 * abs(f1) * R_CTRL / abs(f3)) ** (1 / 3)),
                 floor_b64_rel=float(0.60 * abs(f3) ** (1 / 3) * (abs(f1) * R_CTRL) ** (2 / 3) / abs(f1)),
                 psr_disp_rel=float(abs(f2) * R_CTRL / abs(f1)),
                 psr_samples=[float(v) for v in psr_err], psr_rms_rel=float(np.sqrt(np.mean(psr_err ** 2))),
+                psr_abs_p16=float(np.percentile(np.abs(psr_err), 16)), psr_abs_p50=float(np.percentile(np.abs(psr_err), 50)),
+                psr_abs_p84=float(np.percentile(np.abs(psr_err), 84)),
                 window=win, window_decades=(float(np.log10(win[1] / win[0])) if win else 0.0),
                 sweep=rows)
 
 
 def compute():
     rng = np.random.default_rng(7)
-    return dict(r=R_CTRL, regime=REGIME, eps=[float(e) for e in EPS], ndraw=NDRAW, win=WIN,
+    return dict(r=R_CTRL, regime=REGIME, eps={str(k): v for k, v in EPS_BY_T.items()}, ndraw=NDRAW, win=WIN,
                 wrong=WRONG, panels=[panel(T, rng) for T in TS])
 
 
 def render(d):
     plt.rcParams.update({"font.size": 7})
-    fig, axs = plt.subplots(2, 3, figsize=(7.0, 3.75), dpi=300,
-                            gridspec_kw=dict(height_ratios=[0.62, 1.0], hspace=0.38, wspace=0.10))
+    fig, axs = plt.subplots(2, 3, figsize=(7.0, 3.9), dpi=300,
+                            gridspec_kw=dict(height_ratios=[0.62, 1.0], hspace=0.38, wspace=0.10,
+                                             bottom=0.16))
     labels = ["(a) healthy: wide step window", "(b) intermediate", "(c) ill: narrow step window"]
     ally = np.concatenate([p["land_y"] for p in d["panels"]])
     ylo, yhi = float(ally.min()) - 0.12, float(ally.max()) + 0.12
@@ -168,40 +179,42 @@ def render(d):
         axL.grid(True, alpha=0.12)
         if k == 0:
             axL.set_ylabel(r"$C_{\rm device}(\theta)$", fontsize=7.5)
-        # ── bottom (owner, final): linear axes, |error|/|∇C|.  FD: the RMSE trend and, at
-        #    every step, NSAMP sampled single-estimate errors; PSR: one flat line at its
-        #    average shared-draw error; NSR: a line at zero.  No mirror, no strip. ──
+        # ── bottom (owner, final): |error| / |∇C| on a log axis, ε linear and zoomed per
+        #    landscape.  FD: median with 16–84 percentile bars over the setpoint draws;
+        #    PSR: RMS line with its 16–84 band (one shared draw); NSR: zero (axis floor). ──
         ax = axs[1, k]
-        e = np.array([r["eps"] for r in p["sweep"]]); rr = np.array([r["rmse_rel"] for r in p["sweep"]])
+        e = np.array([r["eps"] for r in p["sweep"]])
+        p16 = np.array([r["abs_p16"] for r in p["sweep"]]); p50 = np.array([r["abs_p50"] for r in p["sweep"]])
+        p84 = np.array([r["abs_p84"] for r in p["sweep"]])
+        xmax = float(e.max()) * 1.06
         if p["window"]:
             ax.axvspan(p["window"][0], p["window"][1], color=C_FD, alpha=0.08, lw=0)
-        rng_j = np.random.default_rng(3)
-        for r in p["sweep"]:
-            sm = np.abs(np.array(r["samples"][:NSAMP]))
-            inside = sm <= YMAX
-            ax.plot(np.full(int(inside.sum()), r["eps"]), sm[inside], "o", color=C_FD,
-                    ms=2.4, alpha=0.6, mec="none")
-            if (~inside).any():                      # off-scale draws: a marker at the top edge
-                ax.plot([r["eps"]], [YMAX * 0.985], "^", color=C_FD, ms=3.2, alpha=0.8, mec="none")
-        ax.plot(e, np.minimum(rr, YMAX * 1.02), "-", color=C_FD, lw=1.3, label="FD (RMSE; dots: single estimates)")
-        ax.axvline(p["eps_star"], color=C_FD, lw=0.6, ls=":")
+        ax.axhspan(p["psr_abs_p16"], p["psr_abs_p84"], color=C_PSR, alpha=0.15, lw=0)
+        ax.axhline(p["psr_rms_rel"], color=C_PSR, lw=1.5, label=r"PSR: RMS, 16–84% band (shared draw)")
+        ax.axhline(YMIN * 1.15, color=C_NSR, lw=1.5, label="NSR: no floor (error 0)")
         ax.axhline(d["win"], color="#888888", lw=0.7, ls="--")
-        ax.axhline(p["psr_rms_rel"], color=C_PSR, lw=1.5, label=r"PSR (one shared draw: $\sim|f''|\,r$)")
-        ax.axhline(0.0, color=C_NSR, lw=1.5, label="NSR (no floor)")
-        ax.text(p["eps_star"] + 0.05, YMAX * 0.97, rf"$\varepsilon^*={p['eps_star']:.2f}$", color=C_FD,
-                fontsize=6, va="top")
-        ax.set_xlim(0.0, XMAX); ax.set_ylim(-0.02, YMAX)
+        lo = np.clip(p16, YMIN, YMAX); hi = np.clip(p84, YMIN, YMAX); mc = np.clip(p50, YMIN, YMAX)
+        ax.errorbar(e, mc, yerr=[mc - lo, hi - mc], fmt="o", color=C_FD, ms=3.4, mec="white", mew=0.4,
+                    elinewidth=1.1, capsize=2.2, label=r"FD: median, 16–84% bars (setpoint draws)")
+        for xe, hv in zip(e, p84):
+            if hv > YMAX:
+                ax.annotate("", xy=(xe, YMAX), xytext=(xe, YMAX * 0.7),
+                            arrowprops=dict(arrowstyle="-|>", color=C_FD, lw=0.8, shrinkA=0, shrinkB=0))
+        ax.axvline(p["eps_star"], color=C_FD, lw=0.6, ls=":")
+        ax.text(p["eps_star"] - 0.02 * xmax, YMAX * 0.7, rf"$\varepsilon^*={p['eps_star']:.2f}$", color=C_FD,
+                fontsize=6, va="top", ha="right")
+        ax.set_yscale("log"); ax.set_xlim(0.0, xmax); ax.set_ylim(YMIN, YMAX)
         ax.set_xlabel(r"FD step $\varepsilon$", fontsize=7.5, labelpad=1)
-        ax.grid(True, alpha=0.12)
+        ax.grid(True, which="both", alpha=0.12)
         ax.tick_params(labelsize=6.5)
         if k > 0:
             ax.tick_params(labelleft=False)
-        if k == 0:
-            ax.legend(fontsize=5.6, loc="upper right", frameon=True, framealpha=0.85,
-                      handlelength=1.6, borderpad=0.3, labelspacing=0.3)
-    axs[1, 0].set_ylabel(r"$|$error$|\,/\,|\nabla C|$  ($N\to\infty$, $r=%g$)" % d["r"], fontsize=7.5)
-    axs[1, 2].text(0.98, 0.80, rf"shaded: usable window, RMSE $\leq$ {int(100 * d['win'])}%" + "\n(none here)",
-                   transform=axs[1, 2].transAxes, fontsize=5.8, ha="right", va="top", color="#52514e")
+    axs[1, 0].set_ylabel(r"$|$error$|\,/\,|\nabla C|$   ($N\to\infty$, $r=%g$)" % d["r"], fontsize=7.5)
+    from matplotlib.patches import Patch
+    h, l = axs[1, 0].get_legend_handles_labels()
+    h.append(Patch(facecolor=C_FD, alpha=0.15, label=rf"usable step window (RMSE $\leq$ {int(100 * d['win'])}%)"))
+    fig.legend(handles=h, fontsize=6, loc="lower center", ncol=4, frameon=False,
+               handlelength=1.6, columnspacing=1.6, handletextpad=0.5, bbox_to_anchor=(0.5, -0.005))
     from matplotlib.lines import Line2D
     axs[0, 2].legend(handles=[Line2D([], [], color=C_PSR, lw=2.2, label="shift-rule tangent"),
                               Line2D([], [], color=C_FD, lw=1.1, marker="o", ms=2.6, label=r"FD secant at $\varepsilon^*$")],

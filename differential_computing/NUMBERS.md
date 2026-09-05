@@ -311,26 +311,28 @@ fixed T/T₂* = 0.15; same 2q TFIM, same device model), each at a **generic** op
 (not an inflection): a random steep point (|∇C| ≥ ½ max, fixed seed 11) whose shared-draw
 displacement |f″|·r/|∇C| lies in 2–5% and whose sharpness |f‴|/|f′| is typical of its
 landscape (middle quintile), so PSR's floor is of the same order in every panel and only
-the step scale moves. Top row: the landscape, the shift-rule tangent, FD's secant at ε*,
-the usable window (RMSE ≤ 10%) shaded; no T or θ₀ on the figure. Bottom row, **linear
-axes, |error|/|∇C| zoomed to 0–0.3, shot-free (N → ∞)**: FD's RMSE trend over 14 steps in
-[0.03, 3.0] with 5 sampled single-estimate errors per step (off-scale draws as ▲ at the top) (two setpoint
-draws each, θ ± ε/2, r = 0.02); PSR as one flat line at its RMS shared-draw error (the exact
-gradient at θ₀+δ, 400 draws); NSR at zero. Cache `figures/F_epssweep_data.json`; figure
+the step scale moves. Top row: the landscape, the shift-rule tangent, FD's secant at ε*, the usable window (RMSE ≤ 10%)
+shaded; no T or θ₀ on the figure. Bottom row, **|error|/|∇C| on a log axis, ε linear and zoomed
+per landscape, shot-free (N → ∞)**: FD as the median with 16–84 percentile bars over 2000
+setpoint draws per step (two draws per estimate, θ ± ε/2, r = 0.02) on a sparse per-landscape
+grid (10 steps; healthy [0.05, 3], intermediate [0.03, 1.2], ill [0.02, 0.55]); PSR as its RMS line
+with the 16–84% band of one shared draw (2000 draws); NSR at the axis floor (error 0). Legend
+row under the figure. Cache `figures/F_epssweep_data.json`; figure
 `F_epssweep.{pdf,png}` in `figures/`, `paper_fig_2/`, `paper_fig_3/figs/`.
 
 | panel | T / T₂* (µs) | θ₀ | f′ | f″ | f‴ | \|f‴\|/\|f′\| | ε* (B.6.4) | FD floor (B.6.4) | usable window (RMSE ≤ 10%) | PSR line (RMS) | NSR |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| (a) healthy | 1 / 6.7 | 1.760 | +0.370 | -0.45 | -0.6 | 2 | 0.70 (0.66) | 4.6% (5.2%) | [0.35, 1.40] | 2.5% | none |
-| (b) intermediate | 2.5 / 16.7 | 1.192 | +0.766 | -1.39 | -5.9 | 8 | 0.35 (0.40) | 8.4% (8.7%) | [0.35, 0.50] | 3.6% | none |
-| (c) ill | 5 / 33.3 | 1.712 | -1.380 | -3.06 | +66.3 | 48 | 0.18 (0.22) | 14.6% (16.1%) | none | 4.8% | none |
+| (a) healthy | 1 / 6.7 | 1.760 | +0.370 | -0.45 | -0.6 | 2 | 0.70 (0.66) | 4.6% (5.2%) | [0.40, 1.00] | 2.4% | none |
+| (b) intermediate | 2.5 / 16.7 | 1.192 | +0.766 | -1.39 | -5.9 | 8 | 0.45 (0.40) | 8.8% (8.7%) | [0.30, 0.45] | 3.6% | none |
+| (c) ill | 5 / 33.3 | 1.712 | -1.380 | -3.06 | +66.3 | 48 | 0.20 (0.22) | 14.3% (16.1%) | none | 4.6% | none |
 
-Reading (10% threshold): the healthy landscape is usable for ε ∈ [0.35, 1.4] with the best
-step at 4.6%; the intermediate one only in the sliver [0.35, 0.5] with 8.4% at best; the ill
-one has **no step** that reaches 10% (best 14.6% at ε = 0.18, and everything beyond ε ≈ 0.9 is
-off-scale). Below ε ≈ 0.1 the setpoint error is amplified by 1/ε in every panel. PSR's line
-is 2.5 / 3.6 / 4.4%, below FD's best step in every panel; NSR has no floor.
+Reading (10% threshold, sparse grids): healthy — usable for ε ∈ [0.4, 1.0], best 4.6% at
+ε = 0.7, and ε = 1.0 still sits at the 0.1 level with a small bar; intermediate — only
+[0.3, 0.45], best 8.8%; ill — **no usable step**: at its best step (ε = 0.2, 14%) the 16–84%
+bar spans 0.03–0.2, i.e. the setpoint draw alone decides whether that estimate is good, and
+every larger step is pure truncation bias. Below ε ≈ 0.1 the bars span a decade in every
+panel (δ/ε). PSR's RMS is 2.5 / 3.6 / 4.4%; NSR has no floor.
 
 Deviations from the handover's P1-1 recipe (owner's rulings): landscapes vary (via T at
 fixed T/T₂*) instead of three θ₀ at one T; shot-free instead of N = 10⁴; generic θ₀ with
-matched PSR displacement instead of the FD-floor percentile scan; linear axes.
+matched PSR displacement instead of the FD-floor percentile scan; per-landscape ε ranges.

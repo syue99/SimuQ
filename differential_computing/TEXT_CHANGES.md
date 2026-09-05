@@ -213,15 +213,14 @@ is the lab's own apparatus, anonymity may require a schematic instead.
 > landscape C_device(θ) around the operating point (black), the shift-rule tangent (blue),
 > the finite-difference secant at its best step ε* (orange) and the usable step window
 > (shaded, RMSE ≤ 10% of |∇C|). Bottom: the error of a single estimate as N → ∞ with the
-> setpoint error r = 0.02 — for FD the RMSE over the step ε (line) and five sampled
-> estimates per step (dots); for PSR one flat line, its shared-draw error ≈ |f″|·r; NSR has
-> none. The three landscapes differ in sharpness (bandwidth Ω̄ = 2, 5, 10); the operating
-> points are generic, chosen so that |f″|·r is of the same order (2.5–4.4% of |∇C|). The
-> small-ε rise is the setpoint error amplified by 1/ε, the same in every panel; the
-> large-ε rise is the truncation bias and closes as the landscape sharpens. At 10% the
-> healthy landscape is usable for ε ∈ [0.35, 1.4], the intermediate one only in [0.35, 0.5],
-> and the ill one has no usable step: its best step leaves 15% error and beyond ε ≈ 0.9 the
-> estimate is off-scale.
+> setpoint error r = 0.02 — for FD the median and the 16–84% range over setpoint draws at
+> each step (orange bars); for PSR the RMS and 16–84% range of its one shared draw (blue);
+> NSR has none. The three landscapes differ in sharpness (bandwidth Ω̄ = 2, 5, 10); the
+> operating points are generic, chosen so that |f″|·r is of the same order (2.5–4.4% of
+> |∇C|). Below ε ≈ 0.1 the setpoint error is amplified by 1/ε and the bars span a decade in
+> every panel; above it the truncation bias takes over, slowly on the healthy landscape
+> (ε = 1 is still at the 10% level) and immediately on the ill one, where no step reaches
+> 10% and at the best step the setpoint draw alone decides whether the estimate is usable.
 
 Suggested conclusion sentence for App. C.3: "Fig. 8's operating point is not a singleton:
 on every landscape the FD window is bounded below by r and above by the landscape's
