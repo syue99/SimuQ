@@ -133,5 +133,35 @@ setpoint draws and stay wrong-signed (97–100% of draws).
 ### Fig. 2 caption / C.3 — notation and labels
 "T4" is gone from the figure; C_noisy → C_device everywhere in the figure. Regime 0.5 stays.
 
+## From Figures 10 and 14 (P0-1 + P0-8) — replot 2026-09-05
+
+### G.1 — the colorbar sentence
+Keep Pengyu's version: the cell value is the mean over seeds of log₁₀(N_NSR/N_PSR) and
+changing the target "leaves both the ratio colorbar and the boundary unchanged" — the
+figure now shows exactly that quantity. Delete any remaining "rescales the colorbar while
+moving no boundary".
+
+### Fig. 10 caption
+> "the gold line [is] the compiler's choice"
+
+→ "the dashed line is the compiler's selector (Ω̄_AC with margin γ(q) = min(1, 1.86/√q),
+App. G.3.1); the solid line is the measured crossing." Same styles as Fig. 14.
+
+> star and circle "on the crossing … at P = 2, k = 1"
+
+→ the star (TFIM instance, p = 2, q = 1) sits on the crossing (measured ratio 10^+0.01);
+the open circle is the global-coefficient rewrite θ·(Z₀Z₁+X₀+X₁) at **(p = 1, q = 3)**,
+which the L1 certificate calls a tie but which measures 10^−0.24, on the NSR side (the ZZ
+term anticommutes with the X terms, so diam(A) = 2√5 < 2Σ|v| = 6 while PSR's cost grows as
+q²). If 6.3 says "the running instance is a PSR case", say "on the boundary".
+
+### Notation
+Fig. 10 axes are (p, q) now, as App. G and Fig. 14. If Fred/Yuxiang choose (P, k) instead,
+it is Fig. 14 and App. G that change, not Fig. 10.
+
+### G.3 / Table 4 / 6.2
+All quoted numbers reproduce (42.3%, 88.3%, 1.07×, 1.26×, 41 → 6 ties; 92.6 / 96.0%,
+1.39× / 2.17×, 27.7 / 94.3%, 72.3% → 92.6% on 20.9%). No change.
+
 ## Pending, not yet regenerated
-Fig 10/14 (P0-1/P0-8), Figs 7/13 (P0-2), Fig 12 (P0-3), Fig 15b (P0-6), Fig 6 (P0-7).
+Figs 7/13 (P0-2), Fig 12 (P0-3), Fig 15b (P0-6), Fig 6 (P0-7).

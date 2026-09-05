@@ -327,21 +327,23 @@ def render(data):
     marg = margin_column(ks)
     halo = [pe.withStroke(linewidth=1.8, foreground="white")]
 
+    import build_F_select_balanced as bb          # Fig 10's colour scale and line styles
     plt.rcParams.update({"font.size": 7})
     fig, axs = plt.subplots(1, 3, figsize=(7.1, 2.65), dpi=300, sharey=True)
     fig.patch.set_facecolor(SURFACE)
 
+    pc = None
     for ax, (family, title) in zip(axs, FAMILIES):
         Z = gaussian_filter(np.array(data[family]["Z"]), sigma=0.8)
         Zsel = gaussian_filter(np.array(data[family]["Zpred_AC"]) + marg,
                                sigma=0.8)
         ax.set_facecolor(SURFACE)
-        ax.contourf(Pg, Kg, Z, levels=[-100, 0, 100],
-                    colors=["#d9f0e6", "#dbe9f5"])
-        ax.contour(Pg, Kg, Z, levels=[0.0], colors=[INK], linewidths=1.4)
+        pc = ax.contourf(Pg, Kg, np.clip(Z, -bb.RATIO_LIM + 1e-6, bb.RATIO_LIM - 1e-6),
+                         levels=bb.RATIO_LEVELS, cmap=bb.ratio_cmap(), antialiased=True)
+        ax.contour(Pg, Kg, Z, levels=[0.0], colors="k", linewidths=1.5, zorder=4)
         if Zsel.min() < 0 < Zsel.max():
-            ax.contour(Pg, Kg, Zsel, levels=[0.0], colors=[C_NSR],
-                       linewidths=1.2, linestyles="dashed")
+            ax.contour(Pg, Kg, Zsel, levels=[0.0], colors="k",
+                       linewidths=1.2, linestyles="dashed", zorder=4)
         if (np.array(data[family]["Z"]) < 0).mean() > 0.04:
             ax.text(0.30, 0.86, "NSR\nwins", transform=ax.transAxes,
                     color="#0f6b52", fontsize=8.5, weight="bold", ha="center",
@@ -361,8 +363,8 @@ def render(data):
 
     from matplotlib.lines import Line2D
     fig.legend(handles=[
-        Line2D([], [], color=INK, lw=1.4, label="measured crossing"),
-        Line2D([], [], color=C_NSR, lw=1.2, ls="dashed",
+        Line2D([], [], color="k", lw=1.5, label="measured crossing"),
+        Line2D([], [], color="k", lw=1.2, ls="dashed",
                label=r"compiler's selector: $\bar\Omega_{AC}$ with margin "
                      r"$\gamma(q)=\min(1,%.2f/\sqrt{q})$" % GAMMA0)],
         fontsize=6.4, frameon=False, loc="lower center", ncol=2,
@@ -376,7 +378,11 @@ def render(data):
                 transform=axs[1].transAxes, fontsize=6.2, color=SEC,
                 ha="right", va="bottom", path_effects=halo)
 
-    fig.tight_layout(pad=0.4, rect=[0, 0.035, 1, 1])
+    fig.tight_layout(pad=0.4, rect=[0, 0.035, 0.925, 1])
+    cax = fig.add_axes([0.935, 0.17, 0.011, 0.70])           # shared colour scale, own axis
+    cb = fig.colorbar(pc, cax=cax, ticks=[-0.8, -0.4, 0.0, 0.4, 0.8])
+    cb.set_label(r"$\log_{10}\,(N_{\rm NSR}\,/\,N_{\rm PSR})$", fontsize=7, color=SEC)
+    cb.ax.tick_params(labelsize=6.5, colors=SEC)
     for out in (FIGDIR, OUT3):
         os.makedirs(out, exist_ok=True)
         for ext in ("pdf", "png"):

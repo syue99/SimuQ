@@ -134,37 +134,27 @@ single residual measurement. Contradiction 5 (metric sensitivity of FD's
 "enters tolerance") still applies to the oracle step.
 
 --------------------------------------------------------------------
-## C. F_select (figs/F_select.pdf)  [\owed{balanced-plane run}]
+## C. F_select (figs/F_select.pdf) — v2 replot (2026-09-05)  [\owed{balanced-plane run}]
 
-Run id: `build_F_select_balanced.py` @ commit 3665560, cache
-`figures/F_select_balanced_data.json`; 6 seeds/cell, seeds
-`default_rng(97s+3P+11k)`. Hamiltonian level, no noise (stated on
-figure). Shading = measured winner (blue PSR / green NSR), solid =
-measured crossing. **The dashed compiler-choice line is NOT drawn**: the
-Sec 5.3 certificate (diam → 2Σ|v|, σ → √2) admits NSR at strictly lower
-C nowhere on the plane (PSR-or-tie everywhere), so the compiler picks
-PSR on the whole plane and there is no certified crossing to draw — the
-choice is stated in the caption instead.
+Same cache (`figures/F_select_balanced_data.json`, 350 cells × 6 seeds), no sweep
+rerun. Colour is now App G.1's cell value, mean over seeds of log₁₀(N_NSR/N_PSR)
+(green NSR wins, blue PSR wins, ±0.8), colorbar "log₁₀(N_NSR / N_PSR)"; solid
+black = measured crossing, dashed black = the compiler's selector (Ω̄_AC with
+margin γ(q) = min(1, 1.86/√q), from `F_regimes_data.json`, whose general-family
+arrays equal this plane's to 2e-16). Fig 14 uses the identical fill and styles.
 
-### C1. Family / ranges  [\owed{balanced-plane numbers}]
-**Balancing option 1 was used** (no family change): same 7-qubit TFIM
-device alphabet {X_a, Z_a, Z_aZ_b} (7+7+21 = 35 terms), k extended
-upward to the full alphabet, P pulled down: **P ∈ [1,10], k ∈ [1,35]**.
-
-### C2. NSR share
-**42.3%** of the sampled plane (measured; near half-half, honest — no
-other tuning).
-
-### C3. Forfeiture of the compiler's choice  [\owed{regret}]
-Max **5.76×** executions vs the measured optimum; median over the whole
-plane **1.00×** (the choice is optimal on 64% of cells); median over the
-divergent cells **1.35×**. Divergence is one-sided (a loose certificate
-costs shots, never bias).
-
-### C4. Markers
-TFIM star (per-bond θ) at **(P=2, k=1)**, measured ratio 10^{+0.01} — on
-the crossing (contradiction 4). Global-coefficient rewrite at
-**(P=1, k=2)**, ratio 10^{+0.01} — likewise a near-tie.
+### C1. Family / ranges — unchanged (7q device alphabet, 35 terms; p 1–10, q 1–35).
+### C2. NSR share — **42.3%** (unchanged).
+### C3. Selector (G.3) — agreement 88.3%, forfeit median 1.07× / max 1.26× over
+the disagreeing cells, ties 41 (L1 exact ties) → 6 (after margin), NSR chosen on
+46.0%. Table 4's L1-certificate row (5.76× max, 1.35× median divergent, 36.0%
+divergent) unchanged.
+### C4. Markers — star (2,1): measured 10^+0.01 (PSR side, near tie). **Circle moved
+to (1,3)**: the global-θ rewrite θ·(Z₀Z₁+X₀+X₁) is one coefficient over three
+terms; on the plane's own cost model it measures 10^−0.24 (NSR side; the L1
+certificate calls it a tie). Contradiction 4 updated accordingly: the instance
+is on the boundary, its rewrite is an NSR case. `../SELECTOR_FACTOR2.md` shows
+the factor 2 in C_PSR (`build_F_select.py:138`) and the near-tie arithmetic.
 
 --------------------------------------------------------------------
 ## D. Compile timing (tab:strategies; curve in figs/F_scale_app.pdf)

@@ -2606,8 +2606,12 @@
   "forfeit_median": 1.0,
   "forfeit_median_divergent": 1.350302407767054,
   "divergent_frac": 0.36,
-  "cert_crossing_drawn": false,
+  "cert_crossing_drawn": true,
   "star_ratio_log10": 0.011585630414793662,
-  "circle_ratio_log10": 0.012840671306234869
+  "circle_ratio_log10": -0.01754815318631003,
+  "circle_pq": [
+   1,
+   3
+  ]
  }
 }

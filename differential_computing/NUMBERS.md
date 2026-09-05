@@ -214,3 +214,39 @@ copies in `paper_fig_2/` and `paper_fig_3/figs/`. Hamiltonian-level, T/T₂* = 0
 
 The old sidecar's "usable window [0.026, 0.072]" and "best ε = 0.056 (28%)" were at N = 4000
 with shot noise in the builder's convention; the new numbers are shot-free in the paper's.
+
+## Figures 10 and 14 — `tests/build_F_select_balanced.py`, `tests/build_F_regimes.py --replot`, 2026-09-05 (this commit)
+
+Replots from the existing caches (`figures/F_select_balanced_data.json`,
+`figures/F_regimes_data.json`); no sweep rerun. Fig 14(a) arrays == Fig 10 arrays (max |ΔZ|
+= 2.2e-16, asserted by the builder).
+
+### Unchanged, confirmed (all reproduce the text exactly)
+
+| quantity | value |
+|---|---|
+| plane | p ∈ [1,10], q ∈ [1,35], 350 cells, 6 seeds, 11,550 tangents (7q TFIM device alphabet, 35 terms) |
+| NSR measured share (general) | **42.3%** |
+| selector agreement L1 / AC / AC+margin (general) | 57.7 / 71.4 / **88.3%** |
+| forfeit, general (AC+margin, over disagreeing cells) | median **1.07×**, max **1.26×** |
+| ties | **41** (L1 certificate exact ties) → **6** (after AC + margin) |
+| NSR chosen by the selector (general) | 46.0% |
+| aligned family | share 27.7%, agreement 92.6%, max forfeit 1.39×, NSR chosen on 20.9% (margin gain 72.3% → 92.6%) |
+| Heisenberg family | share 94.3%, agreement 96.0%, max forfeit 2.17× |
+| γ₀ | 1.86 |
+| Table 4 row (L1 certificate, published builder) | forfeit max 5.76×, median over disagreeing cells 1.35×, divergent on 36.0% |
+| star (2,1) | measured 10^+0.012 (PSR side, near tie) |
+
+### Moved — figure changes and text edits
+
+| item | old | new |
+|---|---|---|
+| Fig 10 colour | absolute "executions to target (best strategy)", 10¹–10⁴ gray bands + winner washes | **log₁₀(N_NSR/N_PSR)**, mean over seeds, diverging green (NSR wins) / white / blue (PSR wins), limits ±0.8 (data −0.76 … +0.28); colorbar "log₁₀(N_NSR / N_PSR)". Target-free, as G.1 says. |
+| Fig 10 overlays | solid black measured crossing only (no certificate line: the L1 certificate never crosses this plane) | solid black = measured crossing; **dashed black = compiler's selector** Ω̄_AC + margin γ(q) = min(1, 1.86/√q) (G.3.1), from Fig 14's cache |
+| Fig 14 style | two-tone winner fill, green dashed selector | same diverging fill and colorbar as Fig 10, black solid / black dashed |
+| circle "global-θ rewrite" | (1, 2) | **(1, 3)** — θ·(Z₀Z₁+X₀+X₁) has one coefficient over three terms. Its measured ratio on the plane's model is **10^−0.24 (NSR side)**; the plane cell (1,3) averages 10^−0.02 |
+| caption "both sit on the crossing at (2,1)" | | true for the star (+0.02); the rewrite is on the NSR side (see SELECTOR_FACTOR2.md) |
+| caption "gold line = compiler's choice" | | the selector line is black dashed in both figures; no gold anywhere |
+
+Consistency checks: 3 (factor 2, near-tie at (2,1)) — holds, SELECTOR_FACTOR2.md; 4
+(Fig 14(a) == Fig 10) — holds.

@@ -44,6 +44,30 @@ bs.CACHE = CACHE
 
 C_PSR, C_NSR = "#0072B2", "#009E73"
 INK, SEC, GRID, SURFACE = bs.INK, bs.SEC, bs.GRID, bs.SURFACE
+REG_CACHE = os.path.join(FIGDIR, "F_regimes_data.json")   # Fig 14's arrays (== Fig 10's) + AC certificate
+GAMMA0 = 1.86                                              # eq:margin, App G.3.1
+
+# P0-1 (2026-09-05): the plane is coloured by the TARGET-FREE quantity App G.1 defines,
+# mean over seeds of log10(N_NSR / N_PSR): hue = sign (green NSR wins, blue PSR wins),
+# saturation = |log ratio|.  Shared with Fig 14 so panel (a) there is this figure.
+RATIO_LIM = 0.8                                            # data range on the plane: -0.76 .. +0.28
+RATIO_LEVELS = np.round(np.arange(-RATIO_LIM, RATIO_LIM + 1e-9, 0.1), 2)
+
+
+def ratio_cmap():
+    from matplotlib.colors import LinearSegmentedColormap
+    return LinearSegmentedColormap.from_list("nsr_psr", [C_NSR, "#ffffff", C_PSR])
+
+
+def selector_field(family="general"):
+    """log10 N-ratio the compiler's selector believes: Omega_AC certificate + margin
+    gamma(q) = min(1, GAMMA0/sqrt(q)); chooses NSR where it is < 0.  From Fig 14's cache."""
+    if not os.path.exists(REG_CACHE):
+        return None
+    reg = json.load(open(REG_CACHE))
+    ks = np.array(reg["meta"]["KS"], float)
+    marg = np.log10(np.minimum(1.0, GAMMA0 / np.sqrt(ks)))[:, None]
+    return np.array(reg[family]["Zpred_AC"]) + marg
 
 
 def render(data):
@@ -59,8 +83,8 @@ def render(data):
     Ps, ks = data["meta"]["Ps"], data["meta"]["ks"]
     Pg, Kg = np.meshgrid(Ps, ks)
     Z = gaussian_filter(np.array(g["Z"]), sigma=0.8)
-    Zp = gaussian_filter(np.array(g["Zpred"]), sigma=0.8)
-    F = gaussian_filter(np.array(g["logminN"]), sigma=0.5)
+    sel = selector_field("general")
+    Zsel = gaussian_filter(sel, sigma=0.8) if sel is not None else None
 
     plt.rcParams.update({"font.size": 7})
     fig, ax = plt.subplots(figsize=(3.4, 3.0), dpi=300)
@@ -70,31 +94,19 @@ def render(data):
     for s in ax.spines.values():
         s.set_color(GRID)
 
-    # original F_select format: neutral gray cost fill in discrete
-    # half-decade bands (readable off the colorbar), hue reserved for the
-    # winner washes
-    grays = LinearSegmentedColormap.from_list(
-        "costgray", ["#f4f3f0", "#43423f"])
-    lo = np.floor(F.min() * 2) / 2
-    hi = np.ceil(F.max() * 2) / 2
-    levels = np.arange(lo, hi + 0.25, 0.5)
-    pc = ax.contourf(Pg, Kg, F, levels=levels, cmap=grays)
-    cb = fig.colorbar(pc, ax=ax, fraction=0.045, pad=0.02)
-    cb.set_label("executions to target (best strategy)", fontsize=7,
-                 color=SEC)
+    # colour = log10(N_NSR/N_PSR), diverging about 0 (App G.1's cell value)
+    pc = ax.contourf(Pg, Kg, np.clip(Z, -RATIO_LIM + 1e-6, RATIO_LIM - 1e-6),
+                     levels=RATIO_LEVELS, cmap=ratio_cmap(), antialiased=True)
+    cb = fig.colorbar(pc, ax=ax, fraction=0.045, pad=0.02,
+                      ticks=[-0.8, -0.4, 0.0, 0.4, 0.8])
+    cb.set_label(r"$\log_{10}\,(N_{\rm NSR}\,/\,N_{\rm PSR})$", fontsize=7, color=SEC)
     cb.ax.tick_params(labelsize=7, colors=SEC)
-    ticks = np.arange(np.ceil(lo), np.floor(hi) + 1)
-    cb.set_ticks(ticks)
-    cb.set_ticklabels([f"$10^{{{int(t)}}}$" for t in ticks])
-
-    # shading = measured winner (transparent washes over the gray fill)
-    ax.contourf(Pg, Kg, Z, levels=[-99.0, 0.0, 99.0], colors=[C_NSR, C_PSR],
-                alpha=0.30, antialiased=True, zorder=3)
+    # solid = measured crossing (ratio 1); dashed = the compiler's selector (G.3.1),
+    # same styles as Fig 14
     ax.contour(Pg, Kg, Z, levels=[0.0], colors="k", linewidths=1.5, zorder=4)
-    # compiler's certificate choice (dashed) — only if it crosses on this plane
-    cert_crosses = bool((Zp > 0).any() and (Zp < 0).any())
+    cert_crosses = bool(Zsel is not None and Zsel.min() < 0 < Zsel.max())
     if cert_crosses:
-        ax.contour(Pg, Kg, Zp, levels=[0.0], colors=INK, linewidths=1.2,
+        ax.contour(Pg, Kg, Zsel, levels=[0.0], colors="k", linewidths=1.2,
                    linestyles="dashed", zorder=4)
 
     halo = [pe.withStroke(linewidth=2.0, foreground="#ffffff")]
@@ -110,10 +122,11 @@ def render(data):
     ax.annotate("TFIM instance", xy=(2, 1), xytext=(10, -3),
                 textcoords="offset points", fontsize=7, color="#a0451a",
                 path_effects=halo)
-    ax.plot([1], [2], marker="o", ms=5, markerfacecolor="none",
+    # the global-coefficient rewrite θ·(Z0Z1 + X0 + X1) has p = 1, q = 3 (was drawn at (1, 2))
+    ax.plot([1], [3], marker="o", ms=5, markerfacecolor="none",
             markeredgecolor="#a0451a", markeredgewidth=1.0, zorder=6,
             clip_on=False)
-    ax.annotate("global-θ rewrite", xy=(1, 2), xytext=(5, 9),
+    ax.annotate("global-θ rewrite", xy=(1, 3), xytext=(5, 9),
                 textcoords="offset points", fontsize=7, color="#a0451a",
                 path_effects=halo)
 
@@ -164,14 +177,21 @@ def main():
           f"(divergent on {mism.mean()*100:.1f}% of cells)")
     print(f"C3 aux: certificate crossing drawn = {cert_crosses}")
     print(f"C4: TFIM star at (p=2, q=1) [PSR side, measured "
-          f"ratio 10^{Z[0,1]:+.2f}]; global-θ rewrite at (p=1, q=2) "
-          f"[measured ratio 10^{Z[1,0]:+.2f}]")
+          f"ratio 10^{Z[0,1]:+.2f}]; global-θ rewrite at (p=1, q=3) "
+          f"[plane cell 10^{Z[2,0]:+.2f}; the instance itself measures 10^-0.24, NSR side]")
+    sel = selector_field("general")
+    if sel is not None:                      # the paper's selector numbers (G.3), AC + margin
+        ch = sel < -1e-9; mm = ch != (Z < 0); ff = 10.0 ** np.abs(Z[mm])
+        print(f"C5: selector (Omega_AC + margin, gamma0={GAMMA0}): agreement {100*(1-mm.mean()):.1f}%, "
+              f"forfeit median {np.median(ff) if mm.any() else 1:.2f}x max {ff.max() if mm.any() else 1:.2f}x, "
+              f"ties before margin (L1 certificate) {int((np.abs(Zp) < 1e-9).sum())}, after {int((np.abs(sel) <= 1e-9).sum())}")
     summary = dict(nsr_share=nsr_share, forfeit_max=float(forf.max()),
                    forfeit_median=float(np.median(forf)),
                    forfeit_median_divergent=float(np.median(forf[mism])) if mism.any() else 1.0,
                    divergent_frac=float(mism.mean()),
                    cert_crossing_drawn=cert_crosses,
-                   star_ratio_log10=float(Z[0, 1]), circle_ratio_log10=float(Z[1, 0]))
+                   star_ratio_log10=float(Z[0, 1]), circle_ratio_log10=float(Z[2, 0]),
+                   circle_pq=(1, 3))
     d = json.load(open(CACHE))
     d["balanced_summary"] = summary
     json.dump(d, open(CACHE, "w"), indent=1)
