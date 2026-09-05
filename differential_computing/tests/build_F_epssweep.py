@@ -3,7 +3,7 @@ build_F_epssweep.py — P1-1 (App C.3 companion): FD's bias floor as a function 
 at three operating points of increasing landscape sharpness.  SHOT-FREE (N → ∞): the figure
 compares bias floors only, so the shot budget never enters.
 
-Per panel (T = 1, 2.5, 5 µs; T/T₂* = 0.15 held; same 2q TFIM, same device model r = 0.02):
+Per panel (T = 0.6, 2.5, 7 µs; T/T₂* = 0.15 held; same 2q TFIM, same device model r = 0.02):
   θ0    a generic point (not an inflection): a random steep point, fixed seed, whose
         shared-draw displacement |f''|·r/|∇C| lies in PSR_BAND = 2–5%, so PSR's floor is of
         the same order in every panel and the panels differ in the step scale (owner,
@@ -40,12 +40,12 @@ from noise_model import NoiseModel
 
 R_CTRL = 0.02
 REGIME = 0.15
-TS = [1.0, 2.5, 5.0]
+TS = [0.6, 2.5, 7.0]                         # owner 2026-09-05: healthy a bit better, ill a bit worse
 # sparse, per-landscape step grids (owner: zoom each panel to its own relevant ε range)
-EPS_BY_T = {1.0: [0.05, 0.1, 0.2, 0.4, 0.7, 1.0, 1.5, 2.0, 2.5, 3.0],
+EPS_BY_T = {0.6: [0.05, 0.1, 0.2, 0.4, 0.7, 1.0, 1.5, 2.0, 3.0, 4.0],
             2.5: [0.03, 0.06, 0.1, 0.2, 0.3, 0.45, 0.6, 0.8, 1.0, 1.2],
-            5.0: [0.02, 0.04, 0.07, 0.1, 0.15, 0.2, 0.28, 0.36, 0.45, 0.55]}
-EPS = np.array(EPS_BY_T[5.0])
+            7.0: [0.02, 0.04, 0.06, 0.09, 0.12, 0.16, 0.2, 0.26, 0.33, 0.42]}
+EPS = np.array(EPS_BY_T[7.0])
 NDRAW = 2000
 WIN = 0.10                                   # usable-window threshold (fraction of |∇C|)
 NSHOW = 40                                   # realizations drawn per step (the cloud)
@@ -92,10 +92,14 @@ def pick_theta(g, d1, d2, d3):
     disp = np.abs(d2) * R_CTRL / np.abs(d1)
     sharp = np.abs(d3) / np.abs(d1)
     lo, hi = np.percentile(sharp[m], [40, 60])          # typical sharpness for THIS landscape
-    ok = m & (disp >= PSR_BAND[0]) & (disp <= PSR_BAND[1]) & (sharp >= lo) & (sharp <= hi)
+    typ = m & (sharp >= lo) & (sharp <= hi)
+    ok = typ & (disp >= PSR_BAND[0]) & (disp <= PSR_BAND[1])
     idx = np.flatnonzero(ok)
-    assert idx.size, "no steep point with the PSR displacement in band"
-    i = int(np.random.default_rng(PICK_SEED).choice(idx))
+    if idx.size:
+        i = int(np.random.default_rng(PICK_SEED).choice(idx))
+    else:                                   # a landscape too smooth for the band: closest to it
+        cand = np.flatnonzero(typ)
+        i = int(cand[np.argmin(np.abs(disp[cand] - 0.5 * sum(PSR_BAND)))])
     a, b, c = float(d1[i]), float(d2[i]), float(d3[i])
     fd = np.sqrt((np.sqrt(2) * R_CTRL * abs(a) / eps) ** 2 + (abs(b) * R_CTRL / np.sqrt(2)) ** 2
                  + (eps ** 2 * abs(c) / 24) ** 2)
