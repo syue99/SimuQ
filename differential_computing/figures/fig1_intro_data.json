@@ -820,21 +820,45 @@
   "secants": [
     {
       "eps": 0.18,
-      "fm": 0.35397243377463233,
-      "fp": 0.6328855345931873,
-      "slope": 0.774758613384875
+      "eps_paper": 0.36,
+      "dm": 0.002514604421867866,
+      "dp": -0.0026420972658260378,
+      "xm": 1.1125146044218681,
+      "xp": 1.467357902734174,
+      "fm": 0.36845877584491565,
+      "fp": 0.6214570179483963,
+      "slope_nominal": 0.774758613384875,
+      "slope": 0.7027728947318905,
+      "wrongsign_frac": 0.9685,
+      "slope_std": 0.3815594983101185
     },
     {
       "eps": 0.25,
-      "fm": 0.08057125582288321,
-      "fp": 0.7997847759710959,
-      "slope": 1.4384270402964252
+      "eps_paper": 0.5,
+      "dm": 0.012808453008865642,
+      "dp": 0.002098002343060794,
+      "xm": 1.052808453008866,
+      "xp": 1.542098002343061,
+      "fm": 0.10279128172764129,
+      "fp": 0.7993236093246172,
+      "slope_nominal": 1.4384270402964252,
+      "slope": 1.3930646551939518,
+      "wrongsign_frac": 1.0,
+      "slope_std": 0.07719575058903112
     },
     {
       "eps": 0.32,
-      "fm": 0.2267147498572008,
-      "fp": 0.6431435315840501,
-      "slope": 0.650669971448202
+      "eps_paper": 0.64,
+      "dm": -0.010713387463222219,
+      "dp": 0.007231901098189695,
+      "xm": 0.9592866125367779,
+      "xp": 1.61723190109819,
+      "fm": 0.2800475522867148,
+      "fp": 0.6186724531958245,
+      "slope_nominal": 0.650669971448202,
+      "slope": 0.529101407670484,
+      "wrongsign_frac": 1.0,
+      "slope_std": 0.17211250199508712
     }
   ],
   "n_pass": 41,
@@ -1474,6 +1498,151 @@
     "window_hi": 0.07239721134646186,
     "window_width": 0.04652888303998379
   },
-  "mini_caption": "Figure 1. The finite-difference trap. Large \u03b5 (orange) mis-signs the gradient \u2014 the secant straddles a feature. Yet \u03b5 cannot shrink freely: it is floored by the control-setpoint resolution \u03b4, where \u03b4/\u03b5 amplification scatters the estimate (purple cone; Sec. 6.2). Either sound strategy (PSR/NSR, blue) recovers the noisy slope with no step size to tune.",
-  "data_note": "DATA NOTE (Fig 1): H(\u03b8)=\u03b8\u00b7Z0+X0, C_noisy=\u27e8Z0\u27e9 under T2* dephasing, Hamiltonian-level under T4. R8 grid sweep over T\u00d7\u03b8*\u00d7\u03b5_min (T/T2*=0.5 fixed) \u2192 41 configs pass; chosen NON-MARGINAL (R9): T=12 (T2=24), \u03b8*=1.290, \u03b5=[0.18, 0.25, 0.32]. Criteria: (1) secant slopes +0.77/+1.44/+0.65 \u2014 all wrong-signed vs \u2207C_noisy=-4.35, min|slope|=0.65\u22650.15 \u2713; (2) anchor 0.077 from nearest extremum = 25% of period 0.313 \u226520% \u2713 (margin); (3) |slope| 4.35 = 61% of max|slope| 7.13 \u226550% \u2713; (4) no collisions \u2713. Drawn tangent slope = analytic \u2207C_noisy = -4.347 (h=1e-3), EQUAL by construction; np.gradient check -4.35. SMALL-\u03b5 (R10): \u03b5 floored by \u03b4=0.02 (Q1-pending \u2014 cone geometry depends on \u03b4; re-render if \u03b4 changes). Cone drawn at \u03b5=0.03\u2248\u03b4 (1.5\u00d7\u03b4; labelled \u03b5\u2248\u03b4): mean -4.01 vs true -4.35, std 1.66, 3% wrong-signed. \u03b5-window sweep over [\u03b4,\u03bb/2=0.16] @N=4000: best \u03b5=0.056 (RMSE/|g|=0.28); usable window [0.026,0.072] (width 0.047, ~34% of [\u03b4,\u03bb/2]). USABLE-WINDOW CRITERION (shared with F6, G2/F8): an \u03b5 is 'usable' iff RMSE/|\u2207C_noisy| < 0.5 AND sign-error < 5% \u2014 the window is the \u03b5-range meeting BOTH (NOT the interval [\u03b4,\u03bb/2], which is only the swept range / the fraction's denominator). HONESTY: FD is NOT trapped from below at this anchor \u2014 a usable \u03b5 exists; Fig 1 asserts only that the shift rules need no \u03b5 (safe), and defers FD's quantitative defeat to Sec 6.2/F6-R."
+  "analytic": {
+    "f1": -4.347169824695462,
+    "f2": -2.175733760392262,
+    "f3": 1645.0130791558213,
+    "eps_star_analytic": 0.10824956575751897,
+    "floor_b64": 1.3900553820081896,
+    "floor_b64_rel": 0.3197610026899671,
+    "mc_best_eps": 0.10846946339706481,
+    "mc_best_rel": 0.28013192302367795,
+    "mc_sweep": [
+      {
+        "eps": 0.02,
+        "rmse_rel": 1.3099422072116085,
+        "signerr": 0.244
+      },
+      {
+        "eps": 0.02332289705236212,
+        "rmse_rel": 1.0996892187891556,
+        "signerr": 0.2005
+      },
+      {
+        "eps": 0.02719787634575409,
+        "rmse_rel": 0.9170376730405152,
+        "signerr": 0.1625
+      },
+      {
+        "eps": 0.03171666350274487,
+        "rmse_rel": 0.7928192426749411,
+        "signerr": 0.1295
+      },
+      {
+        "eps": 0.036986223885946475,
+        "rmse_rel": 0.6655521932477464,
+        "signerr": 0.086
+      },
+      {
+        "eps": 0.043131294602377315,
+        "rmse_rel": 0.5543003155273196,
+        "signerr": 0.065
+      },
+      {
+        "eps": 0.05029733718731742,
+        "rmse_rel": 0.4733285813329703,
+        "signerr": 0.04
+      },
+      {
+        "eps": 0.058653980861387456,
+        "rmse_rel": 0.40124636679318454,
+        "signerr": 0.02
+      },
+      {
+        "eps": 0.06839903786706787,
+        "rmse_rel": 0.3346716441650004,
+        "signerr": 0.006
+      },
+      {
+        "eps": 0.07976318593271214,
+        "rmse_rel": 0.29573196049098976,
+        "signerr": 0.0015
+      },
+      {
+        "eps": 0.09301542870385317,
+        "rmse_rel": 0.28023079987605126,
+        "signerr": 0.0005
+      },
+      {
+        "eps": 0.10846946339706481,
+        "rmse_rel": 0.28013192302367795,
+        "signerr": 0.0
+      },
+      {
+        "eps": 0.12649110640673522,
+        "rmse_rel": 0.31321563889424103,
+        "signerr": 0.0
+      },
+      {
+        "eps": 0.14750695263818336,
+        "rmse_rel": 0.3789338759539668,
+        "signerr": 0.0
+      },
+      {
+        "eps": 0.1720144735444003,
+        "rmse_rel": 0.47184915432966795,
+        "signerr": 0.0
+      },
+      {
+        "eps": 0.20059379289961582,
+        "rmse_rel": 0.5915909991349916,
+        "signerr": 0.0
+      },
+      {
+        "eps": 0.23392141905702932,
+        "rmse_rel": 0.7341108060939037,
+        "signerr": 0.0075
+      },
+      {
+        "eps": 0.27278625875047763,
+        "rmse_rel": 0.8898488977808857,
+        "signerr": 0.1345
+      },
+      {
+        "eps": 0.31810829150682035,
+        "rmse_rel": 1.054186307975306,
+        "signerr": 0.686
+      },
+      {
+        "eps": 0.3709603467158185,
+        "rmse_rel": 1.203851920140429,
+        "signerr": 0.993
+      },
+      {
+        "eps": 0.43259349884807957,
+        "rmse_rel": 1.301964498584914,
+        "signerr": 1.0
+      },
+      {
+        "eps": 0.5044666819577448,
+        "rmse_rel": 1.3139206541142965,
+        "signerr": 1.0
+      },
+      {
+        "eps": 0.5882812244823591,
+        "rmse_rel": 1.2275535069470922,
+        "signerr": 1.0
+      },
+      {
+        "eps": 0.6860211218219795,
+        "rmse_rel": 1.0759973139715164,
+        "signerr": 0.967
+      },
+      {
+        "eps": 0.8,
+        "rmse_rel": 0.9643993705521117,
+        "signerr": 0.068
+      }
+    ],
+    "cone": {
+      "eps": 0.028284271247461905,
+      "S": 4.347169824695462,
+      "signerr": 0.152,
+      "std_meas": 3.9230766718357746
+    },
+    "common_mode": 0.03076952192059751
+  },
+  "version": 2,
+  "mini_caption": "Figure 1. The finite-difference trap. Large \u03b5 (orange) mis-signs the gradient \u2014 the secant straddles a feature (each probe carries its own setpoint draw, r = 0.02). Shrinking \u03b5 does not help: at \u03b5 = \u221a2\u00b7r = 0.028 the setpoint error alone makes the one-sigma slope error equal to |\u2207C| (purple cone), and even the best step \u03b5* = 0.11 leaves an RMSE of 28% of |\u2207C| (B.6.4; Sec. 6.2). The shift-rule tangent (PSR/NSR, blue) recovers \u2207C_device with no step size to tune.",
+  "data_note": "DATA NOTE (Fig 1): H(\u03b8)=\u03b8\u00b7Z0+X0, C_device=\u27e8Z0\u27e9 under T2* dephasing, Hamiltonian-level (setpoint draw r=0.02 on every probe, P0-0; B.6.4 at the anchor: f2=-2.18, f3=+1645, eps*=0.108, floor 32% of |f1| vs shot-free MC best eps=0.108 at 28%; cone at eps=sqrt2\u00b7r=0.028, wrong sign 15%; drawn secants carry seed-0 draws, wrong-signed in [97, 100, 100]% of draws; eps labels in the paper's \u03b8\u00b1\u03b5/2 convention). R8 grid sweep over T\u00d7\u03b8*\u00d7\u03b5_min (T/T2*=0.5 fixed) \u2192 41 configs pass; chosen NON-MARGINAL (R9): T=12 (T2=24), \u03b8*=1.290, \u03b5=[0.18, 0.25, 0.32]. Criteria: (1) secant slopes +0.70/+1.39/+0.53 \u2014 all wrong-signed vs \u2207C_device=-4.35, min|slope|=0.53\u22650.15 \u2713; (2) anchor 0.077 from nearest extremum = 25% of period 0.313 \u226520% \u2713 (margin); (3) |slope| 4.35 = 61% of max|slope| 7.13 \u226550% \u2713; (4) no collisions \u2713. Drawn tangent slope = analytic \u2207C_device = -4.347 (h=1e-3), EQUAL by construction; np.gradient check -4.35. SMALL-\u03b5 (R10): \u03b5 floored by \u03b4=0.02 (Q1-pending \u2014 cone geometry depends on \u03b4; re-render if \u03b4 changes). Cone drawn at \u03b5=0.03\u2248\u03b4 (1.5\u00d7\u03b4; labelled \u03b5\u2248\u03b4): mean -4.01 vs true -4.35, std 1.66, 3% wrong-signed. \u03b5-window sweep over [\u03b4,\u03bb/2=0.16] @N=4000: best \u03b5=0.056 (RMSE/|g|=0.28); usable window [0.026,0.072] (width 0.047, ~34% of [\u03b4,\u03bb/2]). USABLE-WINDOW CRITERION (shared with F6, G2/F8): an \u03b5 is 'usable' iff RMSE/|\u2207C_device| < 0.5 AND sign-error < 5% \u2014 the window is the \u03b5-range meeting BOTH (NOT the interval [\u03b4,\u03bb/2], which is only the swept range / the fraction's denominator). HONESTY: FD is NOT trapped from below at this anchor \u2014 a usable \u03b5 exists; Fig 1 asserts only that the shift rules need no \u03b5 (safe), and defers FD's quantitative defeat to Sec 6.2/F6-R."
 }

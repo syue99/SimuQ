@@ -1,7 +1,7 @@
 # DELTA_NOISE.md — the setpoint rule as implemented (P0-0)
 
 2026-09-04. Figures 8 (`tests/build_F6.py`) and 9 (`tests/build_Floop_trajectory.py`) are
-regenerated under the rule below. Fig 2 follows.
+regenerated under the rule below, and Fig 2 (`tests/build_fig1.py`) draws it.
 
 ## The rule (owner's ruling, 2026-09-04): a draw per *change* of programmed value
 
@@ -105,3 +105,12 @@ plus shot variance ∝ 1/ε, and neither averages away.
 Floors (median ‖θ̄₅₀ − θ*‖, 20 seeds, B = 6000, T = 2.5): PSR 0.012, NSR 0.011, FD ε = 0.1
 (oracle) 0.024, FD 0.5: 0.097, FD 0.05: 0.039. δ off was not rerun for this figure (the
 per-step audit at θ* with δ off gives the shift rules 0.016 under a fixed step).
+
+## Figure 2 (`tests/build_fig1.py`) — FD only; the drawn secants and the cone
+
+FD's two probes are two programmed values → two draws per secant (`compute()`, seed 0, one
+pair per drawn secant); the secant is drawn through the realized points and its slope
+divides by the nominal separation. The purple cone is the analytic setpoint band
+S(ε) = √2·r|f′|/ε (B.6.3) evaluated at ε = √2·r, where S = |f′| — Hamiltonian-level, no
+shots. The shift-rule tangent is the exact ∇C_device (a shared draw would displace it by
+|f″|r = 0.04, 1% of |f′|, not drawn).

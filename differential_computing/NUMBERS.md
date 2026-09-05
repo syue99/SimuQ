@@ -173,3 +173,44 @@ floor is 0.016. (Cache of that fixed-step run: commit 8757aca.)
    in θ₁ at T = 0.8) and FD's probes were clipped into the plotting box. The old
    "34 steps" for NSR is that artefact.
 4. FD ε labels moved to the paper's convention.
+
+## Figure 2 — `tests/build_fig1.py`, run 2026-09-05 (this commit)
+
+Cache: `figures/fig1_intro_data.json` (version 2). Figure: `figures/fig1_intro_trap.{pdf,png}`,
+copies in `paper_fig_2/` and `paper_fig_3/figs/`. Hamiltonian-level, T/T₂* = 0.5 (kept by ruling).
+
+### Unchanged, confirmed
+
+| quantity | value |
+|---|---|
+| H, observable | θZ₀ + X₀, ⟨Z₀⟩ |
+| T, T₂*, regime | 12 µs, 24 µs, 0.5 |
+| anchor θ* | 1.290 (the R8 sweep re-selects it; 41 configs pass) |
+| ∇C_device(θ*) | −4.347 (61% of the window's max slope 7.13) |
+| physical probes | θ* ± 0.18, ± 0.25, ± 0.32 |
+| r | 0.02 |
+
+### Moved — text edits needed
+
+| quantity | old (text) | new | note |
+|---|---|---|---|
+| secant ε labels | 0.18 / 0.25 / 0.32 | **0.36 / 0.50 / 0.64** | same probes, paper's θ ± ε/2 convention (as Figs 8, 9) |
+| drawn secant slopes | +0.77 / +1.44 / +0.65 (δ-free) | **+0.70 / +1.39 / +0.53** (seed-0 δ draws per probe, P0-0) | wrong-signed in 97% / 100% / 100% of 2000 draws |
+| purple cone | shot-noise fan at ε = 0.03 (builder conv.), ±1.8σ, N = 4000 | **analytic setpoint cone S(ε) = √2·r\|f′\|/ε at ε = √2·r = 0.028**, ±1σ = \|∇C\| | δ only, no shots; 15% wrong sign at that step (measured) |
+| step-floor marker | 0.04 wide, "ε ≳ δ" | **0.028 wide (= √2·r), labelled with the value, to scale** | |
+| title strip | "Hamiltonian-level, T4 noise" | "Hamiltonian-level" + second line "best FD step ε* = 0.11: RMSE ≈ 28% of \|∇C\| · r = 0.02" | |
+| notation | C_noisy, ∇C_noisy | **C_device, ∇C_device** | v11 name, as Fig 8 |
+
+### B.6.4 at the anchor (for the caption)
+
+| quantity | value |
+|---|---|
+| f′, f″, f‴ | −4.347, −2.18, +1645 |
+| ε*_analytic = (24\|f′\|r/\|f‴\|)^{1/3} | **0.108** |
+| B.6.4 floor 0.60\|f‴\|^{1/3}(\|f′\|r)^{2/3} | 1.39 = **32% of \|f′\|** |
+| shot-free Monte-Carlo FD floor (2000 draws per ε, 25 steps in [0.02, 0.8]) | best ε = **0.108**, RMSE = **28% of \|f′\|** (this is the annotated number) |
+| common-mode term \|f″\|r/√2 | 0.03 — negligible here (near the steepest point), so B.6.4 and MC agree to 15% |
+| cone step √2·r | 0.028 |
+
+The old sidecar's "usable window [0.026, 0.072]" and "best ε = 0.056 (28%)" were at N = 4000
+with shot noise in the builder's convention; the new numbers are shot-free in the paper's.

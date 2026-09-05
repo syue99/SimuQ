@@ -118,6 +118,20 @@ residual measurement). Their difference (0.012 vs 0.011) is noise.
 The shift rules actually spend 4800 executions per gradient (residual charged twice in
 the accounting), FD 6000. Either quote "≤ 6000" or ask for the parity rerun.
 
+## From Figure 2 (P0-4 + P0-0) — build 2026-09-05
+
+### C.3 — probes
+> "ε ∈ {0.18, 0.25, 0.32}" → **ε ∈ {0.36, 0.50, 0.64}** (paper's θ ± ε/2 convention; the
+physical probes are unchanged).
+
+### Fig. 2 caption — the stronger statement (B.6.4 at this anchor)
+Offer: "At this anchor the best finite-difference step is ε* ≈ 0.11, and even there the
+setpoint error leaves an RMSE of 28% of |∇C| (B.6.4 gives 32%); at ε = √2·r = 0.028 the
+one-sigma slope error equals |∇C| itself (purple cone)." The drawn secants carry their own
+setpoint draws and stay wrong-signed (97–100% of draws).
+
+### Fig. 2 caption / C.3 — notation and labels
+"T4" is gone from the figure; C_noisy → C_device everywhere in the figure. Regime 0.5 stays.
+
 ## Pending, not yet regenerated
-Fig 2 (P0-0/P0-4), Fig 10/14 (P0-1/P0-8), Figs 7/13 (P0-2), Fig 12 (P0-3), Fig 15b (P0-6),
-Fig 6 (P0-7).
+Fig 10/14 (P0-1/P0-8), Figs 7/13 (P0-2), Fig 12 (P0-3), Fig 15b (P0-6), Fig 6 (P0-7).

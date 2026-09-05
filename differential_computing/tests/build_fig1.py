@@ -37,6 +37,7 @@ from scipy.interpolate import interp1d
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+import matplotlib.patheffects as pe
 
 from simuq import QSystem, Qubit
 from noisy_qutip import NoisyQuTiPRunner
@@ -133,8 +134,46 @@ def compute():
     win = (a - 0.55, a + 0.55)
     gx = np.linspace(*win, 400); y = np.array([fn(v) for v in gx])
     g_plot = float(np.gradient(y, gx)[np.argmin(np.abs(gx - a))])
-    secants = [dict(eps=e, fm=float(fn(a - e)), fp=float(fn(a + e)),
-                    slope=float((fn(a + e) - fn(a - e)) / (2 * e))) for e in cfg["eps"]]
+    # P0-0: each probe program dials its own setpoint, so each endpoint carries its own
+    # draw δ ~ N(0, r²) (seed 0 = the drawn realization); the estimate divides by the
+    # NOMINAL separation.  `eps` is the builder's half-separation; the paper's step is
+    # eps_paper = 2·eps (probes θ ± eps_paper/2).
+    srng = np.random.default_rng(0)
+    secants = []
+    for e in cfg["eps"]:
+        dm, dp = srng.normal(0, R_CTRL, 2)
+        xm, xp = a - e + dm, a + e + dp
+        fm_, fp_ = float(fn(xm)), float(fn(xp))
+        secants.append(dict(eps=e, eps_paper=2 * e, dm=float(dm), dp=float(dp),
+                            xm=float(xm), xp=float(xp), fm=fm_, fp=fp_,
+                            slope_nominal=float((fn(a + e) - fn(a - e)) / (2 * e)),
+                            slope=float((fp_ - fm_) / (2 * e))))
+    # B.6.4 quantities at the anchor (paper convention) and a shot-free Monte-Carlo floor
+    hh = 0.02
+    f2 = float((fn(a + hh) - 2 * fn(a) + fn(a - hh)) / hh ** 2)
+    f3 = float((fn(a + 2 * hh) - 2 * fn(a + hh) + 2 * fn(a - hh) - fn(a - 2 * hh)) / (2 * hh ** 3))
+    eps_star_analytic = float((24 * abs(g) * R_CTRL / abs(f3)) ** (1 / 3))
+    floor_b64 = float(0.60 * abs(f3) ** (1 / 3) * (abs(g) * R_CTRL) ** (2 / 3))
+    grid_mc = np.linspace(a - 0.9, a + 0.9, 1801); Cmc = interp1d(grid_mc, [fn(v) for v in grid_mc], kind="cubic")
+    mrng = np.random.default_rng(1); eps_mc = np.geomspace(0.02, 0.8, 25); mc = []
+    for e in eps_mc:
+        dpv, dmv = mrng.normal(0, R_CTRL, 2000), mrng.normal(0, R_CTRL, 2000)
+        est = (Cmc(a + e / 2 + dpv) - Cmc(a - e / 2 + dmv)) / e
+        mc.append(dict(eps=float(e), rmse_rel=float(np.sqrt(np.mean((est - g) ** 2)) / abs(g)),
+                       signerr=float(np.mean(np.sign(est) != np.sign(g)))))
+    mc_best = min(mc, key=lambda w: w["rmse_rel"])
+    cone_eps = float(np.sqrt(2) * R_CTRL)                    # where S(ε) = √2·r|f′|/ε equals |f′|
+    dpv, dmv = mrng.normal(0, R_CTRL, 4000), mrng.normal(0, R_CTRL, 4000)
+    est_c = (Cmc(a + cone_eps / 2 + dpv) - Cmc(a - cone_eps / 2 + dmv)) / cone_eps
+    cone_stats = dict(eps=cone_eps, S=float(abs(g)), signerr=float(np.mean(np.sign(est_c) != np.sign(g))),
+                      std_meas=float(np.std(est_c)))
+    for sec in secants:                                       # how robust is the wrong sign to δ?
+        e = sec["eps"]; dpv, dmv = mrng.normal(0, R_CTRL, 2000), mrng.normal(0, R_CTRL, 2000)
+        sl = (Cmc(a + e + dpv) - Cmc(a - e + dmv)) / (2 * e)
+        sec["wrongsign_frac"] = float(np.mean(np.sign(sl) != np.sign(g))); sec["slope_std"] = float(np.std(sl))
+    analytic = dict(f1=g, f2=f2, f3=f3, eps_star_analytic=eps_star_analytic, floor_b64=floor_b64,
+                    floor_b64_rel=floor_b64 / abs(g), mc_best_eps=mc_best["eps"], mc_best_rel=mc_best["rmse_rel"],
+                    mc_sweep=mc, cone=cone_stats, common_mode=float(abs(f2) * R_CTRL / np.sqrt(2)))
 
     # small-ε noise wall: N_FAN noisy realizations of the ε≈δ secant (δ setpoint jitter on
     # the ± points + shot noise), to SHOW what shrinking ε does — the estimate scatters.
@@ -191,74 +230,92 @@ def compute():
                 near=cfg["near"], window=list(win), gx=list(map(float, gx)),
                 y=list(map(float, y)), secants=secants, n_pass=len(rows), sweep_table=table,
                 small_eps=SMALL_EPS, delta=R_CTRL, fan=fan, fan_stats=fan_stats,
-                eps_window=ewin, eps_window_stats=ewin_stats)
+                eps_window=ewin, eps_window_stats=ewin_stats, analytic=analytic, version=2)
 
 
 def main():
     os.makedirs(FIGDIR, exist_ok=True)
     cache = os.path.join(FIGDIR, "fig1_intro_data.json")
-    d = json.load(open(cache)) if os.path.exists(cache) else compute()
+    d = json.load(open(cache)) if os.path.exists(cache) else None
+    if d is None or d.get("version") != 2:
+        d = compute(); json.dump(d, open(cache, "w"))
 
     a = d["anchor"]; g = d["g_analytic"]; z0 = d["z0"]
     gx = np.array(d["gx"]); y = np.array(d["y"]); win = tuple(d["window"])
     th = 0.06                                                  # short tangent (hugs)
 
     fig, ax = plt.subplots(figsize=(COL, 2.7))
-    ax.plot(gx, y, color=C_INK, lw=1.6, label=r"noisy landscape $C_{\rm noisy}(\theta)$")
+    ax.plot(gx, y, color=C_INK, lw=1.6, label=r"device landscape $C_{\rm device}(\theta)$")
 
     # FD secants + per-secant ε labels (R7) — ONE colour for all three (R11; ε labels
     # disambiguate); no slope literals
-    lab_off = [(4, -8, "top"), (3, 5, "bottom"), (7, -2, "center")]   # stagger → no overlap
+    # stagger → no overlap; last secant labelled ha=right (dx<0) so ε=0.32 stays inboard of
+    # the right spine (Fig-1 fix 2)
+    lab_off = [(4, -8, "top", "left"), (5, 4, "bottom", "left"), (5, 3, "bottom", "left")]
     for k, sec in enumerate(d["secants"]):
-        e = sec["eps"]
-        ax.plot([a - e, a + e], [sec["fm"], sec["fp"]], "o-", color=C_FD, lw=1.2, ms=2.6,
+        e = sec["eps_paper"]                    # paper convention: probes at θ ± ε/2 (+δ)
+        ax.plot([sec["xm"], sec["xp"]], [sec["fm"], sec["fp"]], "o-", color=C_FD, lw=1.2, ms=2.6,
                 label="FD secants (wrong sign)" if k == 0 else None)
-        dx, dy, va = lab_off[k % len(lab_off)]
-        ax.annotate(rf"$\varepsilon={e:.2f}$", xy=(a + e, sec["fp"]), xytext=(dx, dy),
-                    textcoords="offset points", fontsize=5.6, color=C_FD, va=va)
+        dx, dy, va, ha = lab_off[k % len(lab_off)]
+        ax.annotate(rf"$\varepsilon={e:.2f}$", xy=(sec["xp"], sec["fp"]), xytext=(dx, dy),
+                    textcoords="offset points", fontsize=5.6, color=C_FD, va=va, ha=ha)
 
-    # small-ε δ-FLOOR (answers "what if we shrink ε"): ε cannot be set below the control
-    # resolution δ, and near that floor the setpoint error δ (amplified by 1/ε) scatters the
-    # secant. Drawn as a NOISE CONE: the envelope of slopes the FD estimate takes at ε≈δ.
-    C_FAN = "#7b3fa0"; fs = d["fan_stats"]
+    # small-ε trap (answers "what if we shrink ε"): ε cannot be set below the control resolution
+    # δ, and near that floor the setpoint error δ (amplified by 1/ε) scatters the secant. δ is
+    # ZERO-MEAN, so the trap is VARIANCE, not bias — the δ-average is ~unbiased (≈∇C, which is why
+    # we do NOT draw a mean line: it would coincide with the blue tangent and read as "FD is fine"),
+    # but any SINGLE finite run lands anywhere in the cone. Drawn as the single-run scatter envelope.
+    # P0-4: the analytic setpoint cone S(ε) = √2·r|f′|/ε (B.6.3), drawn at the step
+    # ε = √2·r where S(ε) = |f′| — the ±1σ band spans slopes 0 … 2f′, i.e. the sign is lost
+    # at one sigma.  Hamiltonian-level: δ only, no shots.
+    C_FAN = "#7b3fa0"; an = d["analytic"]; cone = an["cone"]
     ylo, yhi = float(y.min()) - 0.12, float(y.max()) + 0.14      # frame; cone clipped to it
     cw = 0.11                                   # draw the SLOPE envelope wide enough to see
     xc = np.array([a - cw, a + cw])
-    s_hi = fs["mean"] + 1.8 * fs["std"]; s_lo = fs["mean"] - 1.8 * fs["std"]   # representative
+    s_hi = g + cone["S"]; s_lo = g - cone["S"]                   # ±1σ = ±|f′|
     ax.fill_between(xc, np.clip(z0 + s_lo * (xc - a), ylo, yhi),
                     np.clip(z0 + s_hi * (xc - a), ylo, yhi), color=C_FAN, alpha=0.28, lw=0,
-                    zorder=1, clip_on=True, label=r"FD at $\varepsilon\!\approx\!\delta$: noise cone")
-    ax.plot(xc, np.clip(z0 + fs["mean"] * (xc - a), ylo, yhi), "--", color=C_FAN, lw=0.9,
-            alpha=0.8, zorder=1, clip_on=True)
-    # explicit ε-floor indicator (upper-left, clear zone): a δ-wide bracket = the smallest
-    # resolvable step; you cannot shrink ε below it.
+                    zorder=1, clip_on=True,
+                    label=rf"FD setpoint cone at $\varepsilon=\sqrt{{2}}\,r$ ($\pm1\sigma=|\nabla C|$)")
+    # the step at which the cone is this wide, drawn to scale: a bracket exactly √2·r wide
     yb = float(y.max()) + 0.05; xb = win[0] + 0.12
-    ax.errorbar([xb], [yb], xerr=[[d["delta"]], [d["delta"]]], fmt="none",
+    ax.errorbar([xb], [yb], xerr=[[0.5 * cone["eps"]], [0.5 * cone["eps"]]], fmt="none",
                 ecolor=C_FAN, elinewidth=1.1, capsize=2.5, zorder=6, clip_on=False)
-    ax.annotate(r"step floor $\varepsilon\gtrsim\delta$ (setpoint resolution)",
-                xy=(xb, yb), xytext=(xb + 0.06, yb), fontsize=5.5, color=C_FAN,
+    ax.annotate(rf"$\varepsilon=\sqrt{{2}}\,r={cone['eps']:.3f}$ (to scale)",
+                xy=(xb, yb), xytext=(xb + 0.05, yb), fontsize=5.5, color=C_FAN,
                 va="center", ha="left", annotation_clip=False)
 
-    # short shift-rule tangent: slope = analytic derivative (equal by construction)
+    # short shift-rule tangent: slope = analytic derivative (equal by construction). Drawn
+    # ABOVE the purple noise cone with a white casing (Fig-1 fix 4: the blue read as "buried"
+    # in the purple wedge — two opposite meanings overlapping); the white stroke + high zorder
+    # lift it clear of the cone.
     xt = np.array([a - th, a + th])
     ax.plot(xt, z0 + g * (xt - a), color=C_PSR, lw=2.6, solid_capstyle="round",
-            label="shift-rule tangent (PSR/NSR)", zorder=7)
-    ax.plot([a], [z0], "o", color=C_INK, ms=4, zorder=8)
+            label=r"shift-rule tangent (PSR/NSR) $=\nabla C_{\rm device}$", zorder=9,
+            path_effects=[pe.Stroke(linewidth=4.4, foreground="white"), pe.Normal()])
+    ax.plot([a], [z0], "o", color=C_INK, ms=4, zorder=10)
 
     # R7 in-figure info line (muted, above the axes → collision-free); PSR/NSR-safe, no refs
-    ax.text(0.0, 1.04, r"$H(\theta)=\theta Z_0+X_0$  ·  Hamiltonian-level, T4 noise  ·  "
+    ax.text(0.0, 1.10, r"$H(\theta)=\theta Z_0+X_0$  ·  Hamiltonian-level  ·  "
             rf"$T/T_2^*={d['regime']:.1f}$", transform=ax.transAxes, fontsize=5.8,
             color=C_MUTE, va="bottom", ha="left")
+    ax.text(0.0, 1.03, rf"best FD step $\varepsilon^*={an['mc_best_eps']:.2f}$: "
+            rf"RMSE $\approx {100*an['mc_best_rel']:.0f}\%$ of $|\nabla C|$  ·  $r={d['delta']}$",
+            transform=ax.transAxes, fontsize=5.8, color=C_MUTE, va="bottom", ha="left")
 
-    ax.set_xlabel(r"parameter $\theta$"); ax.set_ylabel(r"$C_{\rm noisy}(\theta)$")
+    ax.set_xlabel(r"parameter $\theta$"); ax.set_ylabel(r"$C_{\rm device}(\theta)$")
     ax.set_xlim(*win)
     ax.set_ylim(ylo, yhi)                                        # clip cone to landscape range
     # R11: two-column legend below (compact — no longer sandwiches the x-label)
     ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.26), fontsize=6.3,
               handlelength=1.6, ncol=2, columnspacing=1.2)
     fig.tight_layout()
-    for ext in ("pdf", "png"):
-        fig.savefig(os.path.join(FIGDIR, f"fig1_intro_trap.{ext}"), bbox_inches="tight", pad_inches=0.02)
+    OUT2 = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "paper_fig_2"))
+    OUT3 = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "paper_fig_3", "figs"))
+    for out in (FIGDIR, OUT2, OUT3):
+        os.makedirs(out, exist_ok=True)
+        for ext in ("pdf", "png"):
+            fig.savefig(os.path.join(out, f"fig1_intro_trap.{ext}"), bbox_inches="tight", pad_inches=0.02)
     plt.close(fig)
 
     # ---- deliverables: mini caption + data note (persisted, per R7) ----
@@ -267,32 +324,37 @@ def main():
     # tune"), NOT that ε has no good value (that quantitative defeat lives in Sec 6.2/F6-R).
     mini_caption = (
         "Figure 1. The finite-difference trap. Large ε (orange) mis-signs the gradient — the "
-        "secant straddles a feature. Yet ε cannot shrink freely: it is floored by the "
-        "control-setpoint resolution δ, where δ/ε amplification scatters the estimate (purple "
-        "cone; Sec. 6.2). Either sound strategy (PSR/NSR, blue) recovers the noisy slope with "
-        "no step size to tune.")
+        "secant straddles a feature (each probe carries its own setpoint draw, r = 0.02). Shrinking ε "
+        f"does not help: at ε = √2·r = {an['cone']['eps']:.3f} the setpoint error alone makes the one-sigma "
+        "slope error equal to |∇C| (purple cone), and even the best step "
+        f"ε* = {an['mc_best_eps']:.2f} leaves an RMSE of {100*an['mc_best_rel']:.0f}% of |∇C| (B.6.4; Sec. 6.2). "
+        "The shift-rule tangent (PSR/NSR, blue) recovers ∇C_device with no step size to tune.")
     signs = "/".join(f"{s['slope']:+.2f}" for s in d["secants"])
     eps_used = [s["eps"] for s in d["secants"]]
     win_txt = (f"usable window [{ws['window_lo']:.3f},{ws['window_hi']:.3f}] "
                f"(width {ws['window_width']:.3f}, ~{ws['window_width']/(ws['lam_half']-ws['delta'])*100:.0f}% "
                f"of [δ,λ/2])" if ws["window_lo"] else "usable window EMPTY")
     data_note = (
-        f"DATA NOTE (Fig 1): H(θ)=θ·Z0+X0, C_noisy=⟨Z0⟩ under T2* dephasing, Hamiltonian-level "
-        f"under T4. R8 grid sweep over T×θ*×ε_min (T/T2*={d['regime']:.1f} fixed) → "
+        f"DATA NOTE (Fig 1): H(θ)=θ·Z0+X0, C_device=⟨Z0⟩ under T2* dephasing, Hamiltonian-level "
+        f"(setpoint draw r={d['delta']} on every probe, P0-0; B.6.4 at the anchor: f2={d['analytic']['f2']:+.2f}, "
+        f"f3={d['analytic']['f3']:+.0f}, eps*={d['analytic']['eps_star_analytic']:.3f}, floor {100*d['analytic']['floor_b64_rel']:.0f}% of |f1| "
+        f"vs shot-free MC best eps={d['analytic']['mc_best_eps']:.3f} at {100*d['analytic']['mc_best_rel']:.0f}%; cone at eps=sqrt2·r="
+        f"{d['analytic']['cone']['eps']:.3f}, wrong sign {100*d['analytic']['cone']['signerr']:.0f}%; drawn secants carry seed-0 draws, "
+        f"wrong-signed in {[round(100*s['wrongsign_frac']) for s in d['secants']]}% of draws; eps labels in the paper's θ±ε/2 convention). R8 grid sweep over T×θ*×ε_min (T/T2*={d['regime']:.1f} fixed) → "
         f"{d['n_pass']} configs pass; chosen NON-MARGINAL (R9): T={d['T']:.0f} (T2={d['T2']:.0f}), "
         f"θ*={a:.3f}, ε={eps_used}. Criteria: (1) secant slopes {signs} — all wrong-signed "
-        f"vs ∇C_noisy={g:+.2f}, min|slope|={min(abs(s['slope']) for s in d['secants']):.2f}≥0.15 ✓; "
+        f"vs ∇C_device={g:+.2f}, min|slope|={min(abs(s['slope']) for s in d['secants']):.2f}≥0.15 ✓; "
         f"(2) anchor {d['near']:.3f} from nearest extremum = {d['near']/d['period']*100:.0f}% of "
         f"period {d['period']:.3f} ≥20% ✓ (margin); (3) |slope| {abs(g):.2f} = "
         f"{abs(g)/d['maxslope']*100:.0f}% of max|slope| {d['maxslope']:.2f} ≥50% ✓; (4) no "
-        f"collisions ✓. Drawn tangent slope = analytic ∇C_noisy = {g:+.3f} (h=1e-3), EQUAL by "
+        f"collisions ✓. Drawn tangent slope = analytic ∇C_device = {g:+.3f} (h=1e-3), EQUAL by "
         f"construction; np.gradient check {d['g_plotted']:+.2f}. "
         f"SMALL-ε (R10): ε floored by δ={d['delta']} (Q1-pending — cone geometry depends on δ; "
         f"re-render if δ changes). Cone drawn at ε={d['small_eps']}≈δ (1.5×δ; labelled ε≈δ): "
         f"mean {fs['mean']:+.2f} vs true {g:+.2f}, std {fs['std']:.2f}, {fs['frac_wrongsign']*100:.0f}% "
         f"wrong-signed. ε-window sweep over [δ,λ/2={ws['lam_half']:.2f}] @N={N_SHOTS_FAN}: best "
         f"ε={ws['best_eps']:.3f} (RMSE/|g|={ws['best_rmse_rel']:.2f}); {win_txt}. USABLE-WINDOW "
-        f"CRITERION (shared with F6, G2/F8): an ε is 'usable' iff RMSE/|∇C_noisy| < 0.5 AND "
+        f"CRITERION (shared with F6, G2/F8): an ε is 'usable' iff RMSE/|∇C_device| < 0.5 AND "
         f"sign-error < 5% — the window is the ε-range meeting BOTH (NOT the interval [δ,λ/2], "
         f"which is only the swept range / the fraction's denominator). HONESTY: FD is NOT trapped "
         f"from below at this anchor — a usable ε exists; Fig 1 asserts only that the shift rules "
