@@ -340,10 +340,10 @@ def render(data):
         ax.set_facecolor(SURFACE)
         pc = ax.contourf(Pg, Kg, np.clip(Z, -bb.RATIO_LIM + 1e-6, bb.RATIO_LIM - 1e-6),
                          levels=bb.RATIO_LEVELS, cmap=bb.ratio_cmap(), antialiased=True)
-        ax.contour(Pg, Kg, Z, levels=[0.0], colors="k", linewidths=1.5, zorder=4)
+        ax.contour(Pg, Kg, Z, levels=[0.0], colors="k", linewidths=bb.LW_MEAS, zorder=4)
         if Zsel.min() < 0 < Zsel.max():
-            ax.contour(Pg, Kg, Zsel, levels=[0.0], colors="k",
-                       linewidths=1.2, linestyles="dashed", zorder=4)
+            ax.contour(Pg, Kg, Zsel, levels=[0.0], colors=bb.C_SEL,
+                       linewidths=bb.LW_SEL, linestyles="dashed", zorder=5)
         if (np.array(data[family]["Z"]) < 0).mean() > 0.04:
             ax.text(0.30, 0.86, "NSR\nwins", transform=ax.transAxes,
                     color="#0f6b52", fontsize=8.5, weight="bold", ha="center",
@@ -363,8 +363,8 @@ def render(data):
 
     from matplotlib.lines import Line2D
     fig.legend(handles=[
-        Line2D([], [], color="k", lw=1.5, label="measured crossing"),
-        Line2D([], [], color="k", lw=1.2, ls="dashed",
+        Line2D([], [], color="k", lw=bb.LW_MEAS, label="measured crossing"),
+        Line2D([], [], color=bb.C_SEL, lw=bb.LW_SEL, ls="dashed",
                label=r"compiler's selector: $\bar\Omega_{AC}$ with margin "
                      r"$\gamma(q)=\min(1,%.2f/\sqrt{q})$" % GAMMA0)],
         fontsize=6.4, frameon=False, loc="lower center", ncol=2,

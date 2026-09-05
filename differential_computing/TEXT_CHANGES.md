@@ -144,8 +144,8 @@ moving no boundary".
 ### Fig. 10 caption
 > "the gold line [is] the compiler's choice"
 
-→ "the dashed line is the compiler's selector (Ω̄_AC with margin γ(q) = min(1, 1.86/√q),
-App. G.3.1); the solid line is the measured crossing." Same styles as Fig. 14.
+→ "the orange dashed line is the compiler's selector (Ω̄_AC with margin γ(q) = min(1, 1.86/√q),
+App. G.3.1); the thin black line is the measured crossing." Same styles as Fig. 14.
 
 > star and circle "on the crossing … at P = 2, k = 1"
 

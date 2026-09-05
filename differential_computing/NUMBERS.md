@@ -242,11 +242,11 @@ Replots from the existing caches (`figures/F_select_balanced_data.json`,
 | item | old | new |
 |---|---|---|
 | Fig 10 colour | absolute "executions to target (best strategy)", 10¹–10⁴ gray bands + winner washes | **log₁₀(N_NSR/N_PSR)**, mean over seeds, diverging green (NSR wins) / white / blue (PSR wins), limits ±0.8 (data −0.76 … +0.28); colorbar "log₁₀(N_NSR / N_PSR)". Target-free, as G.1 says. |
-| Fig 10 overlays | solid black measured crossing only (no certificate line: the L1 certificate never crosses this plane) | solid black = measured crossing; **dashed black = compiler's selector** Ω̄_AC + margin γ(q) = min(1, 1.86/√q) (G.3.1), from Fig 14's cache |
-| Fig 14 style | two-tone winner fill, green dashed selector | same diverging fill and colorbar as Fig 10, black solid / black dashed |
+| Fig 10 overlays | solid black measured crossing only (no certificate line: the L1 certificate never crosses this plane) | solid black = measured crossing; **dashed orange = compiler's selector** Ω̄_AC + margin γ(q) = min(1, 1.86/√q) (G.3.1), from Fig 14's cache |
+| Fig 14 style | two-tone winner fill, green dashed selector | same diverging fill and colorbar as Fig 10, black solid (1.0 pt) / orange dashed |
 | circle "global-θ rewrite" | (1, 2) | **(1, 3)** — θ·(Z₀Z₁+X₀+X₁) has one coefficient over three terms. Its measured ratio on the plane's model is **10^−0.24 (NSR side)**; the plane cell (1,3) averages 10^−0.02 |
 | caption "both sit on the crossing at (2,1)" | | true for the star (+0.02); the rewrite is on the NSR side (see SELECTOR_FACTOR2.md) |
-| caption "gold line = compiler's choice" | | the selector line is black dashed in both figures; no gold anywhere |
+| caption "gold line = compiler's choice" | | the selector line is orange dashed in both figures ("gold" in the caption is acceptable, or say "orange dashed") |
 
 Consistency checks: 3 (factor 2, near-tie at (2,1)) — holds, SELECTOR_FACTOR2.md; 4
 (Fig 14(a) == Fig 10) — holds.

@@ -46,6 +46,8 @@ C_PSR, C_NSR = "#0072B2", "#009E73"
 INK, SEC, GRID, SURFACE = bs.INK, bs.SEC, bs.GRID, bs.SURFACE
 REG_CACHE = os.path.join(FIGDIR, "F_regimes_data.json")   # Fig 14's arrays (== Fig 10's) + AC certificate
 GAMMA0 = 1.86                                              # eq:margin, App G.3.1
+C_SEL = "#e07b00"                                          # selector line: highlight orange (both planes)
+LW_MEAS, LW_SEL = 1.0, 1.4
 
 # P0-1 (2026-09-05): the plane is coloured by the TARGET-FREE quantity App G.1 defines,
 # mean over seeds of log10(N_NSR / N_PSR): hue = sign (green NSR wins, blue PSR wins),
@@ -103,11 +105,11 @@ def render(data):
     cb.ax.tick_params(labelsize=7, colors=SEC)
     # solid = measured crossing (ratio 1); dashed = the compiler's selector (G.3.1),
     # same styles as Fig 14
-    ax.contour(Pg, Kg, Z, levels=[0.0], colors="k", linewidths=1.5, zorder=4)
+    ax.contour(Pg, Kg, Z, levels=[0.0], colors="k", linewidths=LW_MEAS, zorder=4)
     cert_crosses = bool(Zsel is not None and Zsel.min() < 0 < Zsel.max())
     if cert_crosses:
-        ax.contour(Pg, Kg, Zsel, levels=[0.0], colors="k", linewidths=1.2,
-                   linestyles="dashed", zorder=4)
+        ax.contour(Pg, Kg, Zsel, levels=[0.0], colors=C_SEL, linewidths=LW_SEL,
+                   linestyles="dashed", zorder=5)
 
     halo = [pe.withStroke(linewidth=2.0, foreground="#ffffff")]
     ax.text(0.10, 0.90, "NSR\nwins", transform=ax.transAxes, fontsize=8.5,

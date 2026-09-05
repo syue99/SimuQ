@@ -139,7 +139,7 @@ single residual measurement. Contradiction 5 (metric sensitivity of FD's
 Same cache (`figures/F_select_balanced_data.json`, 350 cells × 6 seeds), no sweep
 rerun. Colour is now App G.1's cell value, mean over seeds of log₁₀(N_NSR/N_PSR)
 (green NSR wins, blue PSR wins, ±0.8), colorbar "log₁₀(N_NSR / N_PSR)"; solid
-black = measured crossing, dashed black = the compiler's selector (Ω̄_AC with
+black = measured crossing, dashed orange = the compiler's selector (Ω̄_AC with
 margin γ(q) = min(1, 1.86/√q), from `F_regimes_data.json`, whose general-family
 arrays equal this plane's to 2e-16). Fig 14 uses the identical fill and styles.
 
