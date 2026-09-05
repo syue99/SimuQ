@@ -44,8 +44,11 @@ TS = [1.0, 2.5, 5.0]
 EPS = np.geomspace(0.02, 3.0, 30)          # wider than Fig 8's inset grid so the window is seen closing
 NDRAW = 2000
 WIN = 0.30                                   # usable-window threshold (fraction of |∇C|)
+NSHOW = 40                                   # realizations drawn per step (the cloud)
+NPSR = 400                                   # PSR realizations (one draw each)
 WRONG = 0.20                                 # × marker threshold (fraction of draws)
 LAND_HALF = 1.6                              # landscape drawn over θ0 ± LAND_HALF (same for all panels)
+YCLIP = 1.6                                  # signed-error axis half-range (draws beyond are clipped to the edge)
 FIGDIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "figures"))
 OUT2 = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "paper_fig_2"))
 OUT3 = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "paper_fig_3", "figs"))
@@ -106,7 +109,11 @@ def panel(T, rng):
         est = (Cint(th0 + e / 2 + dp) - Cint(th0 - e / 2 + dm)) / e
         rows.append(dict(eps=float(e), rmse_rel=float(np.sqrt(np.mean((est - f1) ** 2)) / abs(f1)),
                          bias_rel=float((np.mean(est) - f1) / abs(f1)),
-                         wrong=float(np.mean(np.sign(est) != np.sign(f1)))))
+                         wrong=float(np.mean(np.sign(est) != np.sign(f1))),
+                         samples=[float(v) for v in ((est[:NSHOW] - f1) / abs(f1))]))
+    # PSR: one shared draw per estimate -> the exact gradient at θ0+δ (same δ statistics)
+    dl = rng.normal(0, R_CTRL, NPSR)
+    psr_err = (np.interp(th0 + dl, g, d1) - f1) / abs(f1)
     rr = np.array([r["rmse_rel"] for r in rows])
     ok = rr <= WIN
     win = (float(EPS[ok].min()), float(EPS[ok].max())) if ok.any() else None
@@ -119,6 +126,7 @@ def panel(T, rng):
                 eps_star_b64=float((24 * abs(f1) * R_CTRL / abs(f3)) ** (1 / 3)),
                 floor_b64_rel=float(0.60 * abs(f3) ** (1 / 3) * (abs(f1) * R_CTRL) ** (2 / 3) / abs(f1)),
                 psr_disp_rel=float(abs(f2) * R_CTRL / abs(f1)),
+                psr_samples=[float(v) for v in psr_err], psr_rms_rel=float(np.sqrt(np.mean(psr_err ** 2))),
                 window=win, window_decades=(float(np.log10(win[1] / win[0])) if win else 0.0),
                 sweep=rows)
 
@@ -131,8 +139,9 @@ def compute():
 
 def render(d):
     plt.rcParams.update({"font.size": 7})
-    fig, axs = plt.subplots(2, 3, figsize=(7.0, 3.6), dpi=300,
-                            gridspec_kw=dict(height_ratios=[0.62, 1.0], hspace=0.38, wspace=0.10))
+    fig, axs = plt.subplots(2, 3, figsize=(7.0, 3.75), dpi=300,
+                            gridspec_kw=dict(height_ratios=[0.62, 1.0], hspace=0.38, wspace=0.10,
+                                             bottom=0.14))
     labels = ["(a) healthy: wide step window", "(b) intermediate", "(c) ill: narrow step window"]
     ally = np.concatenate([p["land_y"] for p in d["panels"]])
     ylo, yhi = float(ally.min()) - 0.12, float(ally.max()) + 0.12
@@ -159,32 +168,46 @@ def render(d):
         axL.grid(True, alpha=0.12)
         if k == 0:
             axL.set_ylabel(r"$C_{\rm device}(\theta)$", fontsize=7.5)
-        # ── bottom: shot-free bias floor vs ε ──
+        # ── bottom: the realizations themselves — the same setpoint draws, FD at every ε
+        #    and PSR in the strip at the right; NSR at zero.  Signed error / |∇C|. ──
         ax = axs[1, k]
         e = np.array([r["eps"] for r in p["sweep"]]); rr = np.array([r["rmse_rel"] for r in p["sweep"]])
-        wr = np.array([r["wrong"] for r in p["sweep"]]) >= d["wrong"]
         if p["window"]:
             ax.axvspan(p["window"][0], p["window"][1], color=C_FD, alpha=0.08, lw=0)
-        ax.loglog(e, rr, "-", color=C_FD, lw=1.3)
-        ax.loglog(e[~wr], rr[~wr], "o", color=C_FD, ms=2.6, mec="white", mew=0.3)
-        ax.loglog(e[wr], rr[wr], "X", color="#1a1a1a", ms=4.5)
+        rng_j = np.random.default_rng(3)
+        for r in p["sweep"]:
+            sm = np.clip(np.array(r["samples"]), -YCLIP, YCLIP)
+            xj = r["eps"] * np.exp(rng_j.normal(0, 0.03, len(sm)))
+            ax.plot(xj, sm, "o", color=C_FD, ms=1.6, alpha=0.45, mec="none")
+        ax.plot(e, rr, "-", color=C_FD, lw=0.9, alpha=0.9)
+        ax.plot(e, -rr, "-", color=C_FD, lw=0.9, alpha=0.9)
         ax.axvline(p["eps_star"], color=C_FD, lw=0.6, ls=":")
-        ax.axhline(d["win"], color="#888888", lw=0.7, ls="--")
-        ax.text(p["eps_star"] * 1.1, 0.9, rf"$\varepsilon^*={p['eps_star']:.2f}$", color=C_FD,
+        for yv in (d["win"], -d["win"]):
+            ax.axhline(yv, color="#888888", lw=0.7, ls="--")
+        ax.axhline(-1.0, color="#1a1a1a", lw=0.6, ls="-.")
+        ax.axhline(0.0, color="#1a1a1a", lw=0.5)
+        # strip: PSR realizations (same δ statistics, one draw each) and NSR
+        XP, XN = 7.0, 30.0
+        ps = np.clip(np.array(p["psr_samples"]), -YCLIP, YCLIP)
+        ax.plot(XP * np.exp(rng_j.normal(0, 0.06, len(ps))), ps, "o", color=C_PSR, ms=1.6,
+                alpha=0.45, mec="none")
+        ax.plot([XN], [0.0], "o", color=C_NSR, ms=4.0, mec="white", mew=0.4, zorder=5)
+        ax.axvline(3.6, color="#bbbbbb", lw=0.6)
+        ax.text(p["eps_star"] * 1.1, YCLIP * 0.92, rf"$\varepsilon^*={p['eps_star']:.2f}$", color=C_FD,
                 fontsize=6, va="top")
-        ax.axhline(p["psr_disp_rel"], color=C_PSR, lw=1.3)
-        ax.text(0.021, p["psr_disp_rel"] * 1.15, r"PSR floor $|f''|\,r$ (shared draw)", color=C_PSR,
-                fontsize=5.8, va="bottom")
-        ax.text(0.021, 0.0045, "NSR: no floor", color=C_NSR, fontsize=5.8, va="bottom")
-        ax.set_xlabel(r"FD step $\varepsilon$", fontsize=7.5, labelpad=1)
-        ax.set_xlim(0.018, 3.3); ax.set_ylim(0.004, 1.5)
+        ax.text(XP, -YCLIP * 0.92, "PSR", color=C_PSR, fontsize=6.2, ha="center", va="bottom", weight="bold")
+        ax.text(XN, -YCLIP * 0.92, "NSR", color=C_NSR, fontsize=6.2, ha="center", va="bottom", weight="bold")
+        ax.set_xscale("log"); ax.set_xlim(0.018, 60); ax.set_ylim(-YCLIP, YCLIP)
+        ax.set_xticks([0.1, 1.0]); ax.set_xticklabels([r"$10^{-1}$", r"$10^{0}$"])
+        ax.set_xlabel(r"FD step $\varepsilon$" + " " * 22 + "no step", fontsize=7.5, labelpad=1)
         ax.grid(True, which="both", alpha=0.12)
         ax.tick_params(labelsize=6.5)
         if k > 0:
             ax.tick_params(labelleft=False)
-    axs[1, 0].set_ylabel(r"FD bias floor RMSE$/|\nabla C|$ ($N\to\infty$)", fontsize=7.5)
-    axs[1, 2].text(0.97, 0.31, rf"$r={d['r']}$; shaded: RMSE $\leq$ {int(100 * d['win'])}%",
-                   transform=axs[1, 2].transAxes, fontsize=6, va="top", ha="right", color="#52514e")
+    axs[1, 0].set_ylabel(r"error of one estimate $/\,|\nabla C|$  ($N\to\infty$)", fontsize=7.5)
+    fig.text(0.5, 0.005, rf"bottom: {NSHOW} setpoint draws per step, $r={d['r']}$, the same draw statistics for FD (probes) and PSR (shared draw); "
+             rf"lines: $\pm$RMSE; shaded: RMSE $\leq$ {int(100 * d['win'])}$\%$; below $-1$: wrong sign",
+             fontsize=6, ha="center", va="bottom", color="#52514e")
     from matplotlib.lines import Line2D
     axs[0, 2].legend(handles=[Line2D([], [], color=C_PSR, lw=2.2, label="shift-rule tangent"),
                               Line2D([], [], color=C_FD, lw=1.1, marker="o", ms=2.6, label=r"FD secant at $\varepsilon^*$")],

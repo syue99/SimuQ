@@ -312,9 +312,12 @@ fixed T/T₂* = 0.15; same 2q TFIM, same device model), each at a **generic** op
 displacement |f″|·r/|∇C| lies in 2–5% and whose sharpness |f‴|/|f′| is typical of its
 landscape (middle quintile). So PSR's floor is of the same order in every panel and only
 the step scale moves. The landscape is drawn above each sweep; no parameter (T, θ₀) is
-printed on the figure. Curves are **shot-free** (N → ∞): two setpoint draws per estimate
-(θ ± ε/2), 2000 draws per step, 30 steps in [0.02, 3.0]; × where ≥ 20% of draws flip the
-sign; shaded = RMSE ≤ 30% of |∇C|. Cache `figures/F_epssweep_data.json`; figure
+printed on the figure. The bottom row shows the **realizations** (owner: the V hides what δ
+does): at every step, 40 of the 2000 setpoint draws are plotted as the signed error of one
+FD estimate / |∇C| (two draws per estimate, θ ± ε/2; 30 steps in [0.02, 3.0]), with ±RMSE
+lines and the usable window (RMSE ≤ 30%) shaded; below −1 the estimate has the wrong sign.
+A strip at the right shows 400 PSR estimates from the same draw statistics (one shared draw
+each, the exact gradient at θ₀+δ; RMS 2.4% / 3.7% / 4.7%) and NSR at zero. Shot-free (N → ∞). Cache `figures/F_epssweep_data.json`; figure
 `F_epssweep.{pdf,png}` in `figures/`, `paper_fig_2/`, `paper_fig_3/figs/`.
 
 | panel | T / T₂* (µs) | θ₀ | f′ | f″ | f‴ | \|f‴\|/\|f′\| | ε* (B.6.4) | FD floor (B.6.4) | usable window | PSR floor \|f″\|r | NSR floor |
