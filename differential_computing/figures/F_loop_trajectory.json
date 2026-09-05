@@ -18,45 +18,53 @@
   "tolerance": 0.03,
   "seeds": 20,
   "C_star": 0.0,
+  "eta0": 0.06398483347803485,
+  "eta_tau": 20.0,
+  "tail_avg": true,
   "summary": {
     "PSR": {
-      "final_err": 0.024978403726806053,
-      "held_step": 22,
-      "term5_step": 10,
-      "frac_in_tol_at50": 0.65,
-      "C_final": 0.006166330829493532,
+      "final_err": 0.011770589723697827,
+      "held_step": 3,
+      "raw_final_err": 0.013669517943275727,
+      "term5_step": 3,
+      "frac_in_tol_at50": 0.9,
+      "C_final": 8.319440062319017e-05,
       "predicted_offset": null
     },
     "NSR": {
-      "final_err": 0.02869819856869362,
-      "held_step": 49,
-      "term5_step": null,
-      "frac_in_tol_at50": 0.55,
-      "C_final": 0.00353204153992476,
+      "final_err": 0.01067584690732153,
+      "held_step": 4,
+      "raw_final_err": 0.017261620498635666,
+      "term5_step": 4,
+      "frac_in_tol_at50": 0.9,
+      "C_final": 0.00023385756429247003,
       "predicted_offset": null
     },
     "FD \u03b5=0.1 (best \u03b5 \u2014 needs \u03b8*)": {
-      "final_err": 0.03436622318299225,
-      "held_step": null,
-      "term5_step": null,
-      "frac_in_tol_at50": 0.45,
-      "C_final": 0.0021567452060013053,
+      "final_err": 0.024137742063668283,
+      "held_step": 24,
+      "raw_final_err": 0.022161256491795303,
+      "term5_step": 24,
+      "frac_in_tol_at50": 0.75,
+      "C_final": 0.0004071812390483686,
       "predicted_offset": 0.7565110534513713
     },
     "FD \u03b5=0.5 (too large: fails)": {
-      "final_err": 0.09762125534641275,
+      "final_err": 0.09679658499064964,
       "held_step": null,
+      "raw_final_err": 0.09646715643539219,
       "term5_step": null,
       "frac_in_tol_at50": 0.0,
-      "C_final": 0.06052648857694716,
+      "C_final": 0.06032355305586855,
       "predicted_offset": 0.4983408229813846
     },
     "FD \u03b5=0.05 (too small: unreliable)": {
-      "final_err": 0.05468305593824743,
+      "final_err": 0.03907828172397656,
       "held_step": null,
+      "raw_final_err": 0.03026025744710329,
       "term5_step": null,
-      "frac_in_tol_at50": 0.15,
-      "C_final": 0.005222407503165339,
+      "frac_in_tol_at50": 0.45,
+      "C_final": 0.0003974542159251314,
       "predicted_offset": 1.4885334951483298
     }
   }

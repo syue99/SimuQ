@@ -7,6 +7,8 @@
     "FD \u03b5=0.05 (too small: unreliable)"
   ],
   "ob_eps": 0.1,
+  "eta0": 0.06398483347803485,
+  "eta_tau": 20.0,
   "methods": {
     "PSR": {
       "c": "#0072B2",

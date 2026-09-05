@@ -98,25 +98,40 @@ Unchanged in construction from v11. v2: rej RMSE tail 0.0092 ≈ trunc
 0.0102, at 1.035× the executions per useful shot.
 
 --------------------------------------------------------------------
-## B. F_loop (figs/F_loop.pdf)
+## B. F_loop (figs/F_loop.pdf) — v2 (2026-09-04)
 
-Unchanged from v9 except the on-figure T/T₂* = 0.15 stamp required by the
-ground rules (legend ε values, terminal step markers, tolerance line,
-median ± IQR over 20 seeds, inset valley with median paths all kept).
-Run id: `build_Floop_trajectory.py` @ commit 8e36d9d, cached trajectories
-`figures/F_loop_curves.npz` (REPLOT; env W=0.25, TSTAR=(1,1),
-B_BUDGET=6000, ITERS=100), 20 seeds.
+Run id: `build_Floop_trajectory.py` @ the commit carrying this file; cache
+`figures/F_loop_curves.npz` (raw iterates) + `F_loop_meta.json` +
+`F_loop_trajectory.json`; 20 seeds, 50 steps, B = 6000 executions/gradient
+(shift rules 4800 as accounted), T/T₂* = 0.15 on-figure. **Setpoint draw
+r = 0.02 on every estimator per step** (per-change rule, `../DELTA_NOISE.md`).
+**T = 2.5** (was 0.8; T₂* = 16.7), θ* = (1,1), w = 0.25, start (1.010, 0.680),
+μ_soft/μ_stiff = 0.54/21.9. **Optimizer: η_t = η₀/(1 + t/20), η₀ = 0.064;
+plotted/scored iterate = tail average θ̄_t** (owner's ruling: the raw fixed-step
+iterate sits in a setpoint-kick noise ball of radius 0.025 that no budget
+removes, see `../NUMBERS.md`). FD in the paper's θ ± ε/2 convention: best
+ε = 0.1 (retrospective, grid {0.1, 0.15, 0.2, 0.3, 0.5}), too large 0.5, too
+small 0.05. Y-label "‖θ̄_t − θ*‖ (median and IQR)". Two estimator bugs fixed
+(PSR used one of θ₂'s two per-term program sets → ∂/∂θ₂ halved; NSR shifts and
+FD probes were clipped into the box) — audit at setup: PSR 0.1%, NSR 1.5%
+(14-mode truncation).
 
-For the record (not printed):
-- tolerance **0.03** (≈1.5δ, δ = 0.02 programmed resolution jitter)
-- three ε: **0.15** (retrospective best), **0.7** (too large), **0.04**
-  (too small)
-- enter tolerance (median holds 5 consecutive steps): **PSR @ 10**,
-  **NSR @ 34**, **FD-best: never** (see contradiction 5)
-- FD-best stall distance: median ‖θ−θ*‖ ≈ **0.040** at step 50 (0.036
-  median over steps 40–50; 0.044 at step 100)
-- fraction of seeds inside tolerance at step 50: PSR 80%, NSR 80%,
-  FD-best 35%, FD-small 25%, FD-large 0%.
+Results (median ‖θ̄_t − θ*‖; hold-5 = first step from which the median stays
+inside 0.03):
+- PSR: hold-5 at **3**, holds to 50; 0.012 at 50 (IQR 0.010–0.014); 90% of seeds inside; bias 0.003
+- NSR: hold-5 at **4**, holds to 50; 0.011 (0.007–0.022); 90%; bias 0.007
+- FD ε = 0.1 (best): hold-5 at 24; 0.024 (0.022–0.030); 75%; bias 0.004
+- FD ε = 0.5 (too large): never; 0.097; 0%; **bias 0.097**
+- FD ε = 0.05 (too small): never; 0.039 (0.012–0.133); 45%; **bias 0.051**
+
+Why T moved: at T = 0.8 under the rule with fixed estimators every method
+plateaus at ≈ 0.042 (fixed step; cache `figures/F_loop_*_diag_T08.*`). Scan of
+T with a per-step gradient-error audit at θ* picks 2.5. Pre-fix cache:
+`figures/F_loop_*_v1_prefix.*`; fixed-step T = 2.5 run: commit 8757aca.
+
+NSR in the loop is not better than PSR: both inherit ∇C(θ+δ) through the
+single residual measurement. Contradiction 5 (metric sensitivity of FD's
+"enters tolerance") still applies to the oracle step.
 
 --------------------------------------------------------------------
 ## C. F_select (figs/F_select.pdf)  [\owed{balanced-plane run}]

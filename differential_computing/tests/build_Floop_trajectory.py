@@ -70,6 +70,13 @@ FD_TOO_SMALL = float(os.environ.get("FD_SMALL", "0.05"))  # too-small ε = 2.5δ
 FD_ORACLE_GRID = [0.1, 0.15, 0.2, 0.3, 0.5]                # a-priori-unknowable "best" ε (needs θ*)
 # FLOOP_TAG=<name>: pilot/diagnostic run — caches and figures get a _<name> suffix
 # and the paper_fig outputs are NOT written.
+# 2026-09-04 (owner): the loop is SGD, so (i) the step decays, η_t = η₀/(1 + t/τ), and
+# (ii) the reported iterate is the tail average θ̄_t = mean(θ_{⌈t/2⌉..t}) (Polyak).  Both
+# are what makes an UNBIASED estimator converge to θ* itself instead of a noise ball of
+# radius ∝ √η, and neither can remove a bias (FD's truncation).  τ = ∞ and FLOOP_AVG=0
+# recover the raw fixed-step loop.
+ETA_TAU = float(os.environ.get("FLOOP_TAU", "20"))          # decay constant in steps (pilots: 10 and 20 equivalent for PSR/NSR; 20 kept)
+AVG = os.environ.get("FLOOP_AVG", "1") == "1"
 FLOOP_TAG = os.environ.get("FLOOP_TAG", "")
 SUF = ("_" + FLOOP_TAG) if FLOOP_TAG else ""
 FIGDIR = bd.FIGDIR
@@ -311,12 +318,12 @@ def descend(kind, seed, eps=None):
     th = clipd(THETA_STARTPT + srng.normal(0, 0.015, 2))
     nrng = np.random.default_rng(seed * 131 + 17)
     traj = [th.copy()]
-    for _ in range(ITERS):
+    for t in range(ITERS):
         if kind == "FD":
             g = fd_grad_C(th, eps, nrng)
         else:
             g = iqs_grad(kind, th, nrng)
-        th = clipd(th - ETA * g)
+        th = clipd(th - ETA / (1.0 + t / ETA_TAU) * g)
         traj.append(th.copy())
     return np.array(traj)
 
@@ -442,12 +449,22 @@ def main():
                   f"{np.median([np.hypot(*(tr[-1]-THETA_STAR)) for tr in trajs]):.3f}  "
                   f"(pred b(ε)/μ={pred_offset(eps):.3f})", flush=True)
         order = ["PSR", "NSR"] + [s[0] for s in fd_series]
-        np.savez(CACHE_NPZ, **{f"t{i}": results[lab]["trajs"] for i, lab in enumerate(order)})
-        json.dump({"order": order, "ob_eps": ob[1],
+        np.savez(CACHE_NPZ, **{f"t{i}": results[lab]["trajs"] for i, lab in enumerate(order)})   # RAW iterates
+        json.dump({"order": order, "ob_eps": ob[1], "eta0": ETA, "eta_tau": ETA_TAU,
                    "methods": {lab: {"c": results[lab]["c"], "mk": results[lab]["mk"],
                                      "eps": results[lab].get("eps")} for lab in order}},
                   open(CACHE_JSON, "w"), indent=2)
 
+    def tail_avg(trajs):
+        """Polyak tail average per seed: θ̄_t = mean(θ_s, s ∈ [⌈t/2⌉, t])."""
+        out = np.empty_like(trajs)
+        for t in range(trajs.shape[1]):
+            out[:, t] = trajs[:, (t + 1) // 2:t + 1].mean(1)
+        return out
+    for lab in order:
+        results[lab]["raw"] = results[lab]["trajs"]
+        if AVG:
+            results[lab]["trajs"] = tail_avg(results[lab]["raw"])
     B = bd.B_BUDGET
     THRESH = 0.03
 
@@ -543,7 +560,7 @@ def main():
                          color=results[lab]["c"], alpha=0.10)
     axR.axhline(THRESH, color="#888", lw=0.8, ls=":")
     axR.text(1, THRESH * 1.13, f"tolerance {THRESH}", fontsize=6.3, color="#666")
-    axR.set_xlabel("optimization step"); axR.set_ylabel(r"$\|\theta_t-\theta^*\|$  (median $\pm$ IQR)")
+    axR.set_xlabel("optimization step"); axR.set_ylabel((r"$\|\bar\theta_t-\theta^*\|$" if AVG else r"$\|\theta_t-\theta^*\|$") + "  (median and IQR)")
     axR.set_title("(b) convergence: PSR/NSR reach θ* reliably; every FD ε either fails, floors, "
                   "or is unreliable", fontsize=7.0)
     axR.legend(fontsize=6.4, ncol=2); axR.grid(True, which="both", alpha=0.15); axR.set_xlim(0, 50)
@@ -588,15 +605,20 @@ def main():
     import matplotlib.patheffects as pe
     halo = [pe.withStroke(linewidth=1.8, foreground="white")]
     ax.axhline(THRESH, color="#888", lw=0.8, ls=":")
-    ax.text(0.4, THRESH * 1.10, f"tolerance {THRESH}", fontsize=6.0, color="#666",
-            va="bottom", path_effects=halo)
+    ax.text(NS - 0.6, THRESH * 1.10, f"tolerance {THRESH}", fontsize=6.0, color="#666",
+            va="bottom", ha="right", path_effects=halo)
+    placed_early = 0
     for lab in order:                       # terminal markers (median holds 5 steps)
         t = term[lab]
         if t is None:
             continue
         ax.plot(t, dc[lab][0][t], marker=results[lab]["mk"], ms=5.5,
                 color=results[lab]["c"], mec="k", mew=0.6, zorder=6)
-        dx, dy, ha = (5, -9, "left") if t < 20 else (-3, 6, "right")
+        if t < 20:                          # early markers can sit a step apart: stagger labels
+            dx, dy, ha = ((6, -10, "left"), (6, 5, "left"), (-6, -10, "right"))[placed_early % 3]
+            placed_early += 1
+        else:
+            dx, dy, ha = (-3, 6, "right")
         ax.annotate(f"{t}", (t, dc[lab][0][t]), textcoords="offset points",
                     xytext=(dx, dy), fontsize=6.0, color=results[lab]["c"],
                     ha=ha, weight="bold", path_effects=halo, zorder=7)
@@ -605,7 +627,7 @@ def main():
     ax.text(0.02, 0.985, r"$T/T_2^*=0.15$", transform=ax.transAxes, fontsize=6.5,
             color="#52514e", va="top")
     ax.set_xlabel("optimization step", fontsize=7.5)
-    ax.set_ylabel(r"$\|\theta_t-\theta^*\|$  (median and IQR)", fontsize=7.5)
+    ax.set_ylabel((r"$\|\bar\theta_t-\theta^*\|$" if AVG else r"$\|\theta_t-\theta^*\|$") + "  (median and IQR)", fontsize=7.5)
     ax.tick_params(labelsize=6.5)
     ax.grid(True, which="both", alpha=0.15)
     ax.legend(fontsize=5.6, ncol=2, loc="lower left", bbox_to_anchor=(0.01, 0.015),
@@ -655,14 +677,14 @@ def main():
     plt.close(figS)
 
     Cstar = Cval(THETA_STAR)
-    summ = {lab: dict(final_err=finals[lab], held_step=held[lab],
+    summ = {lab: dict(final_err=finals[lab], held_step=held[lab], raw_final_err=float(np.median(np.linalg.norm(results[lab]["raw"][:, -1] - THETA_STAR, axis=1))),
                       term5_step=term[lab], frac_in_tol_at50=frac50[lab],
                       C_final=float(np.median([Cval(tr[-1]) for tr in results[lab]["trajs"]])),
                       predicted_offset=(pred_offset(results[lab]["eps"]) if "eps" in results[lab] else None))
             for lab in order}
     json.dump({"theta_star": THETA_STAR.tolist(), "a_star": A_STAR, "b_star": B_STAR, "w": W,
                "start": THETA_STARTPT.tolist(), "mu_soft": muC, "C3_soft": C3, "delta": delta,
-               "oracle_eps": ob[1], "B": B, "tolerance": THRESH, "seeds": SEEDS, "C_star": Cstar,
+               "oracle_eps": ob[1], "B": B, "tolerance": THRESH, "seeds": SEEDS, "C_star": Cstar, "eta0": ETA, "eta_tau": ETA_TAU, "tail_avg": AVG,
                "summary": summ}, open(os.path.join(FIGDIR, f"F_loop_trajectory{SUF}.json"), "w"),
               indent=2, default=float)
     # FLOOP_REPLOT §4 — the caption now also carries everything that was in the

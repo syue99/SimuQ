@@ -1,7 +1,7 @@
 # DELTA_NOISE.md — the setpoint rule as implemented (P0-0)
 
-2026-09-04. Figure 8 (`tests/build_F6.py`) is regenerated under the rule below. Figs 2 and 9
-follow and will be appended here.
+2026-09-04. Figures 8 (`tests/build_F6.py`) and 9 (`tests/build_Floop_trajectory.py`) are
+regenerated under the rule below. Fig 2 follows.
 
 ## The rule (owner's ruling, 2026-09-04): a draw per *change* of programmed value
 
@@ -76,3 +76,32 @@ NSR is the only estimator whose δ exposure depends on the rule — none under p
 `figures/F6_floor_amplification_diag_delta_off.json`, `…_diag_per_value.json`. The
 previous paper build (per_programming, θ₀ = 1.940, commit 3e0338c) is kept as
 `figures/F6_diag_per_programming_th1940.json`.
+
+## Figure 9 (`tests/build_Floop_trajectory.py`) — the same rule, per optimizer step
+
+One gradient estimate = one optimizer step; a fresh `Dial` (`build_Floop_trajectory.py:158`)
+per estimate holds one draw per coefficient and redraws a coefficient's draw only when its
+programmed value changes, so every draw is redrawn between steps.
+
+| estimator | programs per step | draws | code |
+|---|---|---|---|
+| FD | 4 probes (θ ± ε/2·e_ℓ) | each probe redraws the coefficient it moves, keeps the other's | `fd_grad_C` `:184` |
+| PSR | residual measurement at θ, then 64 + 128 branches, all dialing θ | **one draw vector** for the whole step: the estimate is ∇C(θ+δ) | `iqs_grad` `:302`, `_obs_grads_psr` `:214` |
+| NSR | residual at θ, then per coefficient ℓ the shifted programs θ + s·e_ℓ, a new (κ, σ) on almost every execution | shifted coefficient: fresh draw whenever (κ, σ) differs from the previous execution's; other coefficient held; 3-point stencil at each shift, quadratic in δ | `_obs_grads_nsr` `:244` |
+
+Seeds: `default_rng(seed·131 + 17)` per seed (`:319`) serves shots and draws; δ and shot
+noise are independent variables, not separately seeded. Optimizer: η_t = η₀/(1 + t/20)
+(`:326`), reported iterate = tail average (`tail_avg`, `:458`).
+
+**What the rule does in a loop.** The IQS residual r is measured at one held setpoint, so
+that program takes one draw and both shift rules inherit the displacement ∇C(θ+δ)
+through r; NSR's per-execution averaging only cleans its ∇⟨O⟩ factor, which multiplies
+r → 0 at the optimum. So in Fig 9 NSR cannot beat PSR on δ (Fig 8 is where that shows);
+under a fixed step both jitter by r·√(ημ/2) per axis (0.017 on the stiff axis here), and
+that jitter is what the decaying step and the tail average remove. FD's setpoint term
+√2·r|∇C|/ε vanishes at the optimum; what remains for FD is truncation bias ε²C‴/(24 μ_soft)
+plus shot variance ∝ 1/ε, and neither averages away.
+
+Floors (median ‖θ̄₅₀ − θ*‖, 20 seeds, B = 6000, T = 2.5): PSR 0.012, NSR 0.011, FD ε = 0.1
+(oracle) 0.024, FD 0.5: 0.097, FD 0.05: 0.039. δ off was not rerun for this figure (the
+per-step audit at θ* with δ off gives the shift rules 0.016 under a fixed step).

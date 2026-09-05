@@ -74,6 +74,50 @@ Unchanged (θ₀ = 1.757 keeps M = 5). s_max = θ₀ is still provisional.
 6.3 quotes C3's 0.028 per-component bias at C3's point. Fig. 8's own PSR+gate bias is now
 0.0037 (was 0.0138 at θ₀ = 1.940); if the text quotes Fig. 8's, update it.
 
+## From Figure 9 (P0-0 + P1-2) — build 2026-09-04, T = 2.5, per-change δ rule, SGD schedule
+
+### C.3 — instance
+> "θ* = (1,1); start (0.802, 1.251); box [0.2,1.4]²; w = 0.25; T = 0.8 µs; T₂* = 5.33 µs; 32 τ-samples"
+
+→ start **(1.010, 0.680)**; **T = 2.5 µs; T₂* = 16.7 µs**. θ*, box, w, τ-samples unchanged.
+Add: the box constrains the iterate, not the programs (NSR's shifts and FD's probes leave it).
+
+### C.3 — optimizer
+> "100 steps" → **50 steps**; add: gradient descent with **η_t = η₀/(1 + t/20), η₀ = 1.4/μ_stiff
+= 0.064**, and the reported iterate is the **tail average θ̄_t = mean(θ_{⌈t/2⌉..t})**.
+> "ε ∈ {0.15, 0.7, 0.04}" → **ε ∈ {0.1, 0.5, 0.05}** (paper's θ ± ε/2 convention; the best
+step chosen retrospectively from {0.1, 0.15, 0.2, 0.3, 0.5}).
+
+### Fig. 9 caption — convergence
+> "converged at 10 / 34" (PSR / NSR)
+
+→ **PSR 3, NSR 4** (first step from which the median of ‖θ̄_t − θ*‖ stays inside 0.03),
+both then hold to step 50 and keep descending (0.012 / 0.011 at 50, centred on θ*).
+FD: the retrospective best step holds only from **step 24** and floors at 0.024; the
+deployable steps never enter tolerance (0.097 too large, 0.039 too small, the latter with
+an IQR of [0.012, 0.133]). The two deployable steps are *biased* (mean offsets 0.097 and
+0.051), so averaging cannot rescue them — that is the sentence the figure now supports.
+
+### Fig. 9 caption — "deliberately ill-conditioned"
+Goes (Fred's plan). κ = 41 at the new T.
+
+### Fig. 9 caption — δ is on
+Say the setpoint draw is applied per step to every estimator (FD two draws per coefficient,
+PSR one shared, NSR per execution on the shifted coefficient), r = 0.02.
+
+### Fig. 9 y-label
+"(median ± IQR)" → "‖θ̄_t − θ*‖ (median and IQR)" — done in the figure; the bar must be
+explained in the caption (tail-averaged iterate).
+
+### §6 prose on NSR in the loop
+Any sentence saying NSR converges faster/cleaner than PSR in the loop must go: both hold
+tolerance from step 3–4 and their δ exposure is the same (both inherit ∇C(θ+δ) through the
+residual measurement). Their difference (0.012 vs 0.011) is noise.
+
+### 6.x / Table 1 if they quote Fig 9's budget
+The shift rules actually spend 4800 executions per gradient (residual charged twice in
+the accounting), FD 6000. Either quote "≤ 6000" or ask for the parity rerun.
+
 ## Pending, not yet regenerated
-Figs 2, 9 (P0-0), Fig 10/14 (P0-1/P0-8), Figs 7/13 (P0-2), Fig 12 (P0-3), Fig 15b (P0-6),
+Fig 2 (P0-0/P0-4), Fig 10/14 (P0-1/P0-8), Figs 7/13 (P0-2), Fig 12 (P0-3), Fig 15b (P0-6),
 Fig 6 (P0-7).

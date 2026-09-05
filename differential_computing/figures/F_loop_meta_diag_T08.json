@@ -1,0 +1,37 @@
+{
+  "order": [
+    "PSR",
+    "NSR",
+    "FD \u03b5=0.2 (best \u03b5 \u2014 needs \u03b8*)",
+    "FD \u03b5=1.4 (too large: fails)",
+    "FD \u03b5=0.08 (too small: unreliable)"
+  ],
+  "ob_eps": 0.2,
+  "methods": {
+    "PSR": {
+      "c": "#0072B2",
+      "mk": "o",
+      "eps": null
+    },
+    "NSR": {
+      "c": "#009E73",
+      "mk": "s",
+      "eps": null
+    },
+    "FD \u03b5=0.2 (best \u03b5 \u2014 needs \u03b8*)": {
+      "c": "#E69F00",
+      "mk": "^",
+      "eps": 0.2
+    },
+    "FD \u03b5=1.4 (too large: fails)": {
+      "c": "#d62728",
+      "mk": "D",
+      "eps": 1.4
+    },
+    "FD \u03b5=0.08 (too small: unreliable)": {
+      "c": "#7b3fa0",
+      "mk": "v",
+      "eps": 0.08
+    }
+  }
+}

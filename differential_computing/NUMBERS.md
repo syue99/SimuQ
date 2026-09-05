@@ -96,3 +96,80 @@ sampler's MAXN can be raised (a rerun, ~30 min); I did not do this unasked.
    0.180 measured even at C″ = 0, so drawing it would misstate agreement.
 4. ε on the figure is in the paper's θ ± ε/2, ÷ε convention (was θ ± ε, ÷2ε in earlier
    builds), so the text's ε* = 0.17 and any older ε label are not comparable.
+
+## Figure 9 — `tests/build_Floop_trajectory.py`, run 2026-09-04 (this commit)
+
+Cache: `figures/F_loop_curves.npz` (raw iterates), `F_loop_meta.json`, `F_loop_trajectory.json`.
+Figure: `paper_fig_3/figs/F_loop.{pdf,png}` (copy + two-panel `F_loop_full` in `paper_fig_2/`).
+Setpoint rule: per change (DELTA_NOISE.md). Two estimator bugs fixed, the landscape (T) and
+the optimizer (decaying step, tail-averaged iterate) changed — all owner's rulings, see
+"Deviations". Pre-fix cache kept as `figures/F_loop_*_v1_prefix.*`.
+
+### Unchanged, confirmed
+
+| quantity | value |
+|---|---|
+| θ* | (1, 1) |
+| box | [0.2, 1.4]² (constrains the iterate only; programs are never clipped) |
+| w | 0.25 |
+| seeds | 20 |
+| τ-samples (PSR) | 32 |
+| executions per gradient | 6000 for FD; 4800 for the shift rules as accounted (see note) |
+| tolerance | 0.03 (= 1.5 r) |
+| T/T₂* | 0.15 |
+| r | 0.02 |
+
+### Moved — text edits needed
+
+| quantity | old (text) | new | note |
+|---|---|---|---|
+| T, T₂* | 0.8 µs, 5.33 µs | **2.5 µs, 16.7 µs** | landscape scan (below) |
+| start | (0.802, 1.251) | **(1.010, 0.680)** | auto: 0.32 from θ*, mostly along the stiff axis |
+| steps run / drawn | 100 / 50 | **50 / 50** | |
+| step size | η = 0.403 fixed | **η_t = η₀/(1 + t/20), η₀ = 0.064** (= 1.4/μ_stiff) | SGD schedule |
+| reported iterate | θ_t | **θ̄_t = mean(θ_s, s ∈ [⌈t/2⌉, t])** (tail average) | y-label ‖θ̄_t − θ*‖ |
+| μ_soft, μ_stiff, κ | 0.31, 3.48, 11 | **0.54, 21.9, 41** | |
+| C‴ along soft | 1.24 | **18.1** | |
+| a*, b* | 0.221, 0.388 | **0.597, −1.331** | |
+| FD arms (paper convention θ ± ε/2) | 0.15 / 0.7 / 0.04 (builder's θ ± ε ÷ 2ε = 0.3 / 1.4 / 0.08) | **0.1 (best) / 0.5 (too large) / 0.05 (too small)** | oracle grid {0.1, 0.15, 0.2, 0.3, 0.5} → 0.1 |
+| converged (median of ‖θ̄_t − θ*‖ holds 0.03 for 5 steps, first such step) | PSR 10, NSR 34 | **PSR 3, NSR 4**; both then hold to step 50 | |
+| FD | never | oracle ε = 0.1: **holds from step 24** (0.024 at 50); ε = 0.5: **never** (0.097); ε = 0.05: **never** (0.039) | |
+| median ‖θ̄₅₀ − θ*‖ | — | PSR **0.012**, NSR **0.011**, FD 0.1: 0.024, FD 0.5: 0.097, FD 0.05: 0.039 | raw iterates: 0.014 / 0.017 / 0.022 / 0.096 / 0.030 |
+| IQR at 50 | — | [0.010, 0.014] / [0.007, 0.022] / [0.022, 0.030] / [0.095, 0.099] / [0.012, 0.133] | |
+| seeds inside tolerance at 50 | 0.80 / 0.80 / 0.35 / 0 / 0.25 | **0.90 / 0.90 / 0.75 / 0 / 0.45** | |
+| mean offset of θ̄₅₀ from θ* (bias) | — | PSR 0.003, NSR 0.007, FD 0.1: 0.004, FD 0.5: **0.097**, FD 0.05: **0.051** | the two deployable steps are biased; averaging cannot help them |
+| C(θ̄₅₀) − C* median | — | 8·10⁻⁵ / 2.3·10⁻⁴ / 4.1·10⁻⁴ / 0.060 / 4.0·10⁻⁴ | |
+
+### Estimator audit (shot-free, δ-free; printed at setup, asserted < 3%)
+PSR reproduces ∇⟨O⟩ to 0.1% on both coefficients (was 50% low on θ₂). NSR to 1.5% (the
+14-mode series truncation of the sampler; was 30–100% off with clipped shifts).
+
+### Budget note
+`iqs_grad` charges the residual measurement twice (`ngrad = B − 2·n_res`) although one
+program yields both observables, so the shift rules use 4800 executions per gradient
+against FD's 6000. Pre-existing; conservative for the shift rules; not changed.
+
+### Why the raw fixed-step loop stalls (the reason for the schedule and the average)
+At T = 2.5 with a fixed η = 1.4/μ_stiff, the raw iterate of an unbiased estimator settles
+in a noise ball of median radius 0.025 (PSR) / 0.029 (NSR), of which the shared setpoint
+draw contributes 0.017 (η·H·δ along the stiff axis, r·√(ημ_stiff/2)), shot jitter
+0.008 ⊕ 0.006, bias ≤ 0.011 (not significant). Neither shots nor bias, so a budget change
+does not fix it; the SGD remedies do, and only for unbiased estimators: with δ off the
+floor is 0.016. (Cache of that fixed-step run: commit 8757aca.)
+
+### Deviations from the handover, for Fred
+1. **T moved 0.8 → 2.5** (T/T₂* unchanged). Under the rule with the fixed estimators,
+   T = 0.8 gives PSR 0.042, NSR 0.044, FD-best 0.038, FD-small 0.042 at step 50 (20 seeds;
+   cache `figures/F_loop_*_diag_T08.*`) — shot-noise jitter above tolerance for every
+   method, nothing separates. The audit over T ∈ {0.8, 1.2, 1.6, 2.0, 2.5, 3.0} picks 2.5
+   (shift rules 0.02, FD's best 0.05 per step); 2.0 is degenerate (κ = 500), 3.0 biases
+   PSR's τ-quadrature at M = 32.
+2. **Decaying step and tail-averaged iterate** (§5 "no optimizer hyperparameters"): the
+   raw fixed-step iterate cannot converge to θ* under per-step noise (noise ball above),
+   and the paper's claim is convergence to θ*. Both are textbook SGD; both leave a biased
+   estimator's offset untouched, which is exactly what separates FD's deployable steps.
+3. **Two estimator bugs fixed**: PSR read only the first of the two per-term program sets
+   for θ₂ (X₀+X₁), halving that gradient component; NSR's Nyquist shifts (±0.98, ±2.9, …
+   in θ₁ at T = 0.8) and FD's probes were clipped into the plotting box. The old
+   "34 steps" for NSR is that artefact.
+4. FD ε labels moved to the paper's convention.
