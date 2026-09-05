@@ -296,9 +296,10 @@ Table 6 fix so the annotation and the table agree at displayed precision: print 
 n = 1000 as **0.191 ms** (then 175 / 0.191 = 916) — or quote the ratio as "≈ 9×10²".
 
 ## Figure 6 (lowering stack) — `tests/build_F_lowering.py`, 2026-09-05
-Redrawn from `figures/compiler.png` (the hand-made version). Handover P0-7 applied with its
-default: the **instance strip is dropped** (Figs 7 and 13 carry the running instance); every
-label is ≥ 7 pt in a two-column float; the internal names on the old figure (function,
+Redrawn from `figures/compiler.png` (the hand-made version). Handover P0-7 applied with the
+owner's choice: the **instance strip is kept as its own row at 7 pt** in a two-column float,
+written in Fig 7's ledger vocabulary (segment · terms with provenance · frame · transport ·
+insertion) for the running NSR branch, no device numbers; every label is ≥ 7 pt; the internal names on the old figure (function,
 config and file names, section codes, the `H₀(4404)` count) are gone. Structure kept: five
 stages A–E, colour = this paper / reused (SimuQ solver; scheduler design) / artifact, the
 emulator under the machine-native segments, and the "existing analog toolchains end here"

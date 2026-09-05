@@ -199,11 +199,13 @@ PSR's log-log slope over the five points is 1.24; Table 6 says 1.3 — say 1.2, 
 fit range (n ≥ 100 gives 1.43). Platform footnote string is real; keep.
 
 ## Figure 6 (P0-7) — `F_lowering`
-Redrawn (two-column, ≥ 7 pt, no internal names); the instance strip is dropped per the
-handover default, so the caption should point to Figs 7 and 13 for the running instance.
-The old figure's section codes (S.1, S.3–S.5) are not on the new one: put the section
-references for stages A–E in the caption. If Fred wants the strip back, it needs its own
-row at ≥ 7 pt (a builder change, no data).
+Redrawn (two-column, ≥ 7 pt, no internal names). The instance strip is kept (owner's
+choice) as its own row in Fig 7's ledger vocabulary: the running NSR branch as ev[0,T) with
+its terms and provenance, the (κ, σ) branch and its weight, the frozen-geometry rescale
+λ = c(x+s)/c(x), the machine-native segment, and the channels it keys. The caption should
+say the strip uses Fig 7's notation and that Figs 7/13 show the same branch compiled. The
+old figure's section codes (S.1, S.3–S.5) are not on the new one: put the section references
+for stages A–E in the caption.
 
 ## Figure 11 (P1-3)
 Needs "reproduced from [bib] (CC BY 4.0)" in the figure file once the entry exists; if it
